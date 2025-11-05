@@ -1,0 +1,16 @@
+[submodule "vendors/imgui"]
+	path = vendors/imgui
+	url = https://github.com/ocornut/imgui.git
+	branch = docking
+[submodule "vendors/SDL"]
+	path = vendors/SDL
+	url = https://github.com/libsdl-org/SDL.git
+[submodule "vendors/glm"]
+	path = vendors/glm
+	url = https://github.com/g-truc/glm.git
+[submodule "vendors/entt"]
+	path = vendors/entt
+	url = https://github.com/skypjack/entt.git
+[submodule "vendors/ImGuizmo"]
+	path = vendors/ImGuizmo
+	url = https://github.com/CedricGuillemet/ImGuizmo.git
