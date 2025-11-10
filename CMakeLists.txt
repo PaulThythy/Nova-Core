@@ -13,6 +13,10 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${SOURCES} ${HEADERS})
 # OpenGL
 find_package(OpenGL REQUIRED)
 
+# TODO Vulkan
+# find_package(Vulkan REQUIRED)
+# Vulkan::Vulkan
+
 # SDL3
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
@@ -61,6 +65,10 @@ target_include_directories(imguizmo PUBLIC
   ${IMGUIZMO_DIR}
 )
 target_link_libraries(imguizmo PUBLIC imgui)
+
+# glad 
+target_sources(Nova-Core PRIVATE vendors/glad/src/gl.c)
+target_include_directories(Nova-Core PRIVATE vendors/glad/include)
 
 # linking
 target_link_libraries(Nova-Core PUBLIC
