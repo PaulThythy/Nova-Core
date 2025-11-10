@@ -2,6 +2,8 @@
 #define APPLICATION_H
 
 #include <SDL3/SDL.h>
+#include <vector>
+#include <memory>
 
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <SDL3/SDL_opengles2.h>
@@ -14,6 +16,7 @@
 #include "imgui_impl_opengl3.h"
 
 #include "Core/Window.h"
+#include "Layer/Layer.h"
 
 namespace Nova::Core {
 
@@ -23,6 +26,13 @@ namespace Nova::Core {
         ~Application();
 
         void Run();
+
+        template<typename TLayer>
+		requires(std::is_base_of_v<Layer, TLayer>)
+		void PushLayer()
+		{
+			m_LayerStack.push_back(std::make_unique<TLayer>());
+		}
 
     private:
         bool m_IsRunning;
@@ -37,6 +47,8 @@ namespace Nova::Core {
         void DestroyImGui();
 
         Window* m_Window = nullptr;
+
+        std::vector<std::unique_ptr<Layer>> m_LayerStack;
     };
 
 } // namespace Nova::Core

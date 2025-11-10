@@ -26,14 +26,17 @@ namespace Nova::Core {
     }
 
     void Application::Run() {
-        ImVec4 clearColor(0.45f, 0.55f, 0.60f, 1.00f);
+        ImVec4 clearColor(0.0f, 0.0f, 0.0f, 1.00f);
         m_IsRunning = true;
+
+        uint64_t prev = SDL_GetPerformanceCounter();
+        const double freq = (double)SDL_GetPerformanceFrequency();
+
         while(m_IsRunning) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
                 ImGui_ImplSDL3_ProcessEvent(&event);
-                //TODO to implement
-                //m_InputManager.processEvent(event);
+
                 if (event.type == SDL_EVENT_QUIT) {
                     m_IsRunning = false;
                 }
@@ -50,22 +53,28 @@ namespace Nova::Core {
                 continue;
             }
 
-            //TODO to implement
-            //m_InputManager.update();
+            // deltaTime
+            uint64_t now = SDL_GetPerformanceCounter();
+            float dt = (float)((now - prev) / freq);
+            prev = now;
 
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplSDL3_NewFrame();
             ImGui::NewFrame();
 
-            // render UI
+            // Main layer update here
+			for (const std::unique_ptr<Layer>& layer : m_LayerStack)
+				layer->OnUpdate(dt);
+
+            // NOTE: rendering can be done elsewhere (eg. render thread)
+			for (const std::unique_ptr<Layer>& layer : m_LayerStack)
+				layer->OnRender();
 
             // Rendering
             ImGui::Render();
             glViewport(0, 0, (int)ImGui::GetIO().DisplaySize.x, (int)ImGui::GetIO().DisplaySize.y);
             glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
             glClear(GL_COLOR_BUFFER_BIT);
-
-            // Render renderer
 
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
