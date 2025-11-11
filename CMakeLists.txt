@@ -33,7 +33,7 @@ include_directories(${SDL_DIR}/include)
 
 # glm
 set(GLM_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/glm)
-add_subdirectory(${GLM_DIR}/glm)
+add_subdirectory(${GLM_DIR})
 include_directories(${GLM_DIR})
 
 # Dear Imgui
