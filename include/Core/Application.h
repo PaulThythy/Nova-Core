@@ -27,12 +27,17 @@ namespace Nova::Core {
 
         void Run();
 
-        template<typename TLayer>
-		requires(std::is_base_of_v<Layer, TLayer>)
-		void PushLayer()
-		{
-			m_LayerStack.push_back(std::make_unique<TLayer>());
-		}
+        Nova::Core::Window& GetWindow() { return *m_Window; }
+
+        template<typename T, typename... Args>
+        T& PushLayer(Args&&... args) {
+            static_assert(std::is_base_of<Layer, T>::value, "T must be derived from Layer");
+            auto layer = std::make_unique<T>(std::forward<Args>(args)...);
+            T& layerRef = *layer;
+            m_LayerStack.emplace_back(std::move(layer));
+            layerRef.OnAttach();
+            return layerRef;
+        }
 
     private:
         bool m_IsRunning;
