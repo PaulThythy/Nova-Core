@@ -70,6 +70,9 @@ namespace Nova::Core {
 			for (const std::unique_ptr<Layer>& layer : m_LayerStack)
 				layer->OnRender();
 
+            for (const std::unique_ptr<Layer>& layer : m_LayerStack)
+                layer->OnImGuiRender();
+
             // Rendering
             ImGui::Render();
             glViewport(0, 0, (int)ImGui::GetIO().DisplaySize.x, (int)ImGui::GetIO().DisplaySize.y);
