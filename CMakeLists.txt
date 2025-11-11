@@ -67,8 +67,8 @@ target_include_directories(imguizmo PUBLIC
 target_link_libraries(imguizmo PUBLIC imgui)
 
 # glad 
-target_sources(Nova-Core PRIVATE vendors/glad/src/gl.c)
-target_include_directories(Nova-Core PRIVATE vendors/glad/include)
+add_library(glad STATIC vendors/glad/src/gl.c)
+target_include_directories(glad PUBLIC vendors/glad/include)
 
 # linking
 target_link_libraries(Nova-Core PUBLIC
@@ -77,6 +77,7 @@ target_link_libraries(Nova-Core PUBLIC
     glm::glm
     imgui
     imguizmo
+    glad
 )
 
 
