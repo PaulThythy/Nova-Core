@@ -17,6 +17,7 @@
 
 #include "Core/Window.h"
 #include "Core/Layer.h"
+#include "Core/LayerStack.h"
 
 namespace Nova::Core {
 
@@ -32,11 +33,19 @@ namespace Nova::Core {
         template<typename T, typename... Args>
         T& PushLayer(Args&&... args) {
             static_assert(std::is_base_of<Layer, T>::value, "T must be derived from Layer");
-            auto layer = std::make_unique<T>(std::forward<Args>(args)...);
-            T& layerRef = *layer;
-            m_LayerStack.emplace_back(std::move(layer));
-            layerRef.OnAttach();
-            return layerRef;
+            T* layer = new T(std::forward<Args>(args)...);
+            m_LayerStack.PushLayer(layer);
+            layer->OnAttach();
+            return *layer;
+        }
+
+        template<typename T, typename... Args>
+        T& PushOverlay(Args&&... args) {
+            static_assert(std::is_base_of<Layer, T>::value, "T must be derived from Layer");
+            T* overlay = new T(std::forward<Args>(args)...);
+            m_LayerStack.PushOverlay(overlay);
+            overlay->OnAttach();
+            return *overlay;
         }
 
     private:
@@ -53,7 +62,7 @@ namespace Nova::Core {
 
         Window* m_Window = nullptr;
 
-        std::vector<std::unique_ptr<Layer>> m_LayerStack;
+        LayerStack m_LayerStack;
     };
 
 } // namespace Nova::Core

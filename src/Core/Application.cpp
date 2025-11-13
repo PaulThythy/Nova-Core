@@ -63,14 +63,14 @@ namespace Nova::Core {
             ImGui::NewFrame();
 
             // Main layer update here
-			for (const std::unique_ptr<Layer>& layer : m_LayerStack)
+			for (Layer* layer : m_LayerStack)
 				layer->OnUpdate(dt);
 
             // NOTE: rendering can be done elsewhere (eg. render thread)
-			for (const std::unique_ptr<Layer>& layer : m_LayerStack)
+			for (Layer* layer : m_LayerStack)
 				layer->OnRender();
 
-            for (const std::unique_ptr<Layer>& layer : m_LayerStack)
+            for (Layer* layer : m_LayerStack)
                 layer->OnImGuiRender();
 
             // Rendering
