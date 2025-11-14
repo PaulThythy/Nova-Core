@@ -11,12 +11,9 @@
 #include <SDL3/SDL_opengl.h>
 #endif
 
-#include "imgui.h"
-#include "imgui_impl_sdl3.h"
-#include "imgui_impl_opengl3.h"
-
 #include "Core/Window.h"
 #include "Core/Layer.h"
+#include "Core/ImGuiLayer.h"
 #include "Core/LayerStack.h"
 
 namespace Nova::Core {
@@ -57,11 +54,8 @@ namespace Nova::Core {
         void InitWindow(const Window::WindowDesc& windowDesc);
         void DestroyWindow();
 
-        void InitImGui();
-        void DestroyImGui();
-
         Window* m_Window = nullptr;
-
+        ImGuiLayer* m_ImGuiLayer = nullptr;
         LayerStack m_LayerStack;
     };
 

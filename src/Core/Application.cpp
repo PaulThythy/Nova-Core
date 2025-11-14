@@ -14,17 +14,16 @@ namespace Nova::Core {
     }
 
     void Application::InitEngine(const Window::WindowDesc* windowDesc) {
-        InitWindow(*windowDesc);
-        InitImGui();
+        Window::WindowDesc desc = windowDesc ? *windowDesc : Window::WindowDesc{};
+        InitWindow(desc);
+        m_ImGuiLayer = &PushOverlay<ImGuiLayer>(*m_Window, desc.m_GraphicsAPI);
     }
 
     void Application::DestroyEngine() {
-        DestroyImGui();
         DestroyWindow();
     }
 
     void Application::Run() {
-        ImVec4 clearColor(0.0f, 0.0f, 0.0f, 1.00f);
         m_IsRunning = true;
 
         uint64_t prev = SDL_GetPerformanceCounter();
@@ -33,7 +32,8 @@ namespace Nova::Core {
         while(m_IsRunning) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                ImGui_ImplSDL3_ProcessEvent(&event);
+                if (m_ImGuiLayer)
+                    m_ImGuiLayer->ProcessSDLEvent(event);
 
                 if (event.type == SDL_EVENT_QUIT) {
                     m_IsRunning = false;
@@ -56,39 +56,39 @@ namespace Nova::Core {
             float dt = (float)((now - prev) / freq);
             prev = now;
 
-            ImGui_ImplOpenGL3_NewFrame();
-            ImGui_ImplSDL3_NewFrame();
-            ImGui::NewFrame();
-
-            // Main layer update here
-			for (Layer* layer : m_LayerStack)
-				layer->OnUpdate(dt);
-
-            // NOTE: rendering can be done elsewhere (eg. render thread)
-			for (Layer* layer : m_LayerStack)
-				layer->OnRender();
-
-            for (Layer* layer : m_LayerStack)
-                layer->OnImGuiRender();
-
-            // Rendering
-            ImGui::Render();
-            glViewport(0, 0, (int)ImGui::GetIO().DisplaySize.x, (int)ImGui::GetIO().DisplaySize.y);
-            glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
-            glClear(GL_COLOR_BUFFER_BIT);
-
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-            // Update and Render additional Platform Windows
-            if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-                SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
-                SDL_GLContext backup_current_context = SDL_GL_GetCurrentContext();
-                ImGui::UpdatePlatformWindows();
-                ImGui::RenderPlatformWindowsDefault();
-                SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
+            if (m_Window->GetGLContext()) {
+                m_Window->MakeCurrent();
+                int w, h;
+                m_Window->GetWindowSize(w, h);
+                glViewport(0, 0, w, h);
+                glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            } else if (m_Window->GetSDLRenderer()) {
+                SDL_Renderer* r = m_Window->GetSDLRenderer();
+                SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+                SDL_RenderClear(r);
             }
 
-            SDL_GL_SwapWindow(m_Window->GetSDLWindow()); // Swap buffers
+            for (Layer* layer : m_LayerStack)
+                layer->OnUpdate(dt);
+
+            for (Layer* layer : m_LayerStack)
+                layer->OnRender();
+            
+            if (m_ImGuiLayer) {
+                m_ImGuiLayer->Begin();
+
+                for (Layer* layer : m_LayerStack)
+                    layer->OnImGuiRender();
+
+                m_ImGuiLayer->End();
+            }
+
+            if (m_Window->GetGLContext()) {
+                m_Window->SwapBuffers();
+            } else if (m_Window->GetSDLRenderer()) {
+                m_Window->PresentRenderer();
+            }
         }
     }
 
@@ -106,37 +106,6 @@ namespace Nova::Core {
             delete m_Window;
             m_Window = nullptr;
         }
-    }
-
-    void Application::InitImGui() {
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO();
-
-        io.IniFilename = "imgui.ini";
-        bool iniExisted = std::filesystem::exists(io.IniFilename);
-        io.UserData = (void*)(intptr_t)iniExisted;
-
-        // imgui flags
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // Enable Docking
-        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;    // Enable Multi-Viewport / Platform Windows
-
-        // Setup Dear ImGui style
-        ImGui::StyleColorsDark();
-        //ImGui::StyleColorsLight();
-        //ImGui::StyleColorsClassic();
-
-        // Initialize backend SDL + OpenGL
-        ImGui_ImplSDL3_InitForOpenGL(m_Window->GetSDLWindow(), m_Window->GetGLContext());
-        ImGui_ImplOpenGL3_Init(m_Window->GetGLSLVersion()); // Use the same GLSL
-    }
-
-    void Application::DestroyImGui() {
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplSDL3_Shutdown();
-        ImGui::DestroyContext();
     }
 
 } // namespace Nova::Core

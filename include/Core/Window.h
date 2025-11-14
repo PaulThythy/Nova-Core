@@ -35,6 +35,7 @@ namespace Nova::Core {
         SDL_Window* GetSDLWindow() const { return m_Window; }
         SDL_GLContext GetGLContext() const { return m_GLContext; }
         SDL_Renderer* GetSDLRenderer() const { return m_Renderer; }
+        GraphicsAPI GetGraphicsAPI() const { return m_Desc.m_GraphicsAPI; }
 
         void SetSDLRenderer(SDL_Renderer* renderer) { m_Renderer = renderer; }
 

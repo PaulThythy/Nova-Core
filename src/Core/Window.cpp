@@ -64,6 +64,7 @@ namespace Nova::Core {
             Destroy();
             return false;
         }
+        SDL_ShowWindow(m_Window);
 
         if (m_Desc.m_GraphicsAPI == GraphicsAPI::OpenGL) {
             m_GLContext = SDL_GL_CreateContext(m_Window);
@@ -74,9 +75,16 @@ namespace Nova::Core {
             }
             MakeCurrent();
             SetVSync(m_Desc.m_VSync);
+
+        } else if (m_Desc.m_GraphicsAPI == GraphicsAPI::SDLRenderer) {
+            m_Renderer = SDL_CreateRenderer(m_Window, nullptr);
+            if (!m_Renderer) {
+                std::cerr << "SDL_CreateRenderer failed: " << SDL_GetError() << std::endl;
+                Destroy();
+                return false;
+            }
+            SDL_SetRenderVSync(m_Renderer, m_Desc.m_VSync ? 1 : 0);
         }
-        
-        SDL_ShowWindow(m_Window);
 
         return true;
     }
