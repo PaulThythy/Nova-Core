@@ -16,8 +16,6 @@ namespace Nova::Core {
     void Application::InitEngine(const Window::WindowDesc* windowDesc) {
         InitWindow(*windowDesc);
         InitImGui();
-        
-        //TODO create renderer
     }
 
     void Application::DestroyEngine() {

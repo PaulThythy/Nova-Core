@@ -3,6 +3,8 @@
 
 #include <SDL3/SDL.h>
 
+#include "Core/GraphicsAPI.h"
+
 namespace Nova::Core {
     
     class Window {
@@ -12,7 +14,7 @@ namespace Nova::Core {
             int m_Width         = 1280;
             int m_Height        = 720;
             bool m_Resizable    = true;
-            bool m_OpenGL       = true;
+            GraphicsAPI m_GraphicsAPI = GraphicsAPI::OpenGL;
             int m_GL_Major      = 3;
             int m_GL_Minor      = 3;
             int m_GL_Profile    = SDL_GL_CONTEXT_PROFILE_CORE;
@@ -51,7 +53,6 @@ namespace Nova::Core {
         SDL_GLContext m_GLContext;
 
         const char* m_GLSLVersion = nullptr;
-        bool m_HasOpenGL = false;
     };
 } // namespace Nova::Core
 

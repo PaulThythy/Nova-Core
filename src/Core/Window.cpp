@@ -4,7 +4,7 @@
 
 namespace Nova::Core {
 
-    Window::Window() : m_Desc{}, m_Window(nullptr), m_GLContext(nullptr), m_GLSLVersion(nullptr), m_HasOpenGL(false) {}
+    Window::Window() : m_Desc{}, m_Window(nullptr), m_GLContext(nullptr), m_GLSLVersion(nullptr) {}
 
     bool Window::Create(const WindowDesc& desc) {
         m_Desc = desc;
@@ -14,10 +14,6 @@ namespace Nova::Core {
             std::cerr << "SDL_Init failed: " << SDL_GetError() << std::endl;
             return false;
         }
-
-        // If an OpenGL context is requested, set attributes *before* creating the window.
-        if (m_Desc.m_OpenGL) {
-            m_HasOpenGL = true;
             
             // Decide GL+GLSL versions
         #if defined(IMGUI_IMPL_OPENGL_ES2)
@@ -56,11 +52,10 @@ namespace Nova::Core {
 
             // If you want a forward-compatible context on macOS:
             // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
-        }
 
         // Build window flags.
         Uint32 flags = 0;
-        if (m_Desc.m_OpenGL)  flags |= SDL_WINDOW_OPENGL;
+        if (m_Desc.m_GraphicsAPI == GraphicsAPI::OpenGL)  flags |= SDL_WINDOW_OPENGL;
         if (m_Desc.m_Resizable) flags |= SDL_WINDOW_RESIZABLE;
 
         m_Window = SDL_CreateWindow(m_Desc.m_Title, m_Desc.m_Width, m_Desc.m_Height, flags);
@@ -70,7 +65,7 @@ namespace Nova::Core {
             return false;
         }
 
-        if (m_Desc.m_OpenGL) {
+        if (m_Desc.m_GraphicsAPI == GraphicsAPI::OpenGL) {
             m_GLContext = SDL_GL_CreateContext(m_Window);
             if (!m_GLContext) {
                 std::cerr << "SDL_GL_CreateContext failed: " << SDL_GetError() << std::endl;
