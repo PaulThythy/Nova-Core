@@ -87,8 +87,9 @@ namespace Nova::Core {
     }
 
     void Window::Destroy() {
-        if (m_GLContext) { SDL_GL_DestroyContext(m_GLContext); m_GLContext = nullptr; }
-        if (m_Window)    { SDL_DestroyWindow(m_Window); m_Window = nullptr; }
+        if (m_GLContext){ SDL_GL_DestroyContext(m_GLContext);}
+        if (m_Window)   { SDL_DestroyWindow(m_Window); m_Window = nullptr; }
+        if (m_Renderer) { SDL_DestroyRenderer(m_Renderer); m_Renderer = nullptr; }
 
         SDL_Quit();
     }
@@ -127,6 +128,12 @@ namespace Nova::Core {
         if (!m_Window) return false;
         const Uint32 wf = SDL_GetWindowFlags(m_Window);
         return (wf & SDL_WINDOW_MINIMIZED) != 0;
+    }
+
+    void Window::PresentRenderer() {
+        if (m_Renderer) {
+            SDL_RenderPresent(m_Renderer);
+        }
     }
 
 } // namespace Nova::Core

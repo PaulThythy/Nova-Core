@@ -48,6 +48,9 @@ set(IMGUI_SOURCES
 set(IMGUI_BACKENDS_SOURCES
     ${IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_sdlrenderer3.cpp
+    #${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
+
 )
 add_library(imgui STATIC ${IMGUI_SOURCES} ${IMGUI_BACKENDS_SOURCES})
 target_include_directories(imgui PUBLIC

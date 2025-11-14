@@ -27,21 +27,27 @@ namespace Nova::Core {
         void SetVSync(bool enabled);
         void SwapBuffers();
         void SetTitle(const char* title);
+
         void GetWindowSize(int& width, int& height);
-        //TODO based on GL version
         const char* GetGLSLVersion() const { return m_GLSLVersion; }
         SDL_Window* GetSDLWindow() const { return m_Window; }
         SDL_GLContext GetGLContext() const { return m_GLContext; }
+        SDL_Renderer* GetSDLRenderer() const { return m_Renderer; }
+
+        void SetSDLRenderer(SDL_Renderer* renderer) { m_Renderer = renderer; }
 
         bool IsMinimized() const;
 
         bool Create(const WindowDesc& desc);
         void Destroy();
+
+        void PresentRenderer();
     
     private:
         WindowDesc m_Desc;
 
         SDL_Window* m_Window = nullptr;
+        SDL_Renderer* m_Renderer = nullptr;
         SDL_GLContext m_GLContext;
 
         const char* m_GLSLVersion = nullptr;
