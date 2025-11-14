@@ -43,7 +43,7 @@ namespace Nova::Core {
                 break;
             } 
             case GraphicsAPI::Vulkan:
-                // TODO : ici tu devras passer un VkInstance, VkDevice, render pass, etc.
+                // TODO: here you'll need to pass a VkInstance, VkDevice, render pass, etc.
                 // ImGui_ImplVulkan_Init(&init_info, render_pass);
                 break;
 

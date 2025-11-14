@@ -6,10 +6,12 @@
 #include <memory>
 
 #if defined(IMGUI_IMPL_OPENGL_ES2)
-#include <SDL3/SDL_opengles2.h>
+//#include <SDL3/SDL_opengles2.h>
 #else
-#include <SDL3/SDL_opengl.h>
+//#include <SDL3/SDL_opengl.h>
 #endif
+
+#include <glad/gl.h>
 
 #include "Core/Window.h"
 #include "Core/Layer.h"

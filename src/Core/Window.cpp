@@ -74,6 +74,13 @@ namespace Nova::Core {
                 return false;
             }
             MakeCurrent();
+
+            if (!gladLoadGL((GLADloadfunc)SDL_GL_GetProcAddress)) {
+                std::cerr << "Failed to initialize GLAD" << std::endl;
+                Destroy();
+                return false;
+            }
+
             SetVSync(m_Desc.m_VSync);
 
         } else if (m_Desc.m_GraphicsAPI == GraphicsAPI::SDLRenderer) {

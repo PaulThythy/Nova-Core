@@ -1,6 +1,7 @@
 #ifndef WINDOW_H
 #define WINDOW_H
 
+#include <glad/gl.h>
 #include <SDL3/SDL.h>
 
 #include "Core/GraphicsAPI.h"

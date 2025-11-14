@@ -83,5 +83,8 @@ target_link_libraries(Nova-Core PUBLIC
     glad
 )
 
-
 target_include_directories(Nova-Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+target_compile_definitions(Nova-Core PRIVATE
+    NOVA_CORE_ROOT_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"
+)
