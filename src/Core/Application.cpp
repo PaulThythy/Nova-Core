@@ -23,7 +23,7 @@ namespace Nova::Core {
     void Application::InitEngine(const Window::WindowDesc* windowDesc) {
         Window::WindowDesc desc = windowDesc ? *windowDesc : Window::WindowDesc{};
         InitWindow(desc);
-        m_ImGuiLayer = &PushOverlay<ImGuiLayer>(*m_Window, desc.m_GraphicsAPI);
+        m_ImGuiLayer = &m_LayerStack.PushOverlay<ImGuiLayer>(*m_Window, desc.m_GraphicsAPI);
     }
 
     void Application::DestroyEngine() {
@@ -90,6 +90,8 @@ namespace Nova::Core {
 
                 m_ImGuiLayer->End();
             }
+
+            m_LayerStack.ProcessPendingTransitions();
 
             if (m_Window->GetGLContext()) {
                 m_Window->SwapBuffers();

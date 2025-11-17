@@ -28,24 +28,7 @@ namespace Nova::Core {
         void Run();
 
         Nova::Core::Window& GetWindow() { return *m_Window; }
-
-        template<typename T, typename... Args>
-        T& PushLayer(Args&&... args) {
-            static_assert(std::is_base_of<Layer, T>::value, "T must be derived from Layer");
-            T* layer = new T(std::forward<Args>(args)...);
-            m_LayerStack.PushLayer(layer);
-            layer->OnAttach();
-            return *layer;
-        }
-
-        template<typename T, typename... Args>
-        T& PushOverlay(Args&&... args) {
-            static_assert(std::is_base_of<Layer, T>::value, "T must be derived from Layer");
-            T* overlay = new T(std::forward<Args>(args)...);
-            m_LayerStack.PushOverlay(overlay);
-            overlay->OnAttach();
-            return *overlay;
-        }
+        LayerStack& GetLayerStack() { return m_LayerStack; }
 
         static Application& Get() { return *s_Instance; }
 

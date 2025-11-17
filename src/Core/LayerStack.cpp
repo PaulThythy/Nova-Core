@@ -55,4 +55,36 @@ namespace Nova::Core {
 		}
 	}
 
+	// Process any queued transitions: for each pending {from, to}, find 'from' in m_Layers,
+    // if found detach+delete it, replace pointer with 'to' and call to->OnAttach().
+    // If 'from' not found, delete 'to' to avoid leak.
+    void LayerStack::ProcessPendingTransitions() {
+        if (m_PendingTransitions.empty())
+            return;
+
+        for (auto& tr : m_PendingTransitions) {
+            Layer* from = tr.from;
+            Layer* to   = tr.to;
+
+            auto it = std::find(m_Layers.begin(), m_Layers.end(), from);
+            if (it != m_Layers.end()) {
+                // detach and delete old
+                from->OnDetach();
+                delete from;
+
+                // replace and attach new
+                *it = to;
+                if (to) to->OnAttach();
+            } else {
+                // not found -> cleanup new to avoid leak
+                if (to) {
+                    to->OnDetach();
+                    delete to;
+                }
+            }
+        }
+
+        m_PendingTransitions.clear();
+    }
+
 } // namespace Nova::Core
