@@ -5,7 +5,14 @@
 
 namespace Nova::Core {
 
+    Application* Application::s_Instance = nullptr;
+
     Application::Application(const Window::WindowDesc& windowDesc) : m_IsRunning(false) {
+        if (s_Instance) {
+            std::cerr << "Warning: Application instance already exists\n";
+        }
+        s_Instance = this;
+
         InitEngine(&windowDesc);
     }
 

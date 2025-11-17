@@ -47,7 +47,11 @@ namespace Nova::Core {
             return *overlay;
         }
 
+        static Application& Get() { return *s_Instance; }
+
     private:
+        static Application* s_Instance;
+
         bool m_IsRunning;
 
         void InitEngine(const Window::WindowDesc* windowDesc = nullptr);
