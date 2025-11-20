@@ -73,6 +73,10 @@ target_link_libraries(imguizmo PUBLIC imgui)
 add_library(glad STATIC vendors/glad/src/gl.c)
 target_include_directories(glad PUBLIC vendors/glad/include)
 
+# entt
+set(ENTT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/entt)
+add_subdirectory(${ENTT_DIR} EXCLUDE_FROM_ALL)
+
 # linking
 target_link_libraries(Nova-Core PUBLIC
     OpenGL::GL
@@ -81,6 +85,7 @@ target_link_libraries(Nova-Core PUBLIC
     imgui
     imguizmo
     glad
+    EnTT::EnTT
 )
 
 target_include_directories(Nova-Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
