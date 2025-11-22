@@ -15,8 +15,17 @@
 
 #include "Core/Window.h"
 #include "Core/Layer.h"
+#include "Events/Event.h"
+#include "Events/ApplicationEvents.h"
+#include "Events/InputEvents.h"
 #include "Core/ImGuiLayer.h"
 #include "Core/LayerStack.h"
+
+namespace Nova::Events {
+    class Event;
+    class WindowClosedEvent;
+    class WindowResizeEvent;
+}
 
 namespace Nova::Core {
 
@@ -32,6 +41,8 @@ namespace Nova::Core {
 
         static Application& Get() { return *s_Instance; }
 
+        void OnEvent(Nova::Events::Event& e);
+
     private:
         static Application* s_Instance;
 
@@ -42,6 +53,9 @@ namespace Nova::Core {
 
         void InitWindow(const Window::WindowDesc& windowDesc);
         void DestroyWindow();
+
+        bool OnWindowClose(Nova::Events::WindowClosedEvent& e);
+        bool OnWindowResize(Nova::Events::WindowResizeEvent& e);
 
         Window* m_Window = nullptr;
         ImGuiLayer* m_ImGuiLayer = nullptr;

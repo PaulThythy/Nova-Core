@@ -3,7 +3,12 @@
 
 #include <string>
 
+#include "Events/Event.h"
+
+using namespace Nova::Events;
+
 namespace Nova::Core {
+
     class Layer {
     public:
         Layer(const std::string& name = "Layer") : m_DebugName(name) {}
@@ -15,7 +20,7 @@ namespace Nova::Core {
         virtual void OnResume() {}
         virtual void OnImGuiRender() {}
 
-        virtual void OnEvent(/*Event& event*/) {}
+        virtual void OnEvent(Event& event) {}
         virtual void OnUpdate(float deltaTime) {}
         virtual void OnRender() {}
 

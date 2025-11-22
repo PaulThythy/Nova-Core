@@ -4,13 +4,9 @@
 #include <SDL3/SDL.h>
 
 #include "Core/Layer.h"
+#include "Events/Event.h"
 #include "Core/Window.h"
 #include "Core/GraphicsAPI.h"
-#include "imgui.h"
-#include "imgui_impl_sdl3.h"
-#include "imgui_impl_opengl3.h"
-//#include "imgui_impl_vulkan.h"
-#include "imgui_impl_sdlrenderer3.h"
 
 namespace Nova::Core {
 
@@ -21,7 +17,7 @@ namespace Nova::Core {
 
         virtual void OnAttach() override;
 		virtual void OnDetach() override;
-		virtual void OnEvent(/*Event& e*/) override {}
+		virtual void OnEvent(Event& e) override {}
 
         void Begin();
         void End();

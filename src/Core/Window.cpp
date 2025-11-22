@@ -146,4 +146,10 @@ namespace Nova::Core {
         }
     }
 
+    void Window::RaiseEvent(Nova::Events::Event& event) {
+        if (m_Desc.m_EventCallback) {
+            m_Desc.m_EventCallback(event);
+        }
+    }
+
 } // namespace Nova::Core

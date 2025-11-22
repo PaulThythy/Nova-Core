@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <filesystem>
+#include <ranges>
 
 namespace Nova::Core {
 
@@ -22,6 +23,11 @@ namespace Nova::Core {
 
     void Application::InitEngine(const Window::WindowDesc* windowDesc) {
         Window::WindowDesc desc = windowDesc ? *windowDesc : Window::WindowDesc{};
+
+        desc.m_EventCallback = [this](Nova::Events::Event& e) {
+            OnEvent(e);
+        };
+
         InitWindow(desc);
         m_ImGuiLayer = &m_LayerStack.PushOverlay<ImGuiLayer>(*m_Window, desc.m_GraphicsAPI);
     }
@@ -42,14 +48,52 @@ namespace Nova::Core {
                 if (m_ImGuiLayer)
                     m_ImGuiLayer->ProcessSDLEvent(event);
 
-                if (event.type == SDL_EVENT_QUIT) {
-                    m_IsRunning = false;
-                }
-
-                if(event.type == SDL_EVENT_WINDOW_RESIZED) {
-                    //int width = event.window.data1;
-                    //int height = event.window.data2;
-                    // resize event
+                switch (event.type) {
+                    case SDL_EVENT_QUIT: {
+                        Nova::Events::WindowClosedEvent e;
+                        m_Window->RaiseEvent(e);
+                        break;
+                    }
+                    case SDL_EVENT_WINDOW_RESIZED: {
+                        int w = event.window.data1;
+                        int h = event.window.data2;
+                        Nova::Events::WindowResizeEvent e((uint32_t)w, (uint32_t)h);
+                        m_Window->RaiseEvent(e);
+                        break;
+                    }
+                    case SDL_EVENT_MOUSE_MOTION: {
+                        Nova::Events::MouseMovedEvent e((double)event.motion.x, (double)event.motion.y);
+                        m_Window->RaiseEvent(e);
+                        break;
+                    }
+                    case SDL_EVENT_MOUSE_WHEEL: {
+                        Nova::Events::MouseScrolledEvent e((double)event.wheel.x, (double)event.wheel.y);
+                        m_Window->RaiseEvent(e);
+                        break;
+                    }
+                    case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+                        Nova::Events::MouseButtonPressedEvent e((int)event.button.button);
+                        m_Window->RaiseEvent(e);
+                        break;
+                    }
+                    case SDL_EVENT_MOUSE_BUTTON_UP: {
+                        Nova::Events::MouseButtonReleasedEvent e((int)event.button.button);
+                        m_Window->RaiseEvent(e);
+                        break;
+                    }
+                    case SDL_EVENT_KEY_DOWN: {
+                        bool repeat = event.key.repeat != 0;
+                        Nova::Events::KeyPressedEvent e((int)event.key.key, repeat);
+                        m_Window->RaiseEvent(e);
+                        break;
+                    }
+                    case SDL_EVENT_KEY_UP: {
+                        Nova::Events::KeyReleasedEvent e((int)event.key.key);
+                        m_Window->RaiseEvent(e);
+                        break;
+                    }
+                    default:
+                        break;
                 }
             }
 
@@ -75,6 +119,8 @@ namespace Nova::Core {
                 SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
                 SDL_RenderClear(r);
             }
+
+            //TODO only update layers when the window is not minimized
 
             for (Layer* layer : m_LayerStack)
                 layer->OnUpdate(dt);
@@ -115,6 +161,32 @@ namespace Nova::Core {
             delete m_Window;
             m_Window = nullptr;
         }
+    }
+
+    void Application::OnEvent(Nova::Events::Event& e) {
+        Nova::Events::EventDispatcher dispatcher(e);
+        dispatcher.Dispatch<Nova::Events::WindowClosedEvent>(
+            [this](Nova::Events::WindowClosedEvent& ev) { return OnWindowClose(ev); });
+        dispatcher.Dispatch<Nova::Events::WindowResizeEvent>(
+            [this](Nova::Events::WindowResizeEvent& ev) { return OnWindowResize(ev); });
+
+        // From top to bottom
+        for (auto it = m_LayerStack.rbegin(); it != m_LayerStack.rend(); ++it) {
+            if (e.m_Handle)
+                break;
+            (*it)->OnEvent(e);
+        }
+    }
+
+    bool Application::OnWindowClose(Nova::Events::WindowClosedEvent&) {
+        m_IsRunning = false;
+        return true;
+    }
+
+    bool Application::OnWindowResize(Nova::Events::WindowResizeEvent& e) {
+        //TODO do something
+        (void)e;
+        return false;
     }
 
 } // namespace Nova::Core

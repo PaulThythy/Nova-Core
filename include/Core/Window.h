@@ -1,10 +1,15 @@
 #ifndef WINDOW_H
 #define WINDOW_H
 
+#include <functional>
 #include <glad/gl.h>
 #include <SDL3/SDL.h>
 
 #include "Core/GraphicsAPI.h"
+
+namespace Nova::Events {
+    class Event;
+}
 
 namespace Nova::Core {
     
@@ -20,6 +25,9 @@ namespace Nova::Core {
             int m_GL_Minor      = 3;
             int m_GL_Profile    = SDL_GL_CONTEXT_PROFILE_CORE;
             bool m_VSync        = true;
+
+            using EventCallbackFn = std::function<void(Nova::Events::Event&)>;
+            EventCallbackFn m_EventCallback;
         };
 
         Window();
@@ -46,6 +54,8 @@ namespace Nova::Core {
         void Destroy();
 
         void PresentRenderer();
+
+        void RaiseEvent(Nova::Events::Event& event);
     
     private:
         WindowDesc m_Desc;
