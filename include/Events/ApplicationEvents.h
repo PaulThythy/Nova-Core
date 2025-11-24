@@ -8,7 +8,7 @@
 
 #include "Event.h"
 
-namespace Nova::Events {
+namespace Nova::Core::Events {
 
     class WindowClosedEvent : public Event
     {
@@ -65,6 +65,6 @@ namespace Nova::Events {
         EVENT_CLASS_CATEGORY(EventCategoryApplication)
     };
 
-}
+} // namespace Nova::Core::Events
 
 #endif // WINDOWEVENTS_H

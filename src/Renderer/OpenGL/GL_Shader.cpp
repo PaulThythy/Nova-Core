@@ -5,7 +5,7 @@
 
 #include "Renderer/OpenGL/GL_Shader.h"
 
-namespace Nova::Renderer::OpenGL {
+namespace Nova::Core::Renderer::OpenGL {
 
     std::string ReadFile(const std::string& filePath) {
         std::ifstream file(filePath);
@@ -107,4 +107,4 @@ namespace Nova::Renderer::OpenGL {
         GLuint programID = LinkProgram({ computeID });
         return programID;
     }
-} // namespace Nova::Renderer::OpenGL
+} // namespace Nova::Core::Renderer::OpenGL

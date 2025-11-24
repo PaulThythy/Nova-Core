@@ -8,7 +8,7 @@
 
 #include "Event.h"
 
-namespace Nova::Events {
+namespace Nova::Core::Events {
 
     //
 	// Key Events
@@ -149,6 +149,6 @@ namespace Nova::Events {
 		EVENT_CLASS_TYPE(MouseButtonReleased)
 	};
 
-} // namespace Nova::Events
+} // namespace Nova::Core::Events
 
 #endif // INPUTEVENTS_H

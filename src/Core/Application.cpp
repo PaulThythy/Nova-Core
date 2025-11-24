@@ -24,7 +24,7 @@ namespace Nova::Core {
     void Application::InitEngine(const Window::WindowDesc* windowDesc) {
         Window::WindowDesc desc = windowDesc ? *windowDesc : Window::WindowDesc{};
 
-        desc.m_EventCallback = [this](Nova::Events::Event& e) {
+        desc.m_EventCallback = [this](Nova::Core::Events::Event& e) {
             OnEvent(e);
         };
 
@@ -50,45 +50,45 @@ namespace Nova::Core {
 
                 switch (event.type) {
                     case SDL_EVENT_QUIT: {
-                        Nova::Events::WindowClosedEvent e;
+                        WindowClosedEvent e;
                         m_Window->RaiseEvent(e);
                         break;
                     }
                     case SDL_EVENT_WINDOW_RESIZED: {
                         int w = event.window.data1;
                         int h = event.window.data2;
-                        Nova::Events::WindowResizeEvent e((uint32_t)w, (uint32_t)h);
+                        WindowResizeEvent e((uint32_t)w, (uint32_t)h);
                         m_Window->RaiseEvent(e);
                         break;
                     }
                     case SDL_EVENT_MOUSE_MOTION: {
-                        Nova::Events::MouseMovedEvent e((double)event.motion.x, (double)event.motion.y);
+                        MouseMovedEvent e((double)event.motion.x, (double)event.motion.y);
                         m_Window->RaiseEvent(e);
                         break;
                     }
                     case SDL_EVENT_MOUSE_WHEEL: {
-                        Nova::Events::MouseScrolledEvent e((double)event.wheel.x, (double)event.wheel.y);
+                        MouseScrolledEvent e((double)event.wheel.x, (double)event.wheel.y);
                         m_Window->RaiseEvent(e);
                         break;
                     }
                     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
-                        Nova::Events::MouseButtonPressedEvent e((int)event.button.button);
+                        MouseButtonPressedEvent e((int)event.button.button);
                         m_Window->RaiseEvent(e);
                         break;
                     }
                     case SDL_EVENT_MOUSE_BUTTON_UP: {
-                        Nova::Events::MouseButtonReleasedEvent e((int)event.button.button);
+                        MouseButtonReleasedEvent e((int)event.button.button);
                         m_Window->RaiseEvent(e);
                         break;
                     }
                     case SDL_EVENT_KEY_DOWN: {
                         bool repeat = event.key.repeat != 0;
-                        Nova::Events::KeyPressedEvent e((int)event.key.key, repeat);
+                        KeyPressedEvent e((int)event.key.key, repeat);
                         m_Window->RaiseEvent(e);
                         break;
                     }
                     case SDL_EVENT_KEY_UP: {
-                        Nova::Events::KeyReleasedEvent e((int)event.key.key);
+                        KeyReleasedEvent e((int)event.key.key);
                         m_Window->RaiseEvent(e);
                         break;
                     }
@@ -163,12 +163,12 @@ namespace Nova::Core {
         }
     }
 
-    void Application::OnEvent(Nova::Events::Event& e) {
-        Nova::Events::EventDispatcher dispatcher(e);
-        dispatcher.Dispatch<Nova::Events::WindowClosedEvent>(
-            [this](Nova::Events::WindowClosedEvent& ev) { return OnWindowClose(ev); });
-        dispatcher.Dispatch<Nova::Events::WindowResizeEvent>(
-            [this](Nova::Events::WindowResizeEvent& ev) { return OnWindowResize(ev); });
+    void Application::OnEvent(Event& e) {
+        EventDispatcher dispatcher(e);
+        dispatcher.Dispatch<WindowClosedEvent>(
+            [this](WindowClosedEvent& ev) { return OnWindowClose(ev); });
+        dispatcher.Dispatch<WindowResizeEvent>(
+            [this](WindowResizeEvent& ev) { return OnWindowResize(ev); });
 
         // From top to bottom
         for (auto it = m_LayerStack.rbegin(); it != m_LayerStack.rend(); ++it) {
@@ -178,12 +178,12 @@ namespace Nova::Core {
         }
     }
 
-    bool Application::OnWindowClose(Nova::Events::WindowClosedEvent&) {
+    bool Application::OnWindowClose(WindowClosedEvent&) {
         m_IsRunning = false;
         return true;
     }
 
-    bool Application::OnWindowResize(Nova::Events::WindowResizeEvent& e) {
+    bool Application::OnWindowResize(WindowResizeEvent& e) {
         //TODO do something
         (void)e;
         return false;

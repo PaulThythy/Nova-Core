@@ -5,7 +5,7 @@
 
 #include "Events/Event.h"
 
-using namespace Nova::Events;
+using namespace Nova::Core::Events;
 
 namespace Nova::Core {
 

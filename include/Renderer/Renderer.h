@@ -1,7 +1,7 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-namespace Nova::Renderer {
+namespace Nova::Core::Renderer {
 
     class IRenderer {
     public:
@@ -19,6 +19,6 @@ namespace Nova::Renderer {
         virtual void EndFrame() = 0;
     };
 
-} // namespace Nova::Renderer
+} // namespace Nova::Core::Renderer
 
 #endif // RENDERER_H

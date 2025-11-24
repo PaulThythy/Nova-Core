@@ -6,7 +6,7 @@
 #include <string>
 #include <functional>
 
-namespace Nova::Events {
+namespace Nova::Core::Events {
 
     enum class EventType {
         None = 0,
@@ -79,6 +79,6 @@ namespace Nova::Events {
         return os << e.ToString();
     }
 
-} // namespace Nova::Events
+} // namespace Nova::Core::Events
 
 #endif // EVENT_H

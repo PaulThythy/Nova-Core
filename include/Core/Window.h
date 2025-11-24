@@ -7,8 +7,10 @@
 
 #include "Core/GraphicsAPI.h"
 
-namespace Nova::Events {
+namespace Nova::Core::Events {
     class Event;
+    class WindowClosedEvent;
+    class WindowResizeEvent;
 }
 
 namespace Nova::Core {
@@ -26,7 +28,7 @@ namespace Nova::Core {
             int m_GL_Profile    = SDL_GL_CONTEXT_PROFILE_CORE;
             bool m_VSync        = true;
 
-            using EventCallbackFn = std::function<void(Nova::Events::Event&)>;
+            using EventCallbackFn = std::function<void(Events::Event&)>;
             EventCallbackFn m_EventCallback;
         };
 
@@ -55,7 +57,7 @@ namespace Nova::Core {
 
         void PresentRenderer();
 
-        void RaiseEvent(Nova::Events::Event& event);
+        void RaiseEvent(Events::Event& event);
     
     private:
         WindowDesc m_Desc;

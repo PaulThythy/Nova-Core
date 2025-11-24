@@ -146,7 +146,7 @@ namespace Nova::Core {
         }
     }
 
-    void Window::RaiseEvent(Nova::Events::Event& event) {
+    void Window::RaiseEvent(Events::Event& event) {
         if (m_Desc.m_EventCallback) {
             m_Desc.m_EventCallback(event);
         }

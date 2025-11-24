@@ -4,7 +4,7 @@
 #include <glad/gl.h>
 #include <string>
 
-namespace Nova::Renderer::OpenGL {
+namespace Nova::Core::Renderer::OpenGL {
 
     std::string ReadFile(const std::string& filePath);
 
@@ -14,6 +14,6 @@ namespace Nova::Renderer::OpenGL {
     GLuint CompileShader(GLenum shaderType, const std::string& shaderCode);
     GLuint LinkProgram(const std::initializer_list<GLuint>& shaderIDs);
 
-} // namespace Nova::Renderer::OpenGL
+} // namespace Nova::Core::Renderer::OpenGL
 
 #endif // GL_SHADER_HPP
