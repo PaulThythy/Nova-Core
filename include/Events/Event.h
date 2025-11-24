@@ -5,6 +5,7 @@
 
 #include <string>
 #include <functional>
+#include <ostream>
 
 namespace Nova::Core::Events {
 
