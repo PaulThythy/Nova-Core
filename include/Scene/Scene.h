@@ -25,10 +25,14 @@ namespace Nova::Core::Scene {
 		entt::registry& GetRegistry() { return m_Registry; }
 		const entt::registry& GetRegistry() const { return m_Registry; }
 
+		void SetMainCamera(entt::entity entity) { m_MainCamera = entity; }
+
 	private:
 		entt::registry m_Registry;
 
 		std::unordered_map<UUID, entt::entity> m_EntityMap;
+
+		entt::entity m_MainCamera{ entt::null };
 	};
 
 } // namespace Nova::Core::Scene
