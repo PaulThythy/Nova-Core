@@ -14,8 +14,7 @@ namespace Nova::Core::Events {
 	// Key Events
 	//
 
-	class KeyEvent : public Event
-	{
+	class KeyEvent : public Event {
 	public:
 		inline int GetKeyCode() const { return m_KeyCode; }
 
@@ -26,15 +25,13 @@ namespace Nova::Core::Events {
 		int m_KeyCode;
 	};
 
-	class KeyPressedEvent : public KeyEvent
-	{
+	class KeyPressedEvent : public KeyEvent {
 	public:
 		KeyPressedEvent(const int keycode, bool isRepeat = false) : KeyEvent(keycode), m_IsRepeat(isRepeat) {}
 
 		inline bool IsRepeat() const { return m_IsRepeat; }
 
-		std::string ToString() const override
-		{
+		std::string ToString() const override {
 			return std::format("KeyPressedEvent: {} (repeat={})", m_KeyCode, m_IsRepeat);
 		}
 
@@ -43,26 +40,22 @@ namespace Nova::Core::Events {
 		bool m_IsRepeat;
 	};
 
-	class KeyReleasedEvent : public KeyEvent
-	{
+	class KeyReleasedEvent : public KeyEvent {
 	public:
 		KeyReleasedEvent(const int keycode) : KeyEvent(keycode) {}
 
-		std::string ToString() const override
-		{
+		std::string ToString() const override {
 			return std::format("KeyReleasedEvent: {}", m_KeyCode);
 		}
 
 		EVENT_CLASS_TYPE(KeyReleased)
 	};
 
-	class KeyTypedEvent : public KeyEvent
-	{
+	class KeyTypedEvent : public KeyEvent {
 	public:
 		KeyTypedEvent(const int keycode) : KeyEvent(keycode) {}
 
-		std::string ToString() const override
-		{
+		std::string ToString() const override {
 			return std::format("KeyTypedEvent: {}", m_KeyCode);
 		}
 
@@ -73,16 +66,14 @@ namespace Nova::Core::Events {
 	// Mouse Events
 	//
 
-	class MouseMovedEvent : public Event
-	{
+	class MouseMovedEvent : public Event {
 	public:
 		MouseMovedEvent(double x, double y) : m_MouseX(x), m_MouseY(y) {}
 
 		inline double GetX() const { return m_MouseX; }
 		inline double GetY() const { return m_MouseY; }
 
-		std::string ToString() const override
-		{
+		std::string ToString() const override {
 			return std::format("MouseMovedEvent: {}, {}", m_MouseX, m_MouseY);
 		}
 
@@ -92,16 +83,14 @@ namespace Nova::Core::Events {
 		double m_MouseX, m_MouseY;
 	};
 
-	class MouseScrolledEvent : public Event
-	{
+	class MouseScrolledEvent : public Event {
 	public:
 		MouseScrolledEvent(const double xOffset, const double yOffset) : m_XOffset(xOffset), m_YOffset(yOffset) {}
 
 		inline double GetXOffset() const { return m_XOffset; }
 		inline double GetYOffset() const { return m_YOffset; }
 
-		std::string ToString() const override
-		{
+		std::string ToString() const override {
 			return std::format("MouseScrolledEvent: {}, {}", m_XOffset, m_YOffset);
 		}
 
@@ -111,8 +100,7 @@ namespace Nova::Core::Events {
 		double m_XOffset, m_YOffset;
 	};
 
-	class MouseButtonEvent : public Event
-	{
+	class MouseButtonEvent : public Event {
 	public:
 		inline int GetMouseButton() const { return m_Button; }
 
@@ -128,21 +116,18 @@ namespace Nova::Core::Events {
 	public:
 		MouseButtonPressedEvent(int button) : MouseButtonEvent(button) {}
 
-		std::string ToString() const override
-		{
+		std::string ToString() const override {
 			return std::format("MouseButtonPressedEvent: {}", m_Button);
 		}
 
 		EVENT_CLASS_TYPE(MouseButtonPressed)
 	};
 
-	class MouseButtonReleasedEvent : public MouseButtonEvent
-	{
+	class MouseButtonReleasedEvent : public MouseButtonEvent {
 	public:
 		MouseButtonReleasedEvent(int button) : MouseButtonEvent(button) {}
 
-		std::string ToString() const override
-		{
+		std::string ToString() const override {
 			return std::format("MouseButtonReleasedEvent: {}", m_Button);
 		}
 

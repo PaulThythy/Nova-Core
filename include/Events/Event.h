@@ -14,7 +14,8 @@ namespace Nova::Core::Events {
         WindowClose, WindowResize, WindowFocus, WindowLostFocus, WindowMoved,
         AppTick, AppUpdate, AppRender,
         KeyPressed, KeyReleased, KeyTyped,
-        MouseButtonPressed, MouseButtonReleased, MouseMoved, MouseScrolled
+        MouseButtonPressed, MouseButtonReleased, MouseMoved, MouseScrolled,
+        ImGuiPanelResize, ImGuiPanelFocus, ImGuiPanelHover
     };
 
     enum EventCategory {
@@ -52,20 +53,14 @@ namespace Nova::Core::Events {
         }
     };
 
-    class EventDispatcher
-    {
+    class EventDispatcher {
     public:
-        EventDispatcher(Event& event)
-            : m_Event(event)
-        {
-        }
+        EventDispatcher(Event& event): m_Event(event) {}
 
         // F will be deduced by the compiler
         template<typename T, typename F>
-        bool Dispatch(const F& func)
-        {
-            if (m_Event.GetEventType() == T::GetStaticType())
-            {
+        bool Dispatch(const F& func) {
+            if (m_Event.GetEventType() == T::GetStaticType()) {
                 m_Event.m_Handle |= func(static_cast<T&>(m_Event));
                 return true;
             }
@@ -75,8 +70,7 @@ namespace Nova::Core::Events {
         Event& m_Event;
     };
 
-    inline std::ostream& operator<<(std::ostream& os, const Event& e)
-    {
+    inline std::ostream& operator<<(std::ostream& os, const Event& e) {
         return os << e.ToString();
     }
 
