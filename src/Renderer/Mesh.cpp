@@ -16,41 +16,70 @@ namespace Nova::Core::Renderer {
 
     std::shared_ptr<Mesh> Mesh::CreatePlane(){
         std::vector<Vertex> vertices;
-        vertices.reserve(4);
+        vertices.reserve(6); // 2 triangles * 3 vertices
 
-        Vertex v0;
-        v0.m_Position = { -1.0f, 0.0f, -1.0f };
-        v0.m_Normal = { 0.0f,  1.0f, 0.0f };
-        v0.m_TexCoord = { 0.0f,  0.0f };
-        v0.m_Color = { 1.0f,  0.0f, 0.0f }; // red
+        std::vector<int> indices;
+        indices.reserve(6);
 
-        Vertex v1;
-        v1.m_Position = { 1.0f, 0.0f, -1.0f };
-        v1.m_Normal = { 0.0f,  1.0f, 0.0f };
-        v1.m_TexCoord = { 1.0f,  0.0f };
-        v1.m_Color = { 0.0f,  1.0f, 0.0f }; // green
+        glm::vec3 p0{ -1.0f, 0.0f, -1.0f }; // bottom-left
+        glm::vec3 p1{  1.0f, 0.0f, -1.0f }; // bottom-right
+        glm::vec3 p2{  1.0f, 0.0f,  1.0f }; // top-right
+        glm::vec3 p3{ -1.0f, 0.0f,  1.0f }; // top-left
 
-        Vertex v2;
-        v2.m_Position = { 1.0f,  0.0f, 1.0f };
-        v2.m_Normal = { 0.0f,  1.0f, 0.0f };
-        v2.m_TexCoord = { 1.0f,  1.0f };
-        v2.m_Color = { 0.0f,  0.0f, 1.0f }; // blue
+        glm::vec3 normal{ 0.0f, 1.0f, 0.0f };
 
-        Vertex v3;
-        v3.m_Position = { -1.0f,  0.0f, 1.0f };
-        v3.m_Normal = { 0.0f,  1.0f, 0.0f };
-        v3.m_TexCoord = { 0.0f,  1.0f };
-        v3.m_Color = { 1.0f,  1.0f, 1.0f }; // white
+        // --- Triangle 0 vertices (p0, p1, p2) ---
+        Vertex v0; // red
+        v0.m_Position = p0;
+        v0.m_Normal   = normal;
+        v0.m_TexCoord = { 0.0f, 0.0f };
+        v0.m_Color    = { 1.0f, 0.0f, 0.0f }; // R
+
+        Vertex v1; // green
+        v1.m_Position = p1;
+        v1.m_Normal   = normal;
+        v1.m_TexCoord = { 1.0f, 0.0f };
+        v1.m_Color    = { 0.0f, 1.0f, 0.0f }; // G
+
+        Vertex v2; // blue
+        v2.m_Position = p2;
+        v2.m_Normal   = normal;
+        v2.m_TexCoord = { 1.0f, 1.0f };
+        v2.m_Color    = { 0.0f, 0.0f, 1.0f }; // B
+
+        // --- Triangle 1 vertices (p0, p2, p3) ---
+        Vertex v3; // red
+        v3.m_Position = p0;
+        v3.m_Normal   = normal;
+        v3.m_TexCoord = { 0.0f, 0.0f };
+        v3.m_Color    = { 1.0f, 0.0f, 0.0f }; // R
+
+        Vertex v4; // green
+        v4.m_Position = p2;
+        v4.m_Normal   = normal;
+        v4.m_TexCoord = { 1.0f, 1.0f };
+        v4.m_Color    = { 0.0f, 1.0f, 0.0f }; // G
+
+        Vertex v5; // blue
+        v5.m_Position = p3;
+        v5.m_Normal   = normal;
+        v5.m_TexCoord = { 0.0f, 1.0f };
+        v5.m_Color    = { 0.0f, 0.0f, 1.0f }; // B
 
         vertices.push_back(v0);
         vertices.push_back(v1);
         vertices.push_back(v2);
         vertices.push_back(v3);
+        vertices.push_back(v4);
+        vertices.push_back(v5);
 
-        std::vector<int> indices = {
-            0, 1, 2,
-            0, 2, 3
-        };
+        indices.push_back(0);
+        indices.push_back(1);
+        indices.push_back(2);
+
+        indices.push_back(3);
+        indices.push_back(4);
+        indices.push_back(5);
 
         return std::make_shared<Mesh>(std::move(vertices), std::move(indices));
     }
@@ -59,119 +88,136 @@ namespace Nova::Core::Renderer {
         std::vector<Vertex> vertices;
         std::vector<int>    indices;
 
-        vertices.reserve(24);  // 6 faces * 4 vertices per face
-        indices.reserve(36);   // 6 faces * 2 triangles * 3 indices
+        // 6 faces * 2 triangles * 3 vertices
+        vertices.reserve(6 * 2 * 3);
+        indices.reserve(6 * 2 * 3);
 
         const float h = halfExtent;
-        const glm::vec3 colors[3] = {
+
+        // Per-triangle RGB pattern
+        const glm::vec3 triColors[3] = {
             {1.0f, 0.0f, 0.0f}, // red
             {0.0f, 1.0f, 0.0f}, // green
             {0.0f, 0.0f, 1.0f}  // blue
         };
 
-        auto addFace = [&](const glm::vec3& p0,
-                           const glm::vec3& p1,
-                           const glm::vec3& p2,
-                           const glm::vec3& p3,
-                           const glm::vec3& normal)
+        auto addTriangle = [&](const glm::vec3& p0,
+                            const glm::vec3& p1,
+                            const glm::vec3& p2,
+                            const glm::vec3& normal,
+                            const glm::vec2& uv0 = {0.0f, 0.0f},
+                            const glm::vec2& uv1 = {1.0f, 0.0f},
+                            const glm::vec2& uv2 = {1.0f, 1.0f})
         {
-            // p0..p3 are assumed in CCW order when seen from outside
-            // We will add triangles with CW order later via indices
-
+            // Add one triangle (3 unique vertices)
             int baseIndex = static_cast<int>(vertices.size());
 
-            Vertex v0, v1, v2, v3;
+            Vertex v0, v1, v2;
             v0.m_Position = p0;
             v1.m_Position = p1;
             v2.m_Position = p2;
-            v3.m_Position = p3;
 
-            v0.m_Normal = v1.m_Normal = v2.m_Normal = v3.m_Normal = normal;
+            v0.m_Normal = v1.m_Normal = v2.m_Normal = normal;
 
-            // Simple UVs for each face
-            v0.m_TexCoord = {0.0f, 0.0f};
-            v1.m_TexCoord = {1.0f, 0.0f};
-            v2.m_TexCoord = {1.0f, 1.0f};
-            v3.m_TexCoord = {0.0f, 1.0f};
+            v0.m_TexCoord = uv0;
+            v1.m_TexCoord = uv1;
+            v2.m_TexCoord = uv2;
 
-            // Assign RGB colors in a repeating pattern over vertices
-            Vertex* v[4] = { &v0, &v1, &v2, &v3 };
-            for (int i = 0; i < 4; ++i) {
-                int idx = baseIndex + i;
-                v[i]->m_Color = colors[idx % 3];
-            }
+            // Each triangle has 3 distinct colors (R, G, B)
+            v0.m_Color = triColors[0];
+            v1.m_Color = triColors[1];
+            v2.m_Color = triColors[2];
+
+            // Simple default tangent/bitangent
+            v0.m_Tangent = v1.m_Tangent = v2.m_Tangent   = glm::vec3(1.0f, 0.0f, 0.0f);
+            v0.m_Bitangent = v1.m_Bitangent = v2.m_Bitangent = glm::vec3(0.0f, 0.0f, 1.0f);
 
             vertices.push_back(v0);
             vertices.push_back(v1);
             vertices.push_back(v2);
-            vertices.push_back(v3);
 
-            int i0 = baseIndex + 0;
-            int i1 = baseIndex + 1;
-            int i2 = baseIndex + 2;
-            int i3 = baseIndex + 3;
+            indices.push_back(baseIndex + 0);
+            indices.push_back(baseIndex + 2);
+            indices.push_back(baseIndex + 1);
+        };
 
-            // Triangles in CW order
-            indices.push_back(i1);
-            indices.push_back(i0);
-            indices.push_back(i2);
+        auto addFace = [&](const glm::vec3& p0,
+                        const glm::vec3& p1,
+                        const glm::vec3& p2,
+                        const glm::vec3& p3,
+                        const glm::vec3& normal)
+        {
+            // Triangle 1
+            addTriangle(
+                p0, p1, p2,
+                normal,
+                glm::vec2(0.0f, 0.0f),
+                glm::vec2(1.0f, 0.0f),
+                glm::vec2(1.0f, 1.0f)
+            );
 
-            indices.push_back(i2);
-            indices.push_back(i0);
-            indices.push_back(i3);
+            // Triangle 2
+            addTriangle(
+                p0, p2, p3,
+                normal,
+                glm::vec2(0.0f, 0.0f),
+                glm::vec2(1.0f, 1.0f),
+                glm::vec2(0.0f, 1.0f)
+            );
         };
 
         // Front face  (Z+)
         addFace(
-            { -h, -h,  h }, // bottom-left
-            {  h, -h,  h }, // bottom-right
-            {  h,  h,  h }, // top-right
-            { -h,  h,  h }, // top-left
+            { -h, -h,  h }, // p0 bottom-left
+            {  h, -h,  h }, // p1 bottom-right
+            {  h,  h,  h }, // p2 top-right
+            { -h,  h,  h }, // p3 top-left
             {  0.0f, 0.0f, 1.0f }
         );
 
         // Back face   (Z-)
+        // Note: order chosen so that it is CCW when viewed from outside (looking along -Z)
         addFace(
-            { -h, -h, -h }, // bottom-left
-            { -h,  h, -h }, // top-left
-            {  h,  h, -h }, // top-right
-            {  h, -h, -h }, // bottom-right
+            {  h, -h, -h }, // p0 bottom-left
+            { -h, -h, -h }, // p1 bottom-right
+            { -h,  h, -h }, // p2 top-right
+            {  h,  h, -h }, // p3 top-left
             {  0.0f, 0.0f,-1.0f }
         );
 
         // Right face  (X+)
         addFace(
-            {  h, -h, -h }, // bottom-left
-            {  h,  h, -h }, // top-left
-            {  h,  h,  h }, // top-right
-            {  h, -h,  h }, // bottom-right
+            {  h, -h,  h }, // p0 bottom-left
+            {  h, -h, -h }, // p1 bottom-right
+            {  h,  h, -h }, // p2 top-right
+            {  h,  h,  h }, // p3 top-left
             {  1.0f, 0.0f, 0.0f }
         );
 
         // Left face   (X-)
         addFace(
-            { -h, -h,  h }, // bottom-left
-            { -h,  h,  h }, // top-left
-            { -h,  h, -h }, // top-right
-            { -h, -h, -h }, // bottom-right
+            { -h, -h, -h }, // p0 bottom-left
+            { -h, -h,  h }, // p1 bottom-right
+            { -h,  h,  h }, // p2 top-right
+            { -h,  h, -h }, // p3 top-left
             { -1.0f, 0.0f, 0.0f }
         );
 
         // Top face    (Y+)
         addFace(
-            { -h,  h, -h }, // bottom-left
-            { -h,  h,  h }, // bottom-right
-            {  h,  h,  h }, // top-right
-            {  h,  h, -h }, // top-left
+            { -h,  h,  h }, // p0 bottom-left
+            {  h,  h,  h }, // p1 bottom-right
+            {  h,  h, -h }, // p2 top-right
+            { -h,  h, -h }, // p3 top-left
             {  0.0f, 1.0f, 0.0f }
         );
 
         // Bottom face (Y-)
         addFace(
-            { -h, -h,  h }, // bottom-left
-            { -h, -h, -h }, // bottom-right
-            {  h, -h, -h }, // top-right
-            {  h, -h,  h }, // top-left
+            { -h, -h, -h }, // p0 bottom-left
+            {  h, -h, -h }, // p1 bottom-right
+            {  h, -h,  h }, // p2 top-right
+            { -h, -h,  h }, // p3 top-left
             {  0.0f,-1.0f, 0.0f }
         );
 
