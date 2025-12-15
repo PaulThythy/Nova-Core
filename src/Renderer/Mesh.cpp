@@ -28,43 +28,49 @@ namespace Nova::Core::Renderer {
 
         glm::vec3 normal{ 0.0f, 1.0f, 0.0f };
 
+        const glm::vec3 triColors[3] = {
+            {1.0f, 1.0f, 0.0f}, // yellow
+            {1.0f, 0.0f, 1.0f}, // magenta
+            {0.0f, 1.0f, 1.0f}  // cyan
+        };
+
         // --- Triangle 0 vertices (p0, p1, p2) ---
-        Vertex v0; // red
+        Vertex v0; // yellow
         v0.m_Position = p0;
         v0.m_Normal   = normal;
         v0.m_TexCoord = { 0.0f, 0.0f };
-        v0.m_Color    = { 1.0f, 0.0f, 0.0f }; // R
+        v0.m_Color = triColors[0];
 
-        Vertex v1; // green
+        Vertex v1; // magenta
         v1.m_Position = p1;
         v1.m_Normal   = normal;
         v1.m_TexCoord = { 1.0f, 0.0f };
-        v1.m_Color    = { 0.0f, 1.0f, 0.0f }; // G
+        v1.m_Color    = triColors[1];
 
-        Vertex v2; // blue
+        Vertex v2; // cyan
         v2.m_Position = p2;
         v2.m_Normal   = normal;
         v2.m_TexCoord = { 1.0f, 1.0f };
-        v2.m_Color    = { 0.0f, 0.0f, 1.0f }; // B
+        v2.m_Color    = triColors[2];
 
         // --- Triangle 1 vertices (p0, p2, p3) ---
-        Vertex v3; // red
+        Vertex v3; // yellow
         v3.m_Position = p0;
         v3.m_Normal   = normal;
         v3.m_TexCoord = { 0.0f, 0.0f };
-        v3.m_Color    = { 1.0f, 0.0f, 0.0f }; // R
+        v3.m_Color    = triColors[0];
 
-        Vertex v4; // green
+        Vertex v4; // magenta
         v4.m_Position = p2;
         v4.m_Normal   = normal;
         v4.m_TexCoord = { 1.0f, 1.0f };
-        v4.m_Color    = { 0.0f, 1.0f, 0.0f }; // G
+        v4.m_Color    = triColors[1];
 
-        Vertex v5; // blue
+        Vertex v5; // cyan
         v5.m_Position = p3;
         v5.m_Normal   = normal;
         v5.m_TexCoord = { 0.0f, 1.0f };
-        v5.m_Color    = { 0.0f, 0.0f, 1.0f }; // B
+        v5.m_Color    = triColors[2];
 
         vertices.push_back(v0);
         vertices.push_back(v1);
@@ -94,11 +100,11 @@ namespace Nova::Core::Renderer {
 
         const float h = halfExtent;
 
-        // Per-triangle RGB pattern
+        // Per-triangle
         const glm::vec3 triColors[3] = {
-            {1.0f, 0.0f, 0.0f}, // red
-            {0.0f, 1.0f, 0.0f}, // green
-            {0.0f, 0.0f, 1.0f}  // blue
+            {1.0f, 1.0f, 0.0f}, // yellow
+            {1.0f, 0.0f, 1.0f}, // magenta
+            {0.0f, 1.0f, 1.0f}  // cyan
         };
 
         auto addTriangle = [&](const glm::vec3& p0,
@@ -270,10 +276,10 @@ namespace Nova::Core::Renderer {
         std::vector<Vertex> vertices;
         std::vector<int>    indices;
 
-        const glm::vec3 colors[3] = {
-            {1.0f, 0.0f, 0.0f}, // red
-            {0.0f, 1.0f, 0.0f}, // green
-            {0.0f, 0.0f, 1.0f}  // blue
+        const glm::vec3 triColors[3] = {
+            {1.0f, 1.0f, 0.0f}, // yellow
+            {1.0f, 0.0f, 1.0f}, // magenta
+            {0.0f, 1.0f, 1.0f}  // cyan
         };
 
         vertices.reserve(latitudeSegments * longitudeSegments * 6); // 2 tris * 3 verts
@@ -302,9 +308,9 @@ namespace Nova::Core::Renderer {
                 {
                     int base = static_cast<int>(vertices.size());
 
-                    vertices.push_back(makeVertex(i0, colors[0])); // red
-                    vertices.push_back(makeVertex(i2, colors[1])); // green
-                    vertices.push_back(makeVertex(i1, colors[2])); // blue
+                    vertices.push_back(makeVertex(i0, triColors[0])); // red
+                    vertices.push_back(makeVertex(i2, triColors[1])); // green
+                    vertices.push_back(makeVertex(i1, triColors[2])); // blue
 
                     indices.push_back(base + 0);
                     indices.push_back(base + 1);
@@ -315,9 +321,9 @@ namespace Nova::Core::Renderer {
                 {
                     int base = static_cast<int>(vertices.size());
 
-                    vertices.push_back(makeVertex(i1, colors[0])); // red
-                    vertices.push_back(makeVertex(i2, colors[1])); // green
-                    vertices.push_back(makeVertex(i3, colors[2])); // blue
+                    vertices.push_back(makeVertex(i1, triColors[0])); // red
+                    vertices.push_back(makeVertex(i2, triColors[1])); // green
+                    vertices.push_back(makeVertex(i3, triColors[2])); // blue
 
                     indices.push_back(base + 0);
                     indices.push_back(base + 1);

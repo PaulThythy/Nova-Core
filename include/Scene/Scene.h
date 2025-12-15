@@ -4,6 +4,7 @@
 #include <entt/entt.hpp>
 #include <unordered_map>
 #include <string>
+#include <vector>
 
 #include "Core/UUID.h"
 
@@ -11,7 +12,12 @@ namespace Nova::Core::Scene {
 
 	class Scene {
 	public: 
-		Scene() = default;
+		struct Node {
+			entt::entity m_Parent{ entt::null };
+			std::vector<entt::entity> m_Children;
+		};
+
+		Scene();
 		~Scene() = default;
 
 		entt::entity CreateEntity(const std::string& name);
@@ -27,10 +33,39 @@ namespace Nova::Core::Scene {
 
 		void SetMainCamera(entt::entity entity) { m_MainCamera = entity; }
 
+		// tree
+
+		entt::entity GetRootEntity() const { return m_Root; }
+
+		bool ParentEntity(entt::entity child, entt::entity newParent);
+		void UnparentEntity(entt::entity child);
+
+		entt::entity GetParent(entt::entity entity) const;
+		const std::vector<entt::entity>& GetChildren(entt::entity entity) const;
+
+		void Clear();
+
 	private:
+		struct EntityHash {
+			std::size_t operator()(entt::entity e) const noexcept {
+				return static_cast<std::size_t>(entt::to_integral(e));
+			}
+		};
+
+		bool IsValidEntity(entt::entity e) const;
+		bool WouldCreateCycle(entt::entity child, entt::entity newParent) const;
+
+		void EnsureNode(entt::entity e);
+		void DetachFromParent(entt::entity e);
+		void AttachToParent(entt::entity e, entt::entity parent);
+
 		entt::registry m_Registry;
 
 		std::unordered_map<UUID, entt::entity> m_EntityMap;
+
+		entt::entity m_Root{ entt::null };
+
+		std::unordered_map<entt::entity, Node, EntityHash> m_Nodes;
 
 		entt::entity m_MainCamera{ entt::null };
 	};
