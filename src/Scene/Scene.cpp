@@ -6,7 +6,9 @@
 
 namespace Nova::Core::Scene {
 
-	Scene::Scene() {
+	Scene::Scene(const std::string& sceneName) {
+		m_Name = sceneName;
+
 		m_Root = m_Registry.create();
 
 		m_Registry.emplace<ECS::Components::NameComponent>(m_Root, "Root");

@@ -17,7 +17,7 @@ namespace Nova::Core::Scene {
 			std::vector<entt::entity> m_Children;
 		};
 
-		Scene();
+		Scene(const std::string& sceneName);
 		~Scene() = default;
 
 		entt::entity CreateEntity(const std::string& name);
@@ -45,6 +45,8 @@ namespace Nova::Core::Scene {
 
 		void Clear();
 
+		std::string GetName() { return m_Name; }
+
 	private:
 		struct EntityHash {
 			std::size_t operator()(entt::entity e) const noexcept {
@@ -58,6 +60,8 @@ namespace Nova::Core::Scene {
 		void EnsureNode(entt::entity e);
 		void DetachFromParent(entt::entity e);
 		void AttachToParent(entt::entity e, entt::entity parent);
+
+		std::string m_Name;
 
 		entt::registry m_Registry;
 
