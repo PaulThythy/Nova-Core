@@ -93,3 +93,12 @@ target_include_directories(Nova-Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_definitions(Nova-Core PRIVATE
     NOVA_CORE_ROOT_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"
 )
+
+target_compile_definitions(Nova-Core
+    PRIVATE
+        NOVA_CORE_ROOT_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"
+        $<$<CONFIG:Debug>:NOVA_DEBUG>
+        $<$<CONFIG:Release>:NOVA_RELEASE>
+        $<$<CONFIG:RelWithDebInfo>:NOVA_RELWITHDEBINFO>
+        $<$<CONFIG:MinSizeRel>:NOVA_MINSIZEREL>
+)
