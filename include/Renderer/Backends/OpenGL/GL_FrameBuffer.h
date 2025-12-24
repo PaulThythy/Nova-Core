@@ -3,11 +3,11 @@
 
 #include <glad/gl.h>
 
-#include "Renderer/FrameBuffer.h"
+#include "Renderer/RHI/RHI_FrameBuffer.h"
 
-namespace Nova::Core::Renderer::OpenGL {
+namespace Nova::Core::Renderer::Backends::OpenGL {
 
-    class GL_FrameBuffer : public FrameBuffer {
+    class GL_FrameBuffer : public RHI::IFrameBuffer {
     public:
         GL_FrameBuffer() = default;
         GL_FrameBuffer(int width, int height) {
@@ -43,6 +43,6 @@ namespace Nova::Core::Renderer::OpenGL {
         int m_Height{ 0 };
     };
 
-} // namespace Nova::Core::Renderer::OpenGL
+} // namespace Nova::Core::Renderer::Backends::OpenGL
 
 #endif // GL_FRAMEBUFFER_H

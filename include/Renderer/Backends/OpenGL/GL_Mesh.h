@@ -2,17 +2,17 @@
 #define GL_MESH_H
 
 #include <glad/gl.h>
-#include "Renderer/Mesh.h"
+#include "Renderer/Graphics/Mesh.h"
 
-namespace Nova::Core::Renderer::OpenGL {
+namespace Nova::Core::Renderer::Backends::OpenGL {
 
-	struct GL_Mesh : public Renderer::Mesh{
+	struct GL_Mesh : public Renderer::Graphics::Mesh{
 
 		GL_Mesh() = default;
-		explicit GL_Mesh(const Renderer::Mesh& mesh);
+		explicit GL_Mesh(const Renderer::Graphics::Mesh& mesh);
 		~GL_Mesh() override;
 
-		void Upload(const Renderer::Mesh& mesh) override;
+		void Upload(const Renderer::Graphics::Mesh& mesh) override;
 		void Release() override;
 
 		void Bind() const override;
@@ -28,6 +28,6 @@ namespace Nova::Core::Renderer::OpenGL {
 		int m_IndexCount{ 0 };
 	};
 
-} // namespace Nova::Core::Renderer::OpenGL
+} // namespace Nova::Core::Renderer::Backends::OpenGL
 
 #endif // GL_MESH_H

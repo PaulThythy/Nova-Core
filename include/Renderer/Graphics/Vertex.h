@@ -3,7 +3,7 @@
 
 #include <glm/glm.hpp>
 
-namespace Nova::Core::Renderer {
+namespace Nova::Core::Renderer::Graphics {
 
 	struct Vertex {
 		glm::vec3 m_Position{ 0.0f, 0.0f, 0.0f };
@@ -14,6 +14,6 @@ namespace Nova::Core::Renderer {
 		glm::vec3 m_Bitangent{ 0.0f, 0.0f, 1.0f };
 	};
 
-} // namespace Nova::Core::Renderer
+} // namespace Nova::Core::Renderer::Graphics
 
 #endif // VERTEX_H

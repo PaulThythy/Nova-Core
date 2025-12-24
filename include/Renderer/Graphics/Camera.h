@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace Nova::Core::Renderer {
+namespace Nova::Core::Renderer::Graphics {
 
     struct Camera {
         Camera() = default;
@@ -41,6 +41,6 @@ namespace Nova::Core::Renderer {
         bool  m_IsPerspective = true;
     };
 
-} // namespace Nova::Core::Renderer
+} // namespace Nova::Core::Renderer::Graphics
 
 #endif // CAMERA_H

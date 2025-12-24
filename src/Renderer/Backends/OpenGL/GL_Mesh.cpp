@@ -1,8 +1,8 @@
-#include "Renderer/OpenGL/GL_Mesh.h"
+#include "Renderer/Backends/OpenGL/GL_Mesh.h"
 
-namespace Nova::Core::Renderer::OpenGL {
+namespace Nova::Core::Renderer::Backends::OpenGL {
 
-    GL_Mesh::GL_Mesh(const Renderer::Mesh& mesh): Renderer::Mesh(mesh.GetVertices(), mesh.GetIndices()) {}
+    GL_Mesh::GL_Mesh(const Renderer::Graphics::Mesh& mesh): Renderer::Graphics::Mesh(mesh.GetVertices(), mesh.GetIndices()) {}
 
     GL_Mesh::~GL_Mesh()
     {
@@ -17,7 +17,7 @@ namespace Nova::Core::Renderer::OpenGL {
         m_IndexCount = 0;
     }
 
-    void GL_Mesh::Upload(const Renderer::Mesh& mesh) {
+    void GL_Mesh::Upload(const Renderer::Graphics::Mesh& mesh) {
         Release();
 
         const auto& vertices = mesh.GetVertices();
@@ -33,7 +33,7 @@ namespace Nova::Core::Renderer::OpenGL {
         // VBO
         glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
         glBufferData(GL_ARRAY_BUFFER,
-            vertices.size() * sizeof(Renderer::Vertex),
+            vertices.size() * sizeof(Renderer::Graphics::Vertex),
             vertices.data(),
             GL_STATIC_DRAW);
 
@@ -44,7 +44,7 @@ namespace Nova::Core::Renderer::OpenGL {
             indices.data(),
             GL_STATIC_DRAW);
 
-        GLsizei stride = sizeof(Renderer::Vertex);
+        GLsizei stride = sizeof(Renderer::Graphics::Vertex);
 
         // layout (location) to be adapted in shader :
         // layout(location = 0) in vec3 a_Position;
@@ -57,32 +57,32 @@ namespace Nova::Core::Renderer::OpenGL {
         // Position
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride,
-            (void*)offsetof(Renderer::Vertex, m_Position));
+            (void*)offsetof(Renderer::Graphics::Vertex, m_Position));
 
         // Normal
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride,
-            (void*)offsetof(Renderer::Vertex, m_Normal));
+            (void*)offsetof(Renderer::Graphics::Vertex, m_Normal));
 
         // TexCoord
         glEnableVertexAttribArray(2);
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride,
-            (void*)offsetof(Renderer::Vertex, m_TexCoord));
+            (void*)offsetof(Renderer::Graphics::Vertex, m_TexCoord));
 
         // Color
         glEnableVertexAttribArray(3);
         glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, stride,
-            (void*)offsetof(Renderer::Vertex, m_Color));
+            (void*)offsetof(Renderer::Graphics::Vertex, m_Color));
 
         // Tangent
         glEnableVertexAttribArray(4);
         glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, stride,
-            (void*)offsetof(Renderer::Vertex, m_Tangent));
+            (void*)offsetof(Renderer::Graphics::Vertex, m_Tangent));
 
         // Bitangent
         glEnableVertexAttribArray(5);
         glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, stride,
-            (void*)offsetof(Renderer::Vertex, m_Bitangent));
+            (void*)offsetof(Renderer::Graphics::Vertex, m_Bitangent));
 
         glBindVertexArray(0);
     }
@@ -101,4 +101,4 @@ namespace Nova::Core::Renderer::OpenGL {
         glBindVertexArray(0);
     }
 
-} // namespace Nova::Core::Renderer::OpenGL
+} // namespace Nova::Core::Renderer::Backends::OpenGL

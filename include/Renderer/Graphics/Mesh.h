@@ -4,9 +4,9 @@
 #include <vector>
 #include <memory>
 
-#include "Renderer/Vertex.h"
+#include "Renderer/Graphics/Vertex.h"
 
-namespace Nova::Core::Renderer {
+namespace Nova::Core::Renderer::Graphics {
 
 	struct Mesh {
 
@@ -19,7 +19,7 @@ namespace Nova::Core::Renderer {
 		std::vector<Vertex>& GetVertices() { return m_Vertices; }
 		std::vector<int>& GetIndices() { return m_Indices; }
 
-		virtual void Upload(const Renderer::Mesh& mesh);
+		virtual void Upload(const Renderer::Graphics::Mesh& mesh);
 		virtual void Release();
 
 		virtual void Bind()   const;
@@ -38,6 +38,6 @@ namespace Nova::Core::Renderer {
 		std::vector<int>	m_Indices;
 	};
 	
-} // namespace Nova::Core::Renderer
+} // namespace Nova::Core::Renderer::Graphics
 
 #endif // MESH_H

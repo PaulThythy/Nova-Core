@@ -1,11 +1,11 @@
-#ifndef FRAMEBUFFER_H
-#define FRAMEBUFFER_H
+#ifndef RHI_FRAMEBUFFER_H
+#define RHI_FRAMEBUFFER_H
 
-namespace Nova::Core::Renderer {
+namespace Nova::Core::Renderer::RHI {
 
-    class FrameBuffer {
+    class IFrameBuffer {
     public:
-        virtual ~FrameBuffer() = default;
+        virtual ~IFrameBuffer() = default;
 
         virtual bool Create(int width, int height) = 0;
         virtual void Release() = 0;
@@ -17,6 +17,6 @@ namespace Nova::Core::Renderer {
         virtual void Invalidate() = 0;
     };
 
-} // namespace Nova::Core::Renderer
+} // namespace Nova::Core::Renderer::RHI
 
-#endif // FRAMEBUFFER_H
+#endif // RHI_FRAMEBUFFER_H

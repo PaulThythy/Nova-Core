@@ -1,10 +1,10 @@
-#include "Renderer/Mesh.h"
+#include "Renderer/Graphics/Mesh.h"
 
 #include <glm/gtc/constants.hpp>
 
-namespace Nova::Core::Renderer {
+namespace Nova::Core::Renderer::Graphics {
 
-    void Mesh::Upload(const Renderer::Mesh&) {}
+    void Mesh::Upload(const Renderer::Graphics::Mesh&) {}
 
     void Mesh::Release() {}
 
@@ -336,4 +336,4 @@ namespace Nova::Core::Renderer {
     }
 
 
-} // namespace Nova::Core::Renderer
+} // namespace Nova::Core::Renderer::Graphics

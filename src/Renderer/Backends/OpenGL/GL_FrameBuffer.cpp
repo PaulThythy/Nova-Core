@@ -1,9 +1,9 @@
-#include "Renderer/OpenGL/GL_FrameBuffer.h"
+#include "Renderer/Backends/OpenGL/GL_FrameBuffer.h"
 
 #include <glad/gl.h>
 #include <iostream>
 
-namespace Nova::Core::Renderer::OpenGL {
+namespace Nova::Core::Renderer::Backends::OpenGL {
 
     bool GL_FrameBuffer::Create(int width, int height) {
 
@@ -91,4 +91,4 @@ namespace Nova::Core::Renderer::OpenGL {
         Create(m_Width, m_Height);
     }
 
-} // namespace Nova::Core::Renderer::OpenGL
+} // namespace Nova::Core::Renderer::Backends::OpenGL
