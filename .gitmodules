@@ -14,3 +14,7 @@
 [submodule "vendors/ImGuizmo"]
 	path = vendors/ImGuizmo
 	url = https://github.com/CedricGuillemet/ImGuizmo.git
+[submodule "vendors/glslang"]
+	path = vendors/glslang
+	url = ../../KhronosGroup/glslang.git
+	branch = main
