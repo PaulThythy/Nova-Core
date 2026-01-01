@@ -77,6 +77,13 @@ target_include_directories(glad PUBLIC vendors/glad/include)
 set(ENTT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/entt)
 add_subdirectory(${ENTT_DIR} EXCLUDE_FROM_ALL)
 
+# glslang
+set(GLSLANG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/glslang)
+set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
+set(ENABLE_GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(${GLSLANG_DIR} EXCLUDE_FROM_ALL)
+target_include_directories(Nova-Core PUBLIC ${GLSLANG_DIR})
+
 # linking
 target_link_libraries(Nova-Core PUBLIC
     OpenGL::GL
@@ -86,6 +93,9 @@ target_link_libraries(Nova-Core PUBLIC
     imguizmo
     glad
     EnTT::EnTT
+    glslang::glslang
+    glslang::SPIRV
+    glslang::glslang-default-resource-limits
 )
 
 target_include_directories(Nova-Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
