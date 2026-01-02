@@ -1,7 +1,6 @@
 #ifndef LOG_H
 #define LOG_H
 
-#include <string>
 #include <chrono>
 #include <iostream>
 
@@ -18,28 +17,28 @@ namespace Nova::Core {
             FATAL = 5
         };
 
-        static constexpr std::string COLOR_TRACE = "\033[37m";
-        static constexpr std::string COLOR_DEBUG = "\033[36m";
-        static constexpr std::string COLOR_INFO = "\033[32m";
-        static constexpr std::string COLOR_WARN = "\033[33m";
-        static constexpr std::string COLOR_ERROR = "\033[31m";
-        static constexpr std::string COLOR_FATAL = "\033[1;31m";
-        static constexpr std::string COLOR_RESET = "\033[0m";
+        inline static constexpr const char* COLOR_TRACE = "\x1b[37m";
+        inline static constexpr const char* COLOR_DEBUG = "\x1b[36m";
+        inline static constexpr const char* COLOR_INFO = "\x1b[32m";
+        inline static constexpr const char* COLOR_WARN = "\x1b[33m";
+        inline static constexpr const char* COLOR_ERROR = "\x1b[31m";
+        inline static constexpr const char* COLOR_FATAL = "\x1b[1;31m";
+        inline static constexpr const char* COLOR_RESET = "\x1b[0m";
 
         static Log& Get();
 
-        void Print(Level level, const std::string& message);
+        void Print(Level level, const char* message);
 
-        void Trace(const std::string& msg) { Print(Level::TRACE, msg); }
-        void Debug(const std::string& msg) { Print(Level::DEBUG, msg); }
-        void Info (const std::string& msg) { Print(Level::INFO,  msg); }
-        void Warn (const std::string& msg) { Print(Level::WARN,  msg); }
-        void Error(const std::string& msg) { Print(Level::ERROR, msg); }
-        void Fatal(const std::string& msg) { Print(Level::FATAL, msg); }
+        void Trace(const char* msg) { Print(Level::TRACE, msg); }
+        void Debug(const char* msg) { Print(Level::DEBUG, msg); }
+        void Info (const char* msg) { Print(Level::INFO,  msg); }
+        void Warn (const char* msg) { Print(Level::WARN,  msg); }
+        void Error(const char* msg) { Print(Level::ERROR, msg); }
+        void Fatal(const char* msg) { Print(Level::FATAL, msg); }
 
-        static const std::string GetColorCode(Level level);
-        static const std::string GetLevelString(Level level);
-        static const std::string ColorReset() { return COLOR_RESET; }
+        static const char* GetColorCode(Level level);
+        static const char* GetLevelString(Level level);
+        static const char* ColorReset() { return COLOR_RESET; }
 
         Log();
         ~Log() = default;

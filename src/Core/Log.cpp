@@ -9,7 +9,7 @@ namespace Nova::Core {
         return instance;
     }
 
-    const std::string Log::GetColorCode(Level level) {
+    const char* Log::GetColorCode(Level level) {
         switch (level) {
             case Level::TRACE: return COLOR_TRACE;      // white
             case Level::DEBUG: return COLOR_DEBUG;      // cyan
@@ -21,7 +21,7 @@ namespace Nova::Core {
         }
     }
 
-    const std::string Log::GetLevelString(Level level) {
+    const char* Log::GetLevelString(Level level) {
         switch (level) {
             case Level::TRACE: return "TRACE";
             case Level::DEBUG: return "DEBUG";
@@ -33,7 +33,7 @@ namespace Nova::Core {
         }
     }
 
-    void Log::Print(Level level, const std::string& message) {
+    void Log::Print(Level level, const char* message) {
         // Errors and fatal go to std::cerr, others to std::cout
         std::ostream& out = (level >= Level::ERROR) ? std::cerr : std::cout;
 
