@@ -13,9 +13,9 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${SOURCES} ${HEADERS})
 # OpenGL
 find_package(OpenGL REQUIRED)
 
-# TODO Vulkan
-# find_package(Vulkan REQUIRED)
-# Vulkan::Vulkan
+# Vulkan
+find_package(Vulkan REQUIRED)
+target_include_directories(Nova-Core PRIVATE ${Vulkan_INCLUDE_DIRS})
 
 # SDL3
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
@@ -49,7 +49,7 @@ set(IMGUI_BACKENDS_SOURCES
     ${IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
     ${IMGUI_DIR}/backends/imgui_impl_sdlrenderer3.cpp
-    #${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
 
 )
 add_library(imgui STATIC ${IMGUI_SOURCES} ${IMGUI_BACKENDS_SOURCES})
@@ -87,6 +87,7 @@ target_include_directories(Nova-Core PUBLIC ${GLSLANG_DIR})
 # linking
 target_link_libraries(Nova-Core PUBLIC
     OpenGL::GL
+    Vulkan::Vulkan
     SDL3::SDL3
     glm::glm
     imgui
