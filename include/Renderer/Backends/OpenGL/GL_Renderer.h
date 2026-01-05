@@ -3,7 +3,7 @@
 
 #include "Renderer/RHI/RHI_Renderer.h"
 
-namespace Nova::Core::Renderer::RHI::Backends::OpenGL {
+namespace Nova::Core::Renderer::Backends::OpenGL {
 
     class GL_Renderer : public RHI::IRenderer {
     public:
@@ -26,6 +26,6 @@ namespace Nova::Core::Renderer::RHI::Backends::OpenGL {
         //TODO GetViewportTextureID()
     };
 
-} // namespace Nova::Core::Renderer::RHI::Backends::OpenGL
+} // namespace Nova::Core::Renderer::Backends::OpenGL
 
 #endif // GL_RENDERER_H

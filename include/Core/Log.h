@@ -53,16 +53,6 @@ namespace Nova::Core {
 #define NV_LOG_ERROR(message, ...) Log::Get().Error(message, ##__VA_ARGS__)
 #define NV_LOG_FATAL(message, ...) Log::Get().Fatal(message, ##__VA_ARGS__)
 
-#define NV_VK_LOG_INFO(message)    NV_LOG_INFO(message, "Vulkan")
-#define NV_VK_LOG_ERROR(message)   NV_LOG_ERROR(message, "Vulkan")
-#define NV_VK_LOG_WARN(message)    NV_LOG_WARN(message, "Vulkan")
-#define NV_VK_LOG_DEBUG(message)   NV_LOG_DEBUG(message, "Vulkan")
-
-#define NV_GL_LOG_INFO(message)    NV_LOG_INFO(message, "OpenGL")
-#define NV_GL_LOG_ERROR(message)   NV_LOG_ERROR(message, "OpenGL")
-#define NV_GL_LOG_WARN(message)    NV_LOG_WARN(message, "OpenGL")
-#define NV_GL_LOG_DEBUG(message)   NV_LOG_DEBUG(message, "OpenGL")
-
 #define NV_LOG_OBJECT_CREATED(type, name)    NV_LOG_DEBUG("Created " + std::string(type) + ": " + std::string(name), "Object")
 #define NV_LOG_OBJECT_DESTROYED(type, name)  NV_LOG_DEBUG("Destroyed " + std::string(type) + ": " + std::string(name), "Object")
 
