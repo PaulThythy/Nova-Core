@@ -15,7 +15,7 @@ find_package(OpenGL REQUIRED)
 
 # Vulkan
 find_package(Vulkan REQUIRED)
-target_include_directories(Nova-Core PRIVATE ${Vulkan_INCLUDE_DIRS})
+target_include_directories(Nova-Core PUBLIC ${Vulkan_INCLUDE_DIRS})
 
 # SDL3
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
@@ -57,6 +57,7 @@ target_include_directories(imgui PUBLIC
   ${IMGUI_DIR}
   ${IMGUI_DIR}/backends
 )
+target_link_libraries(imgui PUBLIC Vulkan::Vulkan)
 
 # ImGuizmo
 set(IMGUIZMO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/ImGuizmo)
