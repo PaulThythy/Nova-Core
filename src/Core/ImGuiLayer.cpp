@@ -1,10 +1,6 @@
 #include "Core/ImGuiLayer.h"
 
-#include "imgui.h"
-#include "imgui_impl_sdl3.h"
-#include "imgui_impl_opengl3.h"
-//#include "imgui_impl_vulkan.h"
-#include "imgui_impl_sdlrenderer3.h"
+#include "Core/Log.h"
 
 #include <iostream>
 
@@ -48,10 +44,24 @@ namespace Nova::Core {
                 ImGui_ImplSDLRenderer3_Init(renderer);
                 break;
             } 
-            case GraphicsAPI::Vulkan:
-                // TODO: here you'll need to pass a VkInstance, VkDevice, render pass, etc.
-                // ImGui_ImplVulkan_Init(&init_info, render_pass);
+            case GraphicsAPI::Vulkan: {
+                ImGui_ImplSDL3_InitForVulkan(sdlWindow);
+
+                ImGui_ImplVulkan_InitInfo init_info = {};
+                init_info.Instance = m_VulkanInitInfo.m_Instance;
+                init_info.PhysicalDevice = m_VulkanInitInfo.m_PhysicalDevice;
+                init_info.Device = m_VulkanInitInfo.m_Device;
+                init_info.QueueFamily = 0; // Assume that graphics and presentation are on the same queue for now
+                init_info.Queue = m_VulkanInitInfo.m_Queue;
+                init_info.DescriptorPool = m_VulkanInitInfo.m_DescriptorPool;
+                init_info.MinImageCount = m_VulkanInitInfo.m_MinImageCount;
+                init_info.ImageCount = m_VulkanInitInfo.m_ImageCount;
+
+                //init_info.UseDynamicRendering = true;
+
+                ImGui_ImplVulkan_Init(&init_info);
                 break;
+            }
 
             default:
                 break;
@@ -67,7 +77,7 @@ namespace Nova::Core {
                 ImGui_ImplSDLRenderer3_Shutdown();
                 break;
             case GraphicsAPI::Vulkan:
-                //ImGui_ImplVulkan_Shutdown();
+                ImGui_ImplVulkan_Shutdown();
                 break;
             default:
                 break;
@@ -90,7 +100,7 @@ namespace Nova::Core {
                 ImGui_ImplSDLRenderer3_NewFrame();
                 break;
             case GraphicsAPI::Vulkan:
-                //ImGui_ImplVulkan_NewFrame();
+                ImGui_ImplVulkan_NewFrame();
                 break;
             default:
                 break;
@@ -133,9 +143,20 @@ namespace Nova::Core {
                 break;
             }
 
-            case GraphicsAPI::Vulkan:
-                // ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), command_buffer);
+            case GraphicsAPI::Vulkan: {
+                if (m_CurrentCommandBuffer != VK_NULL_HANDLE) {
+                    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), m_CurrentCommandBuffer);
+                }
+                else {
+                    NV_LOG_ERROR("Vulkan Command Buffer not set for ImGuiLayer!");
+                }
+
+                if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+                    ImGui::UpdatePlatformWindows();
+                    ImGui::RenderPlatformWindowsDefault();
+                }
                 break;
+            }
 
             default:
                 break;
