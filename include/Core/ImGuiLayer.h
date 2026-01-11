@@ -44,9 +44,11 @@ namespace Nova::Core {
 
         void ProcessSDLEvent(const SDL_Event& e);
 
+        void SetImGuiBackend(GraphicsAPI api);
+
         // --- Vulkan-specific methods ---
         // Must be called by VK_Renderer before the layer is attached (or immediately after creation)
-        void SetVulkanInitInfo(const ImGuiVulkanInitInfo& info) { m_VulkanInitInfo = info; }
+        void SetVulkanInitInfo(const ImGuiVulkanInitInfo& info);
 
         // must be called by the renderer each frame before ImGuiLayer::End()
         void SetVulkanCommandBuffer(VkCommandBuffer cmd) { m_CurrentCommandBuffer = cmd; }
@@ -55,6 +57,8 @@ namespace Nova::Core {
         bool m_BlockEvents = true;
         Window& m_Window;
         GraphicsAPI m_GraphicsAPI;
+
+        bool m_IsRendererInitialized = false;
 
         ImGuiVulkanInitInfo m_VulkanInitInfo{};
         VkCommandBuffer m_CurrentCommandBuffer = VK_NULL_HANDLE;

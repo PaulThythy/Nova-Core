@@ -38,6 +38,7 @@ namespace Nova::Core {
 
         Window& GetWindow() { return *m_Window; }
         LayerStack& GetLayerStack() { return m_LayerStack; }
+        ImGuiLayer& GetImGuiLayer() { return *m_ImGuiLayer; }
 
         static Application& Get() { return *s_Instance; }
 

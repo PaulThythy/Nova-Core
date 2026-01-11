@@ -9,7 +9,7 @@ namespace Nova::Core {
     ImGuiLayer::ImGuiLayer(Window& window, GraphicsAPI api) : Layer("ImGuiLayer"), m_Window(window), m_GraphicsAPI(api) {}
 
     void ImGuiLayer::OnAttach() {
-        // Contexte ImGui
+        // ImGui context
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -31,56 +31,81 @@ namespace Nova::Core {
         }
 
         SDL_Window* sdlWindow = m_Window.GetSDLWindow();
+        ImGui_ImplSDL3_InitForOther(sdlWindow);
+    }
 
-        switch (m_GraphicsAPI) {
-            case GraphicsAPI::OpenGL: {
-                ImGui_ImplSDL3_InitForOpenGL(sdlWindow, m_Window.GetGLContext());
+    void ImGuiLayer::SetImGuiBackend(GraphicsAPI api) {
+        if(m_IsRendererInitialized){
+            NV_LOG_WARN("ImGui backend already initialized");
+            return;
+        }
+
+        m_GraphicsAPI = api;
+        switch(m_GraphicsAPI) {
+            case GraphicsAPI::OpenGL:
                 ImGui_ImplOpenGL3_Init(m_Window.GetGLSLVersion());
+                m_IsRendererInitialized = true;
+                NV_LOG_INFO("ImGui OpenGL3 backend initialized");
                 break;
-            }
-            case GraphicsAPI::SDLRenderer: {
-                SDL_Renderer* renderer = m_Window.GetSDLRenderer();
-                ImGui_ImplSDL3_InitForSDLRenderer(sdlWindow, renderer);
-                ImGui_ImplSDLRenderer3_Init(renderer);
+            case GraphicsAPI::SDLRenderer:
+                ImGui_ImplSDLRenderer3_Init(m_Window.GetSDLRenderer());
+                m_IsRendererInitialized = true;
+                NV_LOG_INFO("ImGui SDLRenderer3 backend initialized");
                 break;
-            } 
             case GraphicsAPI::Vulkan: {
-                ImGui_ImplSDL3_InitForVulkan(sdlWindow);
-
-                ImGui_ImplVulkan_InitInfo init_info = {};
-                init_info.Instance = m_VulkanInitInfo.m_Instance;
-                init_info.PhysicalDevice = m_VulkanInitInfo.m_PhysicalDevice;
-                init_info.Device = m_VulkanInitInfo.m_Device;
-                init_info.QueueFamily = 0; // Assume that graphics and presentation are on the same queue for now
-                init_info.Queue = m_VulkanInitInfo.m_Queue;
-                init_info.DescriptorPool = m_VulkanInitInfo.m_DescriptorPool;
-                init_info.MinImageCount = m_VulkanInitInfo.m_MinImageCount;
-                init_info.ImageCount = m_VulkanInitInfo.m_ImageCount;
-
-                //init_info.UseDynamicRendering = true;
-
-                ImGui_ImplVulkan_Init(&init_info);
+                NV_LOG_WARN("For Vulkan, please use SetVulkanInitInfo() instead of SetImGuiBackend()");
                 break;
             }
-
             default:
+                NV_LOG_ERROR("Unsupported Graphics API");
                 break;
         }
     }
 
+    void ImGuiLayer::SetVulkanInitInfo(const ImGuiVulkanInitInfo& info) {
+        if(m_IsRendererInitialized){
+            NV_LOG_WARN("ImGui Vulkan backend already initialized");
+            return;
+        }
+        m_VulkanInitInfo = info;
+
+        if(m_GraphicsAPI == GraphicsAPI::Vulkan) {
+            ImGui_ImplVulkan_InitInfo init_info = {};
+            init_info.Instance = m_VulkanInitInfo.m_Instance;
+            init_info.PhysicalDevice = m_VulkanInitInfo.m_PhysicalDevice;
+            init_info.Device = m_VulkanInitInfo.m_Device;
+            init_info.QueueFamily = m_VulkanInitInfo.m_QueueFamily;
+            init_info.Queue = m_VulkanInitInfo.m_Queue;
+            init_info.DescriptorPool = m_VulkanInitInfo.m_DescriptorPool;
+            init_info.MinImageCount = m_VulkanInitInfo.m_MinImageCount;
+            init_info.ImageCount = m_VulkanInitInfo.m_ImageCount;
+
+            // init_info.Allocator = m_VulkanInitInfo.m_Allocator;
+            // init_info.CheckVkResultFn = nullptr;
+            // init_info.UseDynamicRendering = false;
+
+            m_IsRendererInitialized = true;
+            NV_LOG_INFO("ImGui Vulkan backend initialized");
+        }
+    }
+
     void ImGuiLayer::OnDetach() {
-        switch (m_GraphicsAPI) {
-            case GraphicsAPI::OpenGL:
-                ImGui_ImplOpenGL3_Shutdown();
-                break;
-            case GraphicsAPI::SDLRenderer:
-                ImGui_ImplSDLRenderer3_Shutdown();
-                break;
-            case GraphicsAPI::Vulkan:
-                ImGui_ImplVulkan_Shutdown();
-                break;
-            default:
-                break;
+        if(m_IsRendererInitialized) {
+            switch (m_GraphicsAPI) {
+                case GraphicsAPI::OpenGL:
+                    ImGui_ImplOpenGL3_Shutdown();
+                    break;
+                case GraphicsAPI::SDLRenderer:
+                    ImGui_ImplSDLRenderer3_Shutdown();
+                    break;
+                case GraphicsAPI::Vulkan:
+                    ImGui_ImplVulkan_Shutdown();
+                    break;
+                default:
+                    break;
+            }
+
+            m_IsRendererInitialized = false;
         }
 
         ImGui_ImplSDL3_Shutdown();
@@ -92,6 +117,11 @@ namespace Nova::Core {
     }
 
     void ImGuiLayer::Begin() {
+        if(!m_IsRendererInitialized) {
+            NV_LOG_ERROR("ImGui backend not initialized!");
+            return;
+        }
+
         switch (m_GraphicsAPI) {
             case GraphicsAPI::OpenGL:
                 ImGui_ImplOpenGL3_NewFrame();
@@ -111,6 +141,11 @@ namespace Nova::Core {
     }
 
     void ImGuiLayer::End() {
+        if(!m_IsRendererInitialized) {
+            NV_LOG_ERROR("ImGui backend not initialized!");
+            return;
+        }
+
         ImGuiIO& io = ImGui::GetIO();
 
         int w, h;
