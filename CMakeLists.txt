@@ -57,6 +57,7 @@ target_include_directories(imgui PUBLIC
   ${IMGUI_DIR}
   ${IMGUI_DIR}/backends
 )
+target_link_libraries(imgui PUBLIC Vulkan::Vulkan)
 
 # ImGuizmo
 set(IMGUIZMO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/ImGuizmo)
