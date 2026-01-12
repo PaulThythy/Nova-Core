@@ -62,7 +62,7 @@ namespace Nova::Core {
         }
     }
 
-    void ImGuiLayer::SetVulkanInitInfo(const ImGuiVulkanInitInfo& info) {
+    void ImGuiLayer::SetVulkanInitInfo(const ImGui_ImplVulkan_InitInfo& info) {
         if(m_IsRendererInitialized){
             NV_LOG_WARN("ImGui Vulkan backend already initialized");
             return;
@@ -70,15 +70,7 @@ namespace Nova::Core {
         m_VulkanInitInfo = info;
 
         if(m_GraphicsAPI == GraphicsAPI::Vulkan) {
-            ImGui_ImplVulkan_InitInfo init_info = {};
-            init_info.Instance = m_VulkanInitInfo.m_Instance;
-            init_info.PhysicalDevice = m_VulkanInitInfo.m_PhysicalDevice;
-            init_info.Device = m_VulkanInitInfo.m_Device;
-            init_info.QueueFamily = m_VulkanInitInfo.m_QueueFamily;
-            init_info.Queue = m_VulkanInitInfo.m_Queue;
-            init_info.DescriptorPool = m_VulkanInitInfo.m_DescriptorPool;
-            init_info.MinImageCount = m_VulkanInitInfo.m_MinImageCount;
-            init_info.ImageCount = m_VulkanInitInfo.m_ImageCount;
+            ImGui_ImplVulkan_Init(&m_VulkanInitInfo);
 
             // init_info.Allocator = m_VulkanInitInfo.m_Allocator;
             // init_info.CheckVkResultFn = nullptr;
