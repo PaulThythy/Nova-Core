@@ -7,6 +7,8 @@
 
 #include "Renderer/RHI/RHI_Renderer.h"
 
+#include "Renderer/Backends/Vulkan/VK_Extensions.h"
+
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
 	class VK_Renderer final : public RHI::IRenderer {

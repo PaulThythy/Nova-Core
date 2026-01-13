@@ -7,19 +7,19 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
     class GL_Renderer : public RHI::IRenderer {
     public:
-        GL_Renderer();
-        ~GL_Renderer();
+        GL_Renderer() = default;
+        ~GL_Renderer() override = default;
 
-        bool Create() override;
-        void Destroy() override;
+        bool Create() override { return true;  }
+        void Destroy() override {}
 
-        bool Resize(int w, int h) override;
+        bool Resize(int w, int h) override { return true;  }
 
-        void Update(float dt) override;
+        void Update(float dt) override {}
 
-        void BeginFrame() override;
-        void Render() override;
-        void EndFrame() override;
+        void BeginFrame() override {}
+        void Render() override {}
+        void EndFrame() override {}
 
         //TODO add framebuffer field
 

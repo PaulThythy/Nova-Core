@@ -18,36 +18,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		NV_LOG_ERROR((std::string("Vulkan error : ") + std::to_string((int)err)).c_str());
 	}
 
-	static void LogDeviceExtensions(VkPhysicalDevice physicalDevice) {
-		uint32_t count = 0;
-		VkResult res = vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &count, nullptr);
-		CheckVkResult(res);
-
-		std::vector<VkExtensionProperties> props(count);
-		res = vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &count, props.data());
-		CheckVkResult(res);
-
-		NV_LOG_INFO((std::string("Device supports ") + std::to_string(count) + " extensions:").c_str());
-		for (const auto& p : props) {
-			NV_LOG_INFO((std::string("  - ") + p.extensionName + " (spec " + std::to_string(p.specVersion) + ")").c_str());
-		}
-	}
-
-	static bool HasDeviceExtension(VkPhysicalDevice physicalDevice, const char* extName) {
-		uint32_t count = 0;
-		if (vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &count, nullptr) != VK_SUCCESS) {
-			return false;
-		}
-		std::vector<VkExtensionProperties> props(count);
-		if (vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &count, props.data()) != VK_SUCCESS) {
-			return false;
-		}
-
-		return std::any_of(props.begin(), props.end(), [&](const VkExtensionProperties& p) {
-			return std::strcmp(p.extensionName, extName) == 0;
-		});
-	}
-
 	static bool FindQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t& outGraphics, uint32_t& outPresent) {
 		outGraphics = UINT32_MAX;
 		outPresent = UINT32_MAX;
@@ -173,7 +143,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		}
 
 		NV_LOG_INFO("Vulkan surface created.");
-		return false;
+		return true;
 	}
 
 	bool VK_Renderer::PickPhysicalDevice() {
