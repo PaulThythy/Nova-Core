@@ -201,7 +201,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     bool VK_Renderer::SetupDebugMessenger() {
         if (!m_EnableValidationLayers) {
-            return true; // rien à faire
+            return true; // rien ï¿½ faire
         }
 
         VkDebugUtilsMessengerCreateInfoEXT createInfo{};
@@ -248,14 +248,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         // ---- Init ImGui Vulkan backend ----
         ImGui_ImplVulkan_InitInfo initInfo{};
-        initInfo.ApiVersion = VK_API_VERSION_1_3; // ou la version que tu utilises
+        initInfo.ApiVersion = VK_API_VERSION_1_4;
         initInfo.Instance = m_Instance;
         initInfo.PhysicalDevice = m_PhysicalDevice;
         initInfo.Device = m_Device;
         initInfo.QueueFamily = m_GraphicsQueueFamily;
         initInfo.Queue = m_GraphicsQueue;
         initInfo.DescriptorPool = m_ImGuiDescriptorPool;
-        initInfo.DescriptorPoolSize = 0; // on fournit le pool nous-mêmes
+        initInfo.DescriptorPoolSize = 0;
         initInfo.MinImageCount = m_MinImageCount;
         initInfo.ImageCount = static_cast<uint32_t>(m_SwapchainImages.size());
         initInfo.PipelineCache = VK_NULL_HANDLE;
