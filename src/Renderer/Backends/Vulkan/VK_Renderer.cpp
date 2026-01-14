@@ -1,6 +1,5 @@
 #include "Renderer/Backends/Vulkan/VK_Renderer.h"
 
-#include "Renderer/Backends/Vulkan/VK_Extensions.h"
 #include "Core/Application.h"
 #include "Core/Window.h"
 #include "Core/ImGuiLayer.h"
@@ -18,79 +17,9 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    // Simple error checker for ImGui & general Vulkan calls
     static void CheckVkResult(VkResult err) {
         if (err == VK_SUCCESS) return;
         NV_LOG_ERROR((std::string("Vulkan error: ") + std::to_string((int)err)).c_str());
-    }
-
-    static const std::vector<const char*> s_ValidationLayers = { 
-        "VK_LAYER_KHRONOS_validation" 
-    };
-
-    static bool CheckValidationLayerSupport() {
-        uint32_t layerCount = 0;
-        vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
-        std::vector<VkLayerProperties> availableLayers(layerCount);
-        vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-
-        for (const char* layerName : s_ValidationLayers) {
-            bool found = false;
-            for (const auto& layerProps : availableLayers) {
-                if (std::strcmp(layerName, layerProps.layerName) == 0) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                NV_LOG_WARN((std::string("Validation layer not found: ") + layerName).c_str());
-                return false;
-            }
-        }
-
-        NV_LOG_INFO("Validation layer supported.");
-        return true;
-    }
-
-    static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
-        (void)messageType;
-        (void)pUserData;
-
-        const char* prefix = "[VULKAN] ";
-
-        if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-            NV_LOG_ERROR((std::string(prefix) + pCallbackData->pMessage).c_str());
-        }
-        else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-            NV_LOG_WARN((std::string(prefix) + pCallbackData->pMessage).c_str());
-        }
-        else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
-            NV_LOG_INFO((std::string(prefix) + pCallbackData->pMessage).c_str());
-        }
-        else {
-            NV_LOG_DEBUG((std::string(prefix) + pCallbackData->pMessage).c_str());
-        }
-
-        // return VK_TRUE to abort the call that triggered the validation message
-        return VK_FALSE;
-    }
-
-    static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pMessenger) {
-        auto func = (PFN_vkCreateDebugUtilsMessengerEXT)
-            vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-        if (func != nullptr) {
-            return func(instance, pCreateInfo, pAllocator, pMessenger);
-        }
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
-    }
-
-    static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT messenger, const VkAllocationCallbacks* pAllocator) {
-        auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
-            vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-        if (func != nullptr) {
-            func(instance, messenger, pAllocator);
-        }
     }
 
     // --- Swapchain support helpers -------------------------------------------------------------
@@ -200,8 +129,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     bool VK_Renderer::SetupDebugMessenger() {
-        if (!m_EnableValidationLayers) {
-            return true; // rien � faire
+        if (!IsValidationLayersEnabled()) {
+            return true;
         }
 
         VkDebugUtilsMessengerCreateInfoEXT createInfo{};
@@ -462,7 +391,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         std::vector<const char*> extensions(sdlExts, sdlExts + extCount);
 
-        if (m_EnableValidationLayers) {
+        if (IsValidationLayersEnabled()) {
             // Debug utils for validation layer messages
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
@@ -472,10 +401,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             NV_LOG_INFO((std::string("  - ") + e).c_str());
         }
 
-        if (m_EnableValidationLayers) {
+        if (IsValidationLayersEnabled()) {
             if (!CheckValidationLayerSupport()) {
                 NV_LOG_WARN("Validation layers requested but not available. Disabling them.");
-                m_EnableValidationLayers = false;
+                SetValidationLayersEnabled(false);
             }
         }
 
@@ -494,7 +423,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         ci.ppEnabledExtensionNames = extensions.data();
 
         VkDebugUtilsMessengerCreateInfoEXT dbgCreateInfo{};
-        if (m_EnableValidationLayers) {
+        if (IsValidationLayersEnabled()) {
             ci.enabledLayerCount = static_cast<uint32_t>(s_ValidationLayers.size());
             ci.ppEnabledLayerNames = s_ValidationLayers.data();
 
@@ -526,7 +455,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
-        if (m_EnableValidationLayers) {
+        if (IsValidationLayersEnabled()) {
             if (!SetupDebugMessenger()) {
                 NV_LOG_WARN("Failed to setup Vulkan debug messenger.");
             }
