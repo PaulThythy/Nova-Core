@@ -13,8 +13,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         "VK_LAYER_KHRONOS_validation"
     };
 
-    // Validation layers enabled state
-    static inline bool g_EnableValidationLayers = true;
+    static inline bool g_EnableValidationLayers =
+#ifndef NOVA_DEBUG
+        true;
+#else
+        false;
+#endif
 
     // Check if validation layers are supported on this system
     bool CheckValidationLayerSupport();
