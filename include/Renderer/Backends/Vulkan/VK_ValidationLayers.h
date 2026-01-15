@@ -16,7 +16,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     };
 
     static inline bool s_EnableValidationLayers =
-#ifndef NOVA_DEBUG
+#ifdef NOVA_DEBUG
         true;
 #else
         false;
