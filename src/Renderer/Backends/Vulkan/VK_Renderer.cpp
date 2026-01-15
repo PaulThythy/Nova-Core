@@ -143,7 +143,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         // ---- Init ImGui Vulkan backend ----
         ImGui_ImplVulkan_InitInfo initInfo{};
-        initInfo.ApiVersion = VK_API_VERSION_1_4;
+        initInfo.ApiVersion = VK_API_VERSION_1_3;
         initInfo.Instance = m_Instance;
         initInfo.PhysicalDevice = m_PhysicalDevice;
         initInfo.Device = m_Device;
@@ -380,7 +380,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         appInfo.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
         appInfo.pEngineName = "Nova Core";
         appInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_4;
+        appInfo.apiVersion = VK_API_VERSION_1_3;
 
         VkInstanceCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;

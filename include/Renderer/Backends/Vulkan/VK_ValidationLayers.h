@@ -15,12 +15,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         "VK_LAYER_KHRONOS_validation"
     };
 
-    static inline bool s_EnableValidationLayers = true;
-/*#ifndef NOVA_DEBUG
+    static inline bool s_EnableValidationLayers =
+#ifndef NOVA_DEBUG
         true;
 #else
         false;
-#endif*/
+#endif
 
     static inline VkDebugUtilsMessengerEXT s_DebugMessenger = VK_NULL_HANDLE;
 
