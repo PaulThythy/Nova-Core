@@ -1,7 +1,5 @@
 #include "Renderer/Backends/Vulkan/VK_ValidationLayers.h"
 
-#include "Core/Log.h"
-
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
     bool CheckValidationLayerSupport() {
@@ -83,6 +81,35 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         }
     }
 
+    bool SetupDebugMessenger(VkInstance instance) {
+        if (!s_EnableValidationLayers) {
+            return true;
+        }
+
+        VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+        createInfo.messageSeverity =
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+            | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+            | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        createInfo.messageType =
+            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+            | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+            | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+        createInfo.pfnUserCallback = DebugCallback;
+        createInfo.pUserData = nullptr;
+
+        VkResult res = CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &s_DebugMessenger);
+        if (res != VK_SUCCESS) {
+            CheckVkResult(res);
+            NV_LOG_ERROR("Failed to create Vulkan debug messenger.");
+            return false;
+        }
+
+        NV_LOG_INFO("Vulkan debug messenger created.");
+        return true;
+    }
+
     void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
         createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -99,11 +126,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     bool IsValidationLayersEnabled() {
-        return g_EnableValidationLayers;
+        return s_EnableValidationLayers;
     }
 
     void SetValidationLayersEnabled(bool enabled) {
-        g_EnableValidationLayers = enabled;
+        s_EnableValidationLayers = enabled;
     }
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

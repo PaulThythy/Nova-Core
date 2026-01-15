@@ -17,40 +17,6 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    static void CheckVkResult(VkResult err) {
-        if (err == VK_SUCCESS) return;
-        NV_LOG_ERROR((std::string("Vulkan error: ") + std::to_string((int)err)).c_str());
-    }
-
-    bool VK_Renderer::SetupDebugMessenger() {
-        if (!IsValidationLayersEnabled()) {
-            return true;
-        }
-
-        VkDebugUtilsMessengerCreateInfoEXT createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        createInfo.messageSeverity =
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
-            | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
-            | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-        createInfo.messageType =
-            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-            | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
-            | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-        createInfo.pfnUserCallback = DebugCallback;
-        createInfo.pUserData = nullptr;
-
-        VkResult res = CreateDebugUtilsMessengerEXT(m_Instance, &createInfo, nullptr, &m_DebugMessenger);
-        if (res != VK_SUCCESS) {
-            CheckVkResult(res);
-            NV_LOG_ERROR("Failed to create Vulkan debug messenger.");
-            return false;
-        }
-
-        NV_LOG_INFO("Vulkan debug messenger created.");
-        return true;
-    }
-
     // --- Swapchain support helpers -------------------------------------------------------------
 
     struct SwapChainSupportDetails {
@@ -456,7 +422,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         }
 
         if (IsValidationLayersEnabled()) {
-            if (!SetupDebugMessenger()) {
+            if (!SetupDebugMessenger(m_Instance)) {
                 NV_LOG_WARN("Failed to setup Vulkan debug messenger.");
             }
         }

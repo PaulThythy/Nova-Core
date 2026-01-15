@@ -10,6 +10,7 @@
 
 #include "Renderer/Backends/Vulkan/VK_Extensions.h"
 #include "Renderer/Backends/Vulkan/VK_ValidationLayers.h"
+#include "Renderer/Backends/Vulkan/VK_Common.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -45,10 +46,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 bool CreateImGuiDescriptorPool();
                 void CleanupSwapchain();
                 bool RecreateSwapchain();
-
-                // Validation layers
-                bool SetupDebugMessenger();
-                VkDebugUtilsMessengerEXT m_DebugMessenger = VK_NULL_HANDLE;
 
 
                 // Vulkan objects

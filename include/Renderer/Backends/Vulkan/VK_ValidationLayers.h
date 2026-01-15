@@ -6,6 +6,8 @@
 #include <vector>
 #include <cstring>
 
+#include "Core/Log.h"
+#include "Renderer/Backends/Vulkan/VK_Common.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -13,12 +15,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         "VK_LAYER_KHRONOS_validation"
     };
 
-    static inline bool g_EnableValidationLayers =
-#ifndef NOVA_DEBUG
+    static inline bool s_EnableValidationLayers = true;
+/*#ifndef NOVA_DEBUG
         true;
 #else
         false;
-#endif
+#endif*/
+
+    static inline VkDebugUtilsMessengerEXT s_DebugMessenger = VK_NULL_HANDLE;
 
     // Check if validation layers are supported on this system
     bool CheckValidationLayerSupport();
@@ -45,6 +49,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkDebugUtilsMessengerEXT messenger,
         const VkAllocationCallbacks* pAllocator
     );
+
+    bool SetupDebugMessenger(VkInstance instance);
 
     // Setup and populate the debug create info structure
     void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
