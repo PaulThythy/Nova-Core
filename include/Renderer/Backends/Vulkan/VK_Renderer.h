@@ -11,6 +11,7 @@
 #include "Renderer/Backends/Vulkan/VK_Extensions.h"
 #include "Renderer/Backends/Vulkan/VK_ValidationLayers.h"
 #include "Renderer/Backends/Vulkan/VK_Common.h"
+#include "Renderer/Backends/Vulkan/VK_Instance.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -32,8 +33,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 	private:
                 // --- Helpers ---
-                bool CreateInstance();
-                bool CreateSurface();
                 bool PickPhysicalDevice();
                 bool CreateDevice();
                 bool CreateSwapchain();
@@ -47,10 +46,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 void CleanupSwapchain();
                 bool RecreateSwapchain();
 
-
-                // Vulkan objects
-                VkInstance        m_Instance = VK_NULL_HANDLE;
-                VkSurfaceKHR      m_Surface = VK_NULL_HANDLE;
+                VK_Instance       m_VKInstance;
                 VkPhysicalDevice  m_PhysicalDevice = VK_NULL_HANDLE;
                 VkDevice          m_Device = VK_NULL_HANDLE;
 
