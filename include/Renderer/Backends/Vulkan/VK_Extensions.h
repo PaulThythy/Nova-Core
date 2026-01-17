@@ -2,6 +2,8 @@
 #define VK_EXTENSIONS_H
 
 #include <vulkan/vulkan.h>
+#include <unordered_set>
+#include <vector>
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -10,6 +12,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     // Check if the given physical device supports a specific extension
     bool HasDeviceExtension(VkPhysicalDevice physicalDevice, const char* extName);
+
+    bool HasDeviceExtensions(VkPhysicalDevice physicalDevice, const std::vector<const char*>& requiredExtensions);
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan
 

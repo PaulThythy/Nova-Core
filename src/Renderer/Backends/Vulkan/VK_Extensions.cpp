@@ -43,7 +43,32 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         return std::any_of(props.begin(), props.end(), [&](const VkExtensionProperties& p) {
             return std::strcmp(p.extensionName, extName) == 0;
-            });
+        });
+    }
+
+    bool HasDeviceExtensions(VkPhysicalDevice physicalDevice, const std::vector<const char*>& requiredExtensions) {
+        uint32_t count = 0;
+        VkResult res = vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &count, nullptr);
+        if (res != VK_SUCCESS || count == 0)
+            return false;
+
+        std::vector<VkExtensionProperties> props(count);
+        res = vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &count, props.data());
+        if (res != VK_SUCCESS)
+            return false;
+
+        std::unordered_set<std::string> available;
+        available.reserve(count);
+
+        for (const auto& p : props)
+            available.insert(p.extensionName);
+
+        for (const char* req : requiredExtensions) {
+            if (available.find(req) == available.end())
+                return false;
+        }
+
+        return true;
     }
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan
