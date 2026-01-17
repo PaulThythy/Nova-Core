@@ -128,8 +128,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     bool VK_Renderer::Create() {
         NV_LOG_INFO("Creating Vulkan renderer...");
 
-        if (!m_VKInstance.CreateInstance())   return false;
-        if (!m_VKInstance.CreateSurface())    return false;
+        if (!m_VKInstance.Create())   return false;
         
         if (!PickPhysicalDevice()) return false;
         if (!CreateDevice())     return false;
@@ -197,8 +196,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_Device = VK_NULL_HANDLE;
         }
 
-        m_VKInstance.DestroySurface();
-        m_VKInstance.DestroyInstance();
+        m_VKInstance.Destroy();
 
         NV_LOG_INFO("Vulkan renderer destroyed.");
     }

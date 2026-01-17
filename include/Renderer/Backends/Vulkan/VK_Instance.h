@@ -12,6 +12,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_Instance() = default;
         ~VK_Instance() = default;
 
+        bool Create();
+        void Destroy();
+
         // Initialization
         bool CreateInstance();
         void DestroyInstance();

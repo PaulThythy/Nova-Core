@@ -15,6 +15,17 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
+    bool VK_Instance::Create() {
+        return CreateInstance() && CreateSurface();
+    }
+
+    void VK_Instance::Destroy() {
+        DestroyDebugUtilsMessengerEXT(m_Instance, s_DebugMessenger, nullptr);
+        
+        DestroySurface();
+        DestroyInstance();
+    }
+
     bool VK_Instance::CreateInstance() {
         SDL_Window* window = Nova::Core::Application::Get().GetWindow().GetSDLWindow();
         if (!window) {
