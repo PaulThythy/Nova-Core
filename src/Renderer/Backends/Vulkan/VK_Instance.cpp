@@ -20,8 +20,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Instance::Destroy() {
-        DestroyDebugUtilsMessengerEXT(m_Instance, s_DebugMessenger, nullptr);
-        
+        if (IsValidationLayersEnabled() && s_DebugMessenger != VK_NULL_HANDLE) {
+            DestroyDebugUtilsMessengerEXT(m_Instance, s_DebugMessenger, nullptr);
+            s_DebugMessenger = VK_NULL_HANDLE;
+        }
+
         DestroySurface();
         DestroyInstance();
     }
@@ -147,7 +150,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_Instance::DestroySurface() {
         if (m_Surface != VK_NULL_HANDLE && m_Instance != VK_NULL_HANDLE) {
-            SDL_Vulkan_DestroySurface(m_Instance, m_Surface, nullptr);
+            vkDestroySurfaceKHR(m_Instance, m_Surface, nullptr);
             m_Surface = VK_NULL_HANDLE;
         }
     }

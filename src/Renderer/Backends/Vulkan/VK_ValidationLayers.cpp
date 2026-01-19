@@ -69,11 +69,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
 
-    void DestroyDebugUtilsMessengerEXT(
-        VkInstance instance,
-        VkDebugUtilsMessengerEXT messenger,
-        const VkAllocationCallbacks* pAllocator
-    ) {
+    void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT messenger, const VkAllocationCallbacks* pAllocator) {
         auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
             vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
         if (func != nullptr) {

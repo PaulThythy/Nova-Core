@@ -22,7 +22,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         false;
 #endif
 
-    static inline VkDebugUtilsMessengerEXT s_DebugMessenger = VK_NULL_HANDLE;
+    inline VkDebugUtilsMessengerEXT s_DebugMessenger = VK_NULL_HANDLE;
 
     // Check if validation layers are supported on this system
     bool CheckValidationLayerSupport();
