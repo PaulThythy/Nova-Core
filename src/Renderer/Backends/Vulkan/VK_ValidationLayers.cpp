@@ -39,16 +39,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const char* prefix = "[VULKAN] ";
 
         if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-            NV_LOG_ERROR((std::string(prefix) + pCallbackData->pMessage).c_str());
+            NV_LOG_ERROR((std::string(prefix) + pCallbackData->pMessage + "\n").c_str());
         }
         else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-            NV_LOG_WARN((std::string(prefix) + pCallbackData->pMessage).c_str());
+            NV_LOG_WARN((std::string(prefix) + pCallbackData->pMessage + "\n").c_str());
         }
         else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
-            NV_LOG_INFO((std::string(prefix) + pCallbackData->pMessage).c_str());
+            NV_LOG_INFO((std::string(prefix) + pCallbackData->pMessage + "\n").c_str());
         }
         else {
-            NV_LOG_DEBUG((std::string(prefix) + pCallbackData->pMessage).c_str());
+            NV_LOG_DEBUG((std::string(prefix) + pCallbackData->pMessage + "\n").c_str());
         }
 
         // return VK_TRUE to abort the call that triggered the validation message
