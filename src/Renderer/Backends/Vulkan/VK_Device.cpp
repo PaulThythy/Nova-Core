@@ -26,7 +26,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
-        NV_LOG_INFO("GL_Device created successfully.");
+        NV_LOG_INFO("VK_Device created successfully.");
         return true;
     }
 
@@ -52,7 +52,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_Features = {};
         m_MemoryProperties = {};
 
-        NV_LOG_INFO("GL_Device destroyed.");
+        NV_LOG_INFO("VK_Device destroyed.");
     }
 
     VK_Device::VK_QueueFamilyIndices VK_Device::FindQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) const {
