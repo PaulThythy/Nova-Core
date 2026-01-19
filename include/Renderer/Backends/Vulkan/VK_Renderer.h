@@ -12,6 +12,7 @@
 #include "Renderer/Backends/Vulkan/VK_ValidationLayers.h"
 #include "Renderer/Backends/Vulkan/VK_Common.h"
 #include "Renderer/Backends/Vulkan/VK_Instance.h"
+#include "Renderer/Backends/Vulkan/VK_Device.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -33,8 +34,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 	private:
                 // --- Helpers ---
-                bool PickPhysicalDevice();
-                bool CreateDevice();
                 bool CreateSwapchain();
                 bool CreateImageViews();
                 bool CreateRenderPass();
@@ -47,13 +46,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 bool RecreateSwapchain();
 
                 VK_Instance       m_VKInstance;
-                VkPhysicalDevice  m_PhysicalDevice = VK_NULL_HANDLE;
-                VkDevice          m_Device = VK_NULL_HANDLE;
-
-                uint32_t          m_GraphicsQueueFamily = 0;
-                uint32_t          m_PresentQueueFamily = 0;
-                VkQueue           m_GraphicsQueue = VK_NULL_HANDLE;
-                VkQueue           m_PresentQueue = VK_NULL_HANDLE;
+                VK_Device         m_VKDevice;
 
                 VkSwapchainKHR                m_Swapchain = VK_NULL_HANDLE;
                 VkFormat                      m_SwapchainImageFormat{};

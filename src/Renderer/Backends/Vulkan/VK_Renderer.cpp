@@ -90,48 +90,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return actualExtent;
     }
 
-    // --- Queue families helper -----------------------------------------------------------------
-
-    static bool FindQueueFamilies(VkPhysicalDevice physicalDevice,
-        VkSurfaceKHR surface,
-        uint32_t& outGraphics,
-        uint32_t& outPresent)
-    {
-        outGraphics = std::numeric_limits<uint32_t>::max();
-        outPresent = std::numeric_limits<uint32_t>::max();
-
-        uint32_t qCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &qCount, nullptr);
-        if (qCount == 0) return false;
-
-        std::vector<VkQueueFamilyProperties> qProps(qCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &qCount, qProps.data());
-
-        for (uint32_t i = 0; i < qCount; i++) {
-            if ((qProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && outGraphics == std::numeric_limits<uint32_t>::max()) {
-                outGraphics = i;
-            }
-
-            VkBool32 presentSupport = VK_FALSE;
-            vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
-            if (presentSupport && outPresent == std::numeric_limits<uint32_t>::max()) {
-                outPresent = i;
-            }
-        }
-
-        return outGraphics != std::numeric_limits<uint32_t>::max() &&
-            outPresent != std::numeric_limits<uint32_t>::max();
-    }
-
+    
     // --- VK_Renderer implementation ------------------------------------------------------------
 
     bool VK_Renderer::Create() {
         NV_LOG_INFO("Creating Vulkan renderer...");
 
+        const std::vector<const char*> deviceExtensions = {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
+
         if (!m_VKInstance.Create())   return false;
-        
-        if (!PickPhysicalDevice()) return false;
-        if (!CreateDevice())     return false;
+        if (!m_VKDevice.Create(m_VKInstance.GetInstance(), m_VKInstance.GetSurface(), deviceExtensions)) return false;
         if (!CreateSwapchain())  return false;
         if (!CreateImageViews()) return false;
         if (!CreateRenderPass()) return false;
@@ -145,10 +115,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         ImGui_ImplVulkan_InitInfo initInfo{};
         initInfo.ApiVersion = VK_API_VERSION_1_3;
         initInfo.Instance = m_VKInstance.GetInstance();
-        initInfo.PhysicalDevice = m_PhysicalDevice;
-        initInfo.Device = m_Device;
-        initInfo.QueueFamily = m_GraphicsQueueFamily;
-        initInfo.Queue = m_GraphicsQueue;
+        initInfo.PhysicalDevice = m_VKDevice.GetPhysicalDevice();
+        initInfo.Device = m_VKDevice.GetDevice();
+        initInfo.QueueFamily = m_VKDevice.GetGraphicsQueueFamily();
+        initInfo.Queue = m_VKDevice.GetGraphicsQueue();
         initInfo.DescriptorPool = m_ImGuiDescriptorPool;
         initInfo.DescriptorPoolSize = 0;
         initInfo.MinImageCount = m_MinImageCount;
@@ -175,25 +145,24 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::Destroy() {
-        if (m_Device != VK_NULL_HANDLE) {
-            vkDeviceWaitIdle(m_Device);
+        if (m_VKDevice.GetDevice() != VK_NULL_HANDLE) {
+            vkDeviceWaitIdle(m_VKDevice.GetDevice());
         }
 
         if (m_ImGuiDescriptorPool != VK_NULL_HANDLE) {
-            vkDestroyDescriptorPool(m_Device, m_ImGuiDescriptorPool, nullptr);
+            vkDestroyDescriptorPool(m_VKDevice.GetDevice(), m_ImGuiDescriptorPool, nullptr);
             m_ImGuiDescriptorPool = VK_NULL_HANDLE;
         }
 
         CleanupSwapchain();
 
         if (m_CommandPool != VK_NULL_HANDLE) {
-            vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
+            vkDestroyCommandPool(m_VKDevice.GetDevice(), m_CommandPool, nullptr);
             m_CommandPool = VK_NULL_HANDLE;
         }
 
-        if (m_Device != VK_NULL_HANDLE) {
-            vkDestroyDevice(m_Device, nullptr);
-            m_Device = VK_NULL_HANDLE;
+        if (m_VKDevice.GetDevice() != VK_NULL_HANDLE) {
+            m_VKDevice.Destroy();
         }
 
         m_VKInstance.Destroy();
@@ -222,11 +191,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             }
         }
 
-        vkWaitForFences(m_Device, 1, &m_InFlightFence, VK_TRUE, UINT64_MAX);
-        vkResetFences(m_Device, 1, &m_InFlightFence);
+        vkWaitForFences(m_VKDevice.GetDevice(), 1, &m_InFlightFence, VK_TRUE, UINT64_MAX);
+        vkResetFences(m_VKDevice.GetDevice(), 1, &m_InFlightFence);
 
         VkResult result = vkAcquireNextImageKHR(
-            m_Device,
+            m_VKDevice.GetDevice(),
             m_Swapchain,
             UINT64_MAX,
             m_ImageAvailableSemaphore,
@@ -311,8 +280,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        CheckVkResult(vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_InFlightFence));
-
+        CheckVkResult(vkQueueSubmit(m_VKDevice.GetGraphicsQueue(), 1, &submitInfo, m_InFlightFence));
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         presentInfo.waitSemaphoreCount = 1;
@@ -321,7 +289,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         presentInfo.pSwapchains = &m_Swapchain;
         presentInfo.pImageIndices = &m_CurrentImageIndex;
 
-        VkResult result = vkQueuePresentKHR(m_PresentQueue, &presentInfo);
+        VkResult result = vkQueuePresentKHR(m_VKDevice.GetPresentQueue(), &presentInfo);
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
             RecreateSwapchain();
         }
@@ -332,96 +300,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     // --- Creation helpers ----------------------------------------------------------------------
 
-    bool VK_Renderer::PickPhysicalDevice() {
-        uint32_t deviceCount = 0;
-        VkResult res = vkEnumeratePhysicalDevices(m_VKInstance.GetInstance(), &deviceCount, nullptr);
-        CheckVkResult(res);
-        if (deviceCount == 0) {
-            NV_LOG_ERROR("No Vulkan physical devices found.");
-            return false;
-        }
-
-        std::vector<VkPhysicalDevice> devices(deviceCount);
-        res = vkEnumeratePhysicalDevices(m_VKInstance.GetInstance(), &deviceCount, devices.data());
-        CheckVkResult(res);
-
-        for (VkPhysicalDevice dev : devices) {
-            uint32_t g = 0, p = 0;
-            if (!FindQueueFamilies(dev, m_VKInstance.GetSurface(), g, p)) {
-                continue;
-            }
-
-            if (!HasDeviceExtension(dev, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
-                continue;
-            }
-
-            m_PhysicalDevice = dev;
-            m_GraphicsQueueFamily = g;
-            m_PresentQueueFamily = p;
-
-            VkPhysicalDeviceProperties props{};
-            vkGetPhysicalDeviceProperties(m_PhysicalDevice, &props);
-
-            NV_LOG_INFO((std::string("Selected GPU: ") + props.deviceName).c_str());
-            LogDeviceExtensions(m_PhysicalDevice);
-            return true;
-        }
-
-        NV_LOG_ERROR("No suitable Vulkan physical devices found (graphics + present + swapchain).");
-        return false;
-    }
-
-    bool VK_Renderer::CreateDevice() {
-        const float priority = 1.0f;
-
-        std::vector<VkDeviceQueueCreateInfo> qcis;
-        qcis.reserve(2);
-
-        VkDeviceQueueCreateInfo qci{};
-        qci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        qci.queueFamilyIndex = m_GraphicsQueueFamily;
-        qci.queueCount = 1;
-        qci.pQueuePriorities = &priority;
-        qcis.push_back(qci);
-
-        if (m_PresentQueueFamily != m_GraphicsQueueFamily) {
-            VkDeviceQueueCreateInfo pqci{};
-            pqci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            pqci.queueFamilyIndex = m_PresentQueueFamily;
-            pqci.queueCount = 1;
-            pqci.pQueuePriorities = &priority;
-            qcis.push_back(pqci);
-        }
-
-        std::vector<const char*> enabledDeviceExts;
-        enabledDeviceExts.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-
-        VkPhysicalDeviceFeatures features{};
-        // Enable features if you need them (e.g. samplerAnisotropy = VK_TRUE)
-
-        VkDeviceCreateInfo dci{};
-        dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        dci.queueCreateInfoCount = static_cast<uint32_t>(qcis.size());
-        dci.pQueueCreateInfos = qcis.data();
-        dci.pEnabledFeatures = &features;
-        dci.enabledExtensionCount = static_cast<uint32_t>(enabledDeviceExts.size());
-        dci.ppEnabledExtensionNames = enabledDeviceExts.data();
-
-        VkResult res = vkCreateDevice(m_PhysicalDevice, &dci, nullptr, &m_Device);
-        CheckVkResult(res);
-        if (res != VK_SUCCESS) return false;
-
-        vkGetDeviceQueue(m_Device, m_GraphicsQueueFamily, 0, &m_GraphicsQueue);
-        vkGetDeviceQueue(m_Device, m_PresentQueueFamily, 0, &m_PresentQueue);
-
-        NV_LOG_INFO("Vulkan logical device created.");
-        return true;
-    }
-
     bool VK_Renderer::CreateSwapchain() {
         SDL_Window* window = Nova::Core::Application::Get().GetWindow().GetSDLWindow();
 
-        SwapChainSupportDetails details = QuerySwapChainSupport(m_PhysicalDevice, m_VKInstance.GetSurface());
+        SwapChainSupportDetails details = QuerySwapChainSupport(m_VKDevice.GetPhysicalDevice(), m_VKInstance.GetSurface());
         if (details.formats.empty() || details.presentModes.empty()) {
             NV_LOG_ERROR("Swapchain support is incomplete.");
             return false;
@@ -448,9 +330,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         ci.imageArrayLayers = 1;
         ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-        uint32_t queueFamilyIndices[] = { m_GraphicsQueueFamily, m_PresentQueueFamily };
+        uint32_t queueFamilyIndices[] = { m_VKDevice.GetGraphicsQueueFamily(), m_VKDevice.GetPresentQueueFamily() };
 
-        if (m_GraphicsQueueFamily != m_PresentQueueFamily) {
+        if (m_VKDevice.GetGraphicsQueueFamily() != m_VKDevice.GetPresentQueueFamily()) {
             ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
             ci.queueFamilyIndexCount = 2;
             ci.pQueueFamilyIndices = queueFamilyIndices;
@@ -467,13 +349,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         ci.clipped = VK_TRUE;
         ci.oldSwapchain = VK_NULL_HANDLE;
 
-        VkResult res = vkCreateSwapchainKHR(m_Device, &ci, nullptr, &m_Swapchain);
+        VkResult res = vkCreateSwapchainKHR(m_VKDevice.GetDevice(), &ci, nullptr, &m_Swapchain);
         CheckVkResult(res);
         if (res != VK_SUCCESS) return false;
 
-        vkGetSwapchainImagesKHR(m_Device, m_Swapchain, &imageCount, nullptr);
+        vkGetSwapchainImagesKHR(m_VKDevice.GetDevice(), m_Swapchain, &imageCount, nullptr);
         m_SwapchainImages.resize(imageCount);
-        vkGetSwapchainImagesKHR(m_Device, m_Swapchain, &imageCount, m_SwapchainImages.data());
+        vkGetSwapchainImagesKHR(m_VKDevice.GetDevice(), m_Swapchain, &imageCount, m_SwapchainImages.data());
 
         m_SwapchainImageFormat = surfaceFormat.format;
         m_SwapchainExtent = extent;
@@ -501,7 +383,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             ci.subresourceRange.baseArrayLayer = 0;
             ci.subresourceRange.layerCount = 1;
 
-            VkResult res = vkCreateImageView(m_Device, &ci, nullptr, &m_SwapchainImageViews[i]);
+            VkResult res = vkCreateImageView(m_VKDevice.GetDevice(), &ci, nullptr, &m_SwapchainImageViews[i]);
             CheckVkResult(res);
             if (res != VK_SUCCESS) return false;
         }
@@ -547,7 +429,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         rpInfo.dependencyCount = 1;
         rpInfo.pDependencies = &dependency;
 
-        VkResult res = vkCreateRenderPass(m_Device, &rpInfo, nullptr, &m_RenderPass);
+        VkResult res = vkCreateRenderPass(m_VKDevice.GetDevice(), &rpInfo, nullptr, &m_RenderPass);
         CheckVkResult(res);
         if (res != VK_SUCCESS) return false;
 
@@ -570,7 +452,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             fbInfo.height = m_SwapchainExtent.height;
             fbInfo.layers = 1;
 
-            VkResult res = vkCreateFramebuffer(m_Device, &fbInfo, nullptr, &m_SwapchainFramebuffers[i]);
+            VkResult res = vkCreateFramebuffer(m_VKDevice.GetDevice(), &fbInfo, nullptr, &m_SwapchainFramebuffers[i]);
             CheckVkResult(res);
             if (res != VK_SUCCESS) return false;
         }
@@ -583,9 +465,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        poolInfo.queueFamilyIndex = m_GraphicsQueueFamily;
+        poolInfo.queueFamilyIndex = m_VKDevice.GetGraphicsQueueFamily();
 
-        VkResult res = vkCreateCommandPool(m_Device, &poolInfo, nullptr, &m_CommandPool);
+        VkResult res = vkCreateCommandPool(m_VKDevice.GetDevice(), &poolInfo, nullptr, &m_CommandPool);
         CheckVkResult(res);
         if (res != VK_SUCCESS) return false;
 
@@ -602,7 +484,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = static_cast<uint32_t>(m_CommandBuffers.size());
 
-        VkResult res = vkAllocateCommandBuffers(m_Device, &allocInfo, m_CommandBuffers.data());
+        VkResult res = vkAllocateCommandBuffers(m_VKDevice.GetDevice(), &allocInfo, m_CommandBuffers.data());
         CheckVkResult(res);
         if (res != VK_SUCCESS) return false;
 
@@ -618,15 +500,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        VkResult res = vkCreateSemaphore(m_Device, &semInfo, nullptr, &m_ImageAvailableSemaphore);
+        VkResult res = vkCreateSemaphore(m_VKDevice.GetDevice(), &semInfo, nullptr, &m_ImageAvailableSemaphore);
         CheckVkResult(res);
         if (res != VK_SUCCESS) return false;
 
-        res = vkCreateSemaphore(m_Device, &semInfo, nullptr, &m_RenderFinishedSemaphore);
+        res = vkCreateSemaphore(m_VKDevice.GetDevice(), &semInfo, nullptr, &m_RenderFinishedSemaphore);
         CheckVkResult(res);
         if (res != VK_SUCCESS) return false;
 
-        res = vkCreateFence(m_Device, &fenceInfo, nullptr, &m_InFlightFence);
+        res = vkCreateFence(m_VKDevice.GetDevice(), &fenceInfo, nullptr, &m_InFlightFence);
         CheckVkResult(res);
         if (res != VK_SUCCESS) return false;
 
@@ -656,7 +538,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         pool_info.poolSizeCount = static_cast<uint32_t>(pool_sizes.size());
         pool_info.pPoolSizes = pool_sizes.data();
 
-        VkResult res = vkCreateDescriptorPool(m_Device, &pool_info, nullptr, &m_ImGuiDescriptorPool);
+        VkResult res = vkCreateDescriptorPool(m_VKDevice.GetDevice(), &pool_info, nullptr, &m_ImGuiDescriptorPool);
         CheckVkResult(res);
         if (res != VK_SUCCESS) return false;
 
@@ -666,28 +548,28 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_Renderer::CleanupSwapchain() {
         for (auto fb : m_SwapchainFramebuffers) {
-            vkDestroyFramebuffer(m_Device, fb, nullptr);
+            vkDestroyFramebuffer(m_VKDevice.GetDevice(), fb, nullptr);
         }
         m_SwapchainFramebuffers.clear();
 
         if (m_RenderPass != VK_NULL_HANDLE) {
-            vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
+            vkDestroyRenderPass(m_VKDevice.GetDevice(), m_RenderPass, nullptr);
             m_RenderPass = VK_NULL_HANDLE;
         }
 
         for (auto view : m_SwapchainImageViews) {
-            vkDestroyImageView(m_Device, view, nullptr);
+            vkDestroyImageView(m_VKDevice.GetDevice(), view, nullptr);
         }
         m_SwapchainImageViews.clear();
 
         if (m_Swapchain != VK_NULL_HANDLE) {
-            vkDestroySwapchainKHR(m_Device, m_Swapchain, nullptr);
+            vkDestroySwapchainKHR(m_VKDevice.GetDevice(), m_Swapchain, nullptr);
             m_Swapchain = VK_NULL_HANDLE;
         }
     }
 
     bool VK_Renderer::RecreateSwapchain() {
-        vkDeviceWaitIdle(m_Device);
+        vkDeviceWaitIdle(m_VKDevice.GetDevice());
 
         CleanupSwapchain();
 
