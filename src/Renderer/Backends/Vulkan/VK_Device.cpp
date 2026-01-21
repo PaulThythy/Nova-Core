@@ -2,6 +2,44 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
+    static std::string QueueFlagsToString(VkQueueFlags flags) {
+        std::string s;
+        auto Add = [&](const char* name) {
+            if (!s.empty()) s += ", ";
+            s += name;
+            };
+
+        if (flags & VK_QUEUE_GRAPHICS_BIT) Add("GRAPHICS");
+        if (flags & VK_QUEUE_COMPUTE_BIT)  Add("COMPUTE");
+        if (flags & VK_QUEUE_TRANSFER_BIT) Add("TRANSFER");
+        if (flags & VK_QUEUE_SPARSE_BINDING_BIT) Add("SPARSE_BINDING_BIT");
+        if (flags & VK_QUEUE_VIDEO_DECODE_BIT_KHR) Add("VIDEO_DECODE_BIT_KHR");
+        if (flags & VK_QUEUE_VIDEO_ENCODE_BIT_KHR) Add("VIDEO_ENCODE_BIT_KHR");
+        if (flags & VK_QUEUE_OPTICAL_FLOW_BIT_NV) Add("OPTICAL_FLOW_BIT_NV");
+
+        if (s.empty()) s = "NONE";
+        return s;
+    }
+
+    void VK_Device::LogQueueFamilies(const std::vector<VK_QueueFamily>& families) const {
+        NV_LOG_INFO("---- Queue Families ----");
+        for (const auto& f : families) {
+            std::string line =
+                "Family " + std::to_string(f.index) +
+                " | flags=" + QueueFlagsToString(f.flags) +
+                " | queueCount=" + std::to_string(f.queueCount) +
+                " | present=" + std::string(f.supportsPresentation ? "true" : "false") +
+                " | timestampValidBits=" + std::to_string(f.timestampValidBits) +
+                " | granularity=(" +
+                std::to_string(f.minImageTransferGranularity.width) + "," +
+                std::to_string(f.minImageTransferGranularity.height) + "," +
+                std::to_string(f.minImageTransferGranularity.depth) + ")";
+
+            NV_LOG_INFO(line.c_str());
+        }
+        NV_LOG_INFO("------------------------");
+    }
+
     bool VK_Device::HasSwapChainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) const {
         uint32_t formatCount;
         vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, nullptr);
@@ -10,6 +48,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr);
 
         return formatCount > 0 && presentModeCount > 0;
+    }
+
+    const VK_Device::VK_QueueFamily* VK_Device::GetQueueFamily(uint32_t familyIndex) const {
+        for (const auto& f : m_QueueFamilies) {
+            if (f.index == familyIndex)
+                return &f;
+        }
+        return nullptr;
     }
 
     bool VK_Device::Create(const VkInstance instance, const VkSurfaceKHR surface, const std::vector<const char*>& requiredDeviceExtensions) {
@@ -38,16 +84,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_PhysicalDevice = VK_NULL_HANDLE;
 
-        m_GraphicsQueueFamily = UINT32_MAX;
-        m_PresentQueueFamily  = UINT32_MAX;
-        m_ComputeQueueFamily  = UINT32_MAX;
-        m_TransferQueueFamily = UINT32_MAX;
-
-        m_GraphicsQueue = VK_NULL_HANDLE;
-        m_PresentQueue  = VK_NULL_HANDLE;
-        m_ComputeQueue  = VK_NULL_HANDLE;
-        m_TransferQueue = VK_NULL_HANDLE;
-
         m_Properties = {};
         m_Features = {};
         m_MemoryProperties = {};
@@ -55,87 +91,38 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         NV_LOG_INFO("VK_Device destroyed.");
     }
 
-    VK_Device::VK_QueueFamilyIndices VK_Device::FindQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) const {
-        VK_QueueFamilyIndices indices;
+    std::vector<VK_Device::VK_QueueFamily> VK_Device::QueryQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) const {
+        std::vector<VK_QueueFamily> families;
 
         uint32_t qCount = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &qCount, nullptr);
         if (qCount == 0) {
-            return indices;
+            return families;
         }
 
-        std::vector<VkQueueFamilyProperties> qProps(qCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &qCount, qProps.data());
+        std::vector<VkQueueFamilyProperties> props(qCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &qCount, props.data());
 
-        // Track the "best" compute/transfer queues.
-        // Prefer dedicated queues (compute without graphics, transfer without graphics/compute)
+        families.reserve(qCount);
+
         for (uint32_t i = 0; i < qCount; ++i) {
-            const VkQueueFamilyProperties& props = qProps[i];
-            if (props.queueCount == 0) {
-                continue;
+            VK_QueueFamily fam{};
+            fam.index = i;
+            fam.flags = props[i].queueFlags;
+            fam.queueCount = props[i].queueCount;
+            fam.timestampValidBits = props[i].timestampValidBits;
+            fam.minImageTransferGranularity = props[i].minImageTransferGranularity;
+
+            if (surface != VK_NULL_HANDLE) {
+                VkBool32 presentSupport = VK_FALSE;
+                vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
+                fam.supportsPresentation = (presentSupport == VK_TRUE);
             }
 
-            const bool supportsGraphics = (props.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
-            const bool supportsCompute  = (props.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
-            const bool supportsTransfer = (props.queueFlags & VK_QUEUE_TRANSFER_BIT) != 0;
-
-            // Graphics
-            if (supportsGraphics && !indices.m_Graphics.has_value()) {
-                indices.m_Graphics = i;
-            }
-
-            // Present
-            VkBool32 presentSupport = VK_FALSE;
-            vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
-            if (presentSupport && !indices.m_Present.has_value()) {
-                indices.m_Present = i;
-            }
-
-            // Compute: prefer compute-only (no graphics)
-            if (supportsCompute) {
-                if (!indices.m_Compute.has_value()) {
-                    indices.m_Compute = i;
-                } else {
-                    // If current compute also supports graphics, prefer a compute-only family
-                    const uint32_t current = *indices.m_Compute;
-                    const bool currentIsGraphics = (qProps[current].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
-                    if (currentIsGraphics && !supportsGraphics) {
-                        indices.m_Compute = i;
-                    }
-                }
-            }
-
-            // Transfer: prefer transfer-only (no graphics, no compute)
-            if (supportsTransfer) {
-                if (!indices.m_Transfer.has_value()) {
-                    indices.m_Transfer = i;
-                } else {
-                    const uint32_t current = *indices.m_Transfer;
-                    const VkQueueFamilyProperties& curProps = qProps[current];
-                    const bool curHasGraphics = (curProps.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
-                    const bool curHasCompute  = (curProps.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
-                    const bool newHasGraphics = supportsGraphics;
-                    const bool newHasCompute  = supportsCompute;
-
-                    const bool currentDedicated = (!curHasGraphics && !curHasCompute);
-                    const bool newDedicated     = (!newHasGraphics && !newHasCompute);
-
-                    if (!currentDedicated && newDedicated) {
-                        indices.m_Transfer = i;
-                    }
-                }
-            }
+            families.push_back(fam);
         }
 
-        // Fallbacks: compute/transfer can be the same family as graphics
-        if (!indices.m_Compute.has_value() && indices.m_Graphics.has_value()) {
-            indices.m_Compute = indices.m_Graphics;
-        }
-        if (!indices.m_Transfer.has_value() && indices.m_Graphics.has_value()) {
-            indices.m_Transfer = indices.m_Graphics;
-        }
-
-        return indices;
+        return families;
     }
 
     bool VK_Device::PickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface, const std::vector<const char*>& requiredDeviceExtensions) {
@@ -156,33 +143,128 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
-        // Choose best device by scoring
+        // Petit helper local: choisir les queues “best effort”
+        struct SelectedQueues {
+            uint32_t graphics = UINT32_MAX;
+            uint32_t present = UINT32_MAX;
+            uint32_t compute = UINT32_MAX;
+            uint32_t transfer = UINT32_MAX;
+
+            bool HasGraphicsPresent() const {
+                return graphics != UINT32_MAX && present != UINT32_MAX;
+            }
+        };
+
+        auto SelectQueues = [](const std::vector<VK_QueueFamily>& families) -> SelectedQueues
+            {
+                SelectedQueues out{};
+
+                // Graphics
+                for (const auto& f : families) {
+                    if (f.queueCount > 0 && f.SupportsGraphics()) {
+                        out.graphics = f.index;
+                        break;
+                    }
+                }
+
+                // Present
+                for (const auto& f : families) {
+                    if (f.queueCount > 0 && f.supportsPresentation) {
+                        out.present = f.index;
+                        break;
+                    }
+                }
+
+                // Compute: prefer compute-only (no graphics)
+                for (const auto& f : families) {
+                    if (f.queueCount > 0 && f.SupportsCompute() && !f.SupportsGraphics()) {
+                        out.compute = f.index;
+                        break;
+                    }
+                }
+                // fallback: any compute
+                if (out.compute == UINT32_MAX) {
+                    for (const auto& f : families) {
+                        if (f.queueCount > 0 && f.SupportsCompute()) {
+                            out.compute = f.index;
+                            break;
+                        }
+                    }
+                }
+
+                // Transfer: prefer transfer-only (no graphics, no compute)
+                for (const auto& f : families) {
+                    if (f.queueCount > 0 && f.SupportsTransfer() && !f.SupportsGraphics() && !f.SupportsCompute()) {
+                        out.transfer = f.index;
+                        break;
+                    }
+                }
+                // fallback: transfer without graphics
+                if (out.transfer == UINT32_MAX) {
+                    for (const auto& f : families) {
+                        if (f.queueCount > 0 && f.SupportsTransfer() && !f.SupportsGraphics()) {
+                            out.transfer = f.index;
+                            break;
+                        }
+                    }
+                }
+                // fallback: any transfer
+                if (out.transfer == UINT32_MAX) {
+                    for (const auto& f : families) {
+                        if (f.queueCount > 0 && f.SupportsTransfer()) {
+                            out.transfer = f.index;
+                            break;
+                        }
+                    }
+                }
+
+                // ultimate fallback
+                if (out.compute == UINT32_MAX)  out.compute = out.graphics;
+                if (out.transfer == UINT32_MAX) out.transfer = out.graphics;
+
+                return out;
+            };
+
+        const bool requiresSwapchain = std::find(requiredDeviceExtensions.begin(), requiredDeviceExtensions.end(), VK_KHR_SWAPCHAIN_EXTENSION_NAME) != requiredDeviceExtensions.end();
+
         int bestScore = -1;
         VkPhysicalDevice bestDevice = VK_NULL_HANDLE;
-        VK_QueueFamilyIndices bestQueues;
+        std::vector<VK_QueueFamily> bestFamilies;
+        SelectedQueues bestSelected{};
 
-        for (VkPhysicalDevice dev : devices) {
-            VK_QueueFamilyIndices indices = FindQueueFamilies(dev, surface);
-            if (!indices.IsComplete()) {
-                continue;
-            }
-
-            if (!HasDeviceExtensions(dev, requiredDeviceExtensions)) {
-                continue;
-            }
-
-            // If swapchain extension is required, ensure we have at least one format + present mode
-            if (std::find(requiredDeviceExtensions.begin(), requiredDeviceExtensions.end(), VK_KHR_SWAPCHAIN_EXTENSION_NAME)
-                != requiredDeviceExtensions.end())
-            {
-                if (!HasSwapChainSupport(dev, surface)) {
-                    continue;
-                }
-            }
-
+        for (VkPhysicalDevice dev : devices)
+        {
             VkPhysicalDeviceProperties props{};
             vkGetPhysicalDeviceProperties(dev, &props);
 
+            // Query families + log
+            std::vector<VK_QueueFamily> families = QueryQueueFamilies(dev, surface);
+
+            NV_LOG_INFO((std::string("==== GPU Candidate: ") + props.deviceName + " ====").c_str());
+            LogQueueFamilies(families);
+
+            // Must have required extensions
+            if (!HasDeviceExtensions(dev, requiredDeviceExtensions)) {
+                NV_LOG_WARN("Skipping GPU: missing required device extensions.");
+                continue;
+            }
+
+            // If swapchain required, must have swapchain surface support (format + present modes)
+            if (requiresSwapchain && !HasSwapChainSupport(dev, surface)) {
+                NV_LOG_WARN("Skipping GPU: swapchain support incomplete (no formats/present modes).");
+                continue;
+            }
+
+            // Select queue families
+            SelectedQueues selected = SelectQueues(families);
+
+            // If swapchain, we must have graphics+present
+            if (requiresSwapchain && !selected.HasGraphicsPresent()) {
+                NV_LOG_WARN("Skipping GPU: missing required graphics/present queues.");
+                continue;
+            }
+
+            // Scoring
             int score = 0;
             if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) score += 1000;
             score += static_cast<int>(props.limits.maxImageDimension2D);
@@ -190,31 +272,31 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             if (score > bestScore) {
                 bestScore = score;
                 bestDevice = dev;
-                bestQueues = indices;
+                bestFamilies = std::move(families);
+                bestSelected = selected;
             }
         }
 
         if (bestDevice == VK_NULL_HANDLE) {
-            NV_LOG_ERROR("No suitable Vulkan physical device found (graphics + present + required extensions).");
+            NV_LOG_ERROR("No suitable Vulkan physical device found.");
             return false;
         }
 
-        // Commit selection
+        // Commit
         m_PhysicalDevice = bestDevice;
+        m_QueueFamilies = std::move(bestFamilies);
 
-        m_GraphicsQueueFamily = bestQueues.m_Graphics.value();
-        m_PresentQueueFamily  = bestQueues.m_Present.value();
-        m_ComputeQueueFamily  = bestQueues.m_Compute.value();
-        m_TransferQueueFamily = bestQueues.m_Transfer.value();
+        m_GraphicsQueueFamily = bestSelected.graphics;
+        m_PresentQueueFamily = bestSelected.present;
+        m_ComputeQueueFamily = bestSelected.compute;
+        m_TransferQueueFamily = bestSelected.transfer;
 
         vkGetPhysicalDeviceProperties(m_PhysicalDevice, &m_Properties);
         vkGetPhysicalDeviceFeatures(m_PhysicalDevice, &m_Features);
         vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &m_MemoryProperties);
 
         NV_LOG_INFO((std::string("Selected GPU: ") + m_Properties.deviceName).c_str());
-
-        NV_LOG_INFO((std::string("Queue families:") +
-            " graphics=" + std::to_string(m_GraphicsQueueFamily) +
+        NV_LOG_INFO((std::string("Selected queue families: graphics=") + std::to_string(m_GraphicsQueueFamily) +
             " present=" + std::to_string(m_PresentQueueFamily) +
             " compute=" + std::to_string(m_ComputeQueueFamily) +
             " transfer=" + std::to_string(m_TransferQueueFamily)).c_str());
@@ -230,22 +312,25 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
+        if (m_GraphicsQueueFamily == UINT32_MAX) {
+            NV_LOG_ERROR("CreateLogicalDevice failed: no graphics queue family selected");
+            return false;
+        }
+
         const float priority = 1.0f;
 
-        // Use unique queue family indices (a family may serve multiple roles).
-        std::set<uint32_t> uniqueFamilies = {
-            m_GraphicsQueueFamily,
-            m_PresentQueueFamily,
-            m_ComputeQueueFamily,
-            m_TransferQueueFamily
-        };
+        // Unique queue family indices (a family may serve multiple roles)
+        std::set<uint32_t> uniqueFamilies;
+        if (m_GraphicsQueueFamily != UINT32_MAX) uniqueFamilies.insert(m_GraphicsQueueFamily);
+        if (m_PresentQueueFamily != UINT32_MAX) uniqueFamilies.insert(m_PresentQueueFamily);
+        if (m_ComputeQueueFamily != UINT32_MAX) uniqueFamilies.insert(m_ComputeQueueFamily);
+        if (m_TransferQueueFamily != UINT32_MAX) uniqueFamilies.insert(m_TransferQueueFamily);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
         queueCreateInfos.reserve(uniqueFamilies.size());
 
-        for (uint32_t family : uniqueFamilies) {
-            if (family == UINT32_MAX) continue;
-
+        for (uint32_t family : uniqueFamilies)
+        {
             VkDeviceQueueCreateInfo qci{};
             qci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             qci.queueFamilyIndex = family;
@@ -254,7 +339,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             queueCreateInfos.push_back(qci);
         }
 
-        // Enable only what you need here. Keep it empty for now.
+        // Enable only what you need here (keep empty for now)
         VkPhysicalDeviceFeatures enabledFeatures{};
 
         VkDeviceCreateInfo dci{};
@@ -272,10 +357,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
+        // Retrieve queues
         vkGetDeviceQueue(m_Device, m_GraphicsQueueFamily, 0, &m_GraphicsQueue);
-        vkGetDeviceQueue(m_Device, m_PresentQueueFamily, 0, &m_PresentQueue);
-        vkGetDeviceQueue(m_Device, m_ComputeQueueFamily, 0, &m_ComputeQueue);
-        vkGetDeviceQueue(m_Device, m_TransferQueueFamily, 0, &m_TransferQueue);
+
+        if (m_PresentQueueFamily != UINT32_MAX)
+            vkGetDeviceQueue(m_Device, m_PresentQueueFamily, 0, &m_PresentQueue);
+
+        if (m_ComputeQueueFamily != UINT32_MAX)
+            vkGetDeviceQueue(m_Device, m_ComputeQueueFamily, 0, &m_ComputeQueue);
+
+        if (m_TransferQueueFamily != UINT32_MAX)
+            vkGetDeviceQueue(m_Device, m_TransferQueueFamily, 0, &m_TransferQueue);
 
         NV_LOG_INFO("Vulkan logical device created.");
         return true;
