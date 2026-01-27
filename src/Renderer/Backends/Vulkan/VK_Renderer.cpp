@@ -14,84 +14,24 @@
 #include <vector>
 #include <cstring>
 #include <limits>
+#include <thread>
+#include <atomic>
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    // --- Swapchain support helpers -------------------------------------------------------------
+    // Tracks whether we have already submitted at least one frame.
+    // Prevents deadlock on first frame if the fence was created unsignaled.
+    static bool s_HasSubmittedAtLeastOnce = false;
 
-    struct SwapChainSupportDetails {
-        VkSurfaceCapabilitiesKHR        capabilities{};
-        std::vector<VkSurfaceFormatKHR> formats;
-        std::vector<VkPresentModeKHR>   presentModes;
-    };
-
-    static SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
-        SwapChainSupportDetails details;
-
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
-
-        uint32_t formatCount = 0;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
-        if (formatCount != 0) {
-            details.formats.resize(formatCount);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
-        }
-
-        uint32_t presentModeCount = 0;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
-        if (presentModeCount != 0) {
-            details.presentModes.resize(presentModeCount);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
-        }
-
-        return details;
+    // We reserve the LAST secondary command buffer for ImGui.
+    // All other secondary command buffers are used for engine rendering (optionally multi-threaded).
+    static constexpr uint32_t GetImGuiSecondaryIndex() {
+        return (VK_Swapchain::WORKER_THREAD_COUNT > 0) ? (VK_Swapchain::WORKER_THREAD_COUNT - 1) : 0;
     }
 
-    static VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
-        for (const auto& availableFormat : availableFormats) {
-            if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM &&
-                availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-                return availableFormat;
-            }
-        }
-        return availableFormats[0];
+    static constexpr uint32_t GetEngineSecondaryCount() {
+        return (VK_Swapchain::WORKER_THREAD_COUNT > 1) ? (VK_Swapchain::WORKER_THREAD_COUNT - 1) : 0;
     }
-
-    static VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
-        // Try mailbox (triple buffering) first
-        for (const auto& availablePresentMode : availablePresentModes) {
-            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-                return availablePresentMode;
-            }
-        }
-        // Fallback: FIFO is guaranteed to be available
-        return VK_PRESENT_MODE_FIFO_KHR;
-    }
-
-    static VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, SDL_Window* window) {
-        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-            return capabilities.currentExtent;
-        }
-
-        int width = 0, height = 0;
-        SDL_GetWindowSizeInPixels(window, &width, &height);
-
-        VkExtent2D actualExtent = {
-            static_cast<uint32_t>(width),
-            static_cast<uint32_t>(height)
-        };
-
-        actualExtent.width = std::clamp(actualExtent.width,
-            capabilities.minImageExtent.width,
-            capabilities.maxImageExtent.width);
-        actualExtent.height = std::clamp(actualExtent.height,
-            capabilities.minImageExtent.height,
-            capabilities.maxImageExtent.height);
-        return actualExtent;
-    }
-
-    
-    // --- VK_Renderer implementation ------------------------------------------------------------
 
     bool VK_Renderer::Create() {
         NV_LOG_INFO("Creating Vulkan renderer...");
@@ -100,16 +40,45 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME
         };
 
-        if (!m_VKInstance.Create())   return false;
-        if (!m_VKDevice.Create(m_VKInstance.GetInstance(), m_VKInstance.GetSurface(), deviceExtensions)) return false;
-        if (!CreateSwapchain())  return false;
-        if (!CreateImageViews()) return false;
-        if (!CreateRenderPass()) return false;
-        if (!CreateFramebuffers()) return false;
-        if (!CreateCommandPool())  return false;
-        if (!AllocateCommandBuffers()) return false;
-        if (!CreateSyncObjects()) return false;
-        if (!CreateImGuiDescriptorPool()) return false;
+        if (!m_VKInstance.Create()) {
+            NV_LOG_ERROR("VK_Instance::Create failed");
+            return false;
+        }
+
+        if (!m_VKDevice.Create(m_VKInstance.GetInstance(), m_VKInstance.GetSurface(), deviceExtensions)) {
+            NV_LOG_ERROR("VK_Device::Create failed");
+            return false;
+        }
+
+        SDL_Window* window = Nova::Core::Application::Get().GetWindow().GetSDLWindow();
+
+        int w = 0, h = 0;
+        SDL_GetWindowSizeInPixels(window, &w, &h);
+
+        VkExtent2D initialExtent{
+            static_cast<uint32_t>(std::max(1, w)),
+            static_cast<uint32_t>(std::max(1, h))
+        };
+
+        if (!m_VKSwapchain.Create(
+            m_VKDevice.GetPhysicalDevice(),
+            m_VKDevice.GetDevice(),
+            m_VKInstance.GetSurface(),
+            m_VKDevice.GetGraphicsQueue(),
+            m_VKDevice.GetPresentQueue(),
+            m_VKDevice.GetGraphicsQueueFamily(),
+            m_VKDevice.GetPresentQueueFamily(),
+            initialExtent
+        )) {
+            NV_LOG_ERROR("VK_Swapchain::Create failed");
+            return false;
+        }
+
+        // --- ImGui descriptor pool ---
+        if (!CreateImGuiDescriptorPool()) {
+            NV_LOG_ERROR("Failed to create ImGui descriptor pool");
+            return false;
+        }
 
         // ---- Init ImGui Vulkan backend ----
         ImGui_ImplVulkan_InitInfo initInfo{};
@@ -121,11 +90,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         initInfo.Queue = m_VKDevice.GetGraphicsQueue();
         initInfo.DescriptorPool = m_ImGuiDescriptorPool;
         initInfo.DescriptorPoolSize = 0;
-        initInfo.MinImageCount = m_MinImageCount;
-        initInfo.ImageCount = static_cast<uint32_t>(m_SwapchainImages.size());
+        initInfo.MinImageCount = m_VKSwapchain.GetMinImageCount();
+        initInfo.ImageCount = m_VKSwapchain.GetImageCount();
         initInfo.PipelineCache = VK_NULL_HANDLE;
 
-        initInfo.PipelineInfoMain.RenderPass = m_RenderPass;
+        initInfo.PipelineInfoMain.RenderPass = m_VKSwapchain.GetRenderPass();
         initInfo.PipelineInfoMain.Subpass = 0;
         initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
@@ -140,6 +109,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         Nova::Core::ImGuiLayer& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
         imguiLayer.SetVulkanInitInfo(initInfo);
 
+        s_HasSubmittedAtLeastOnce = false;
+
         NV_LOG_INFO("Vulkan renderer created successfully.");
         return true;
     }
@@ -149,22 +120,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             vkDeviceWaitIdle(m_VKDevice.GetDevice());
         }
 
-        if (m_ImGuiDescriptorPool != VK_NULL_HANDLE) {
-            vkDestroyDescriptorPool(m_VKDevice.GetDevice(), m_ImGuiDescriptorPool, nullptr);
-            m_ImGuiDescriptorPool = VK_NULL_HANDLE;
-        }
+        DestroyImGuiDescriptorPool();
 
-        CleanupSwapchain();
+        m_VKSwapchain.Destroy();
 
-        if (m_CommandPool != VK_NULL_HANDLE) {
-            vkDestroyCommandPool(m_VKDevice.GetDevice(), m_CommandPool, nullptr);
-            m_CommandPool = VK_NULL_HANDLE;
-        }
-
-        if (m_VKDevice.GetDevice() != VK_NULL_HANDLE) {
-            m_VKDevice.Destroy();
-        }
-
+        m_VKDevice.Destroy();
         m_VKInstance.Destroy();
 
         NV_LOG_INFO("Vulkan renderer destroyed.");
@@ -172,8 +132,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     bool VK_Renderer::Resize(int w, int h) {
         (void)w; (void)h;
-        // We just mark that swapchain must be recreated.
         m_FramebufferResized = true;
+        m_VKSwapchain.SetFramebufferResized(true);
         return true;
     }
 
@@ -182,93 +142,287 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // Later: animations, camera, etc.
     }
 
+    bool VK_Renderer::RecreateSwapchain() {
+        SDL_Window* window = Nova::Core::Application::Get().GetWindow().GetSDLWindow();
+
+        int w = 0, h = 0;
+        SDL_GetWindowSizeInPixels(window, &w, &h);
+
+        VkExtent2D extent{
+            static_cast<uint32_t>(w),
+            static_cast<uint32_t>(h)
+        };
+
+        // If minimized (0,0), skip
+        if (extent.width == 0 || extent.height == 0) {
+            return false;
+        }
+
+        const bool ok = m_VKSwapchain.RecreateSwapchain(extent);
+        if (!ok) {
+            return false;
+        }
+
+        NV_LOG_INFO("Swapchain recreated.");
+        return true;
+    }
+
     void VK_Renderer::BeginFrame() {
-        if (m_FramebufferResized) {
+        m_FrameActive = false;
+
+        // ImGuiLayer::OnEnd() will record Vulkan draw calls.
+        // Always clear the command buffer first to avoid stale usage on skipped frames.
+        {
+            Nova::Core::ImGuiLayer& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
+            imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
+        }
+
+        // Resize request
+        if (m_FramebufferResized || m_VKSwapchain.WasFramebufferResized()) {
             m_FramebufferResized = false;
+            m_VKSwapchain.SetFramebufferResized(false);
+
             if (!RecreateSwapchain()) {
-                NV_LOG_ERROR("Failed to recreate swapchain on resize");
+                // Window minimized or error => skip frame
                 return;
             }
         }
 
-        vkWaitForFences(m_VKDevice.GetDevice(), 1, &m_InFlightFence, VK_TRUE, UINT64_MAX);
-        vkResetFences(m_VKDevice.GetDevice(), 1, &m_InFlightFence);
-
-        VkResult result = vkAcquireNextImageKHR(
-            m_VKDevice.GetDevice(),
-            m_Swapchain,
-            UINT64_MAX,
-            m_ImageAvailableSemaphore,
-            VK_NULL_HANDLE,
-            &m_CurrentImageIndex
-        );
-
-        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        uint32_t imageIndex = 0;
+        if (!m_VKSwapchain.AcquireNextImage(imageIndex)) {
+            // Out of date -> recreate
             RecreateSwapchain();
             return;
         }
-        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-            NV_LOG_ERROR("Failed to acquire swap chain image");
-            return;
+
+        m_CurrentImageIndex = imageIndex;
+
+        const uint32_t frameIndex = m_VKSwapchain.GetCurrentFrame();
+
+        // Wait/reset the in-flight fence BEFORE reusing per-frame command buffers.
+        // Only wait if we already submitted at least once, otherwise we can deadlock at startup.
+        {
+            VkFence fence = m_VKSwapchain.GetInFlightFence();
+
+            if (s_HasSubmittedAtLeastOnce) {
+                CheckVkResult(vkWaitForFences(m_VKDevice.GetDevice(), 1, &fence, VK_TRUE, UINT64_MAX));
+            }
+
+            CheckVkResult(vkResetFences(m_VKDevice.GetDevice(), 1, &fence));
         }
 
-        VkCommandBuffer cmd = m_CommandBuffers[m_CurrentImageIndex];
+        VkCommandBuffer primary = m_VKSwapchain.GetPrimaryCommandBuffer(frameIndex);
 
-        vkResetCommandBuffer(cmd, 0);
+        // Reset primary command buffer
+        vkResetCommandBuffer(primary, 0);
 
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        CheckVkResult(vkBeginCommandBuffer(cmd, &beginInfo));
 
+        CheckVkResult(vkBeginCommandBuffer(primary, &beginInfo));
+
+        // Begin render pass
         VkClearValue clearColor{};
         clearColor.color = { { 0.1f, 0.1f, 0.12f, 1.0f } };
 
         VkRenderPassBeginInfo rpBegin{};
         rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rpBegin.renderPass = m_RenderPass;
-        rpBegin.framebuffer = m_SwapchainFramebuffers[m_CurrentImageIndex];
+        rpBegin.renderPass = m_VKSwapchain.GetRenderPass();
+        rpBegin.framebuffer = m_VKSwapchain.GetFramebuffer(imageIndex);
         rpBegin.renderArea.offset = { 0, 0 };
-        rpBegin.renderArea.extent = m_SwapchainExtent;
+        rpBegin.renderArea.extent = m_VKSwapchain.GetExtent();
         rpBegin.clearValueCount = 1;
         rpBegin.pClearValues = &clearColor;
 
-        vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+        // IMPORTANT:
+        // We use SECONDARY_COMMAND_BUFFERS because we call vkCmdExecuteCommands() in this subpass.
+        // With VK_SUBPASS_CONTENTS_INLINE, vkCmdExecuteCommands() is INVALID and will trigger validation errors.
+        vkCmdBeginRenderPass(primary, &rpBegin, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(m_SwapchainExtent.width);
-        viewport.height = static_cast<float>(m_SwapchainExtent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        // --------------------------------------------------------------------
+        // Prepare the ImGui secondary command buffer for this frame.
+        //
+        // Goal:
+        // - ImGuiLayer::OnEnd() will call ImGui_ImplVulkan_RenderDrawData(drawData, cmd)
+        // - That function DOES NOT call vkBeginCommandBuffer() for you.
+        // - So we must provide a command buffer that is ALREADY in recording state.
+        //
+        // We begin the UI secondary here and we ONLY end it in EndFrame(),
+        // after ImGuiLayer::OnEnd() has recorded its commands.
+        // --------------------------------------------------------------------
+        {
+            const uint32_t uiIndex = GetImGuiSecondaryIndex();
+            VkCommandBuffer uiCmd = m_VKSwapchain.GetSecondaryCommandBuffer(frameIndex, uiIndex);
 
-        VkRect2D scissor{};
-        scissor.offset = { 0, 0 };
-        scissor.extent = m_SwapchainExtent;
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+            vkResetCommandBuffer(uiCmd, 0);
 
-        // Inform ImGuiLayer about current command buffer
-        Nova::Core::ImGuiLayer& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
-        imguiLayer.SetVulkanCommandBuffer(cmd);
+            VkCommandBufferInheritanceInfo inherit{};
+            inherit.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+            inherit.renderPass = m_VKSwapchain.GetRenderPass();
+            inherit.subpass = 0;
+            inherit.framebuffer = m_VKSwapchain.GetFramebuffer(m_CurrentImageIndex);
+
+            VkCommandBufferBeginInfo uiBegin{};
+            uiBegin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            uiBegin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT |
+                VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+            uiBegin.pInheritanceInfo = &inherit;
+
+            CheckVkResult(vkBeginCommandBuffer(uiCmd, &uiBegin));
+
+            // Optional: set viewport/scissor here (ImGui backend also sets them).
+            const VkExtent2D extent = m_VKSwapchain.GetExtent();
+
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(extent.width);
+            viewport.height = static_cast<float>(extent.height);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(uiCmd, 0, 1, &viewport);
+
+            VkRect2D scissor{};
+            scissor.offset = { 0, 0 };
+            scissor.extent = extent;
+            vkCmdSetScissor(uiCmd, 0, 1, &scissor);
+
+            // Give the recording UI secondary to ImGui for this frame.
+            Nova::Core::ImGuiLayer& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
+            imguiLayer.SetVulkanCommandBuffer(uiCmd);
+        }
+
+        m_FrameActive = true;
     }
 
     void VK_Renderer::Render() {
-        // For now we only clear the screen and let ImGui draw.
-        // Later you will record your 3D pipelines and meshes here,
-        // before ImGuiLayer::End() appends its own draw calls.
+        if (!m_FrameActive)
+            return;
+
+        const uint32_t frameIndex = m_VKSwapchain.GetCurrentFrame();
+        VkCommandBuffer primary = m_VKSwapchain.GetPrimaryCommandBuffer(frameIndex);
+
+        const uint32_t engineCount = GetEngineSecondaryCount();
+        if (engineCount == 0) {
+            // No engine secondary buffers available (only the ImGui secondary exists).
+            // That's valid: engine rendering can be empty while ImGui still renders.
+            return;
+        }
+
+        std::vector<VkCommandBuffer> engineCBs(engineCount);
+        for (uint32_t t = 0; t < engineCount; t++) {
+            engineCBs[t] = m_VKSwapchain.GetSecondaryCommandBuffer(frameIndex, t);
+            vkResetCommandBuffer(engineCBs[t], 0);
+        }
+
+        VkCommandBufferInheritanceInfo inherit{};
+        inherit.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+        inherit.renderPass = m_VKSwapchain.GetRenderPass();
+        inherit.subpass = 0;
+        inherit.framebuffer = m_VKSwapchain.GetFramebuffer(m_CurrentImageIndex);
+
+        const VkExtent2D extent = m_VKSwapchain.GetExtent();
+
+        auto BeginSecondary = [&](VkCommandBuffer cmd) {
+            VkCommandBufferBeginInfo bi{};
+            bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT |
+                VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+            bi.pInheritanceInfo = &inherit;
+
+            CheckVkResult(vkBeginCommandBuffer(cmd, &bi));
+
+            // Dynamic viewport/scissor must be set inside each secondary if your pipelines use dynamic state
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(extent.width);
+            viewport.height = static_cast<float>(extent.height);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+            VkRect2D scissor{};
+            scissor.offset = { 0, 0 };
+            scissor.extent = extent;
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
+            };
+
+        std::atomic<bool> ok(true);
+
+        auto RecordWorker = [&](uint32_t threadIndex) {
+            VkCommandBuffer cmd = engineCBs[threadIndex];
+            BeginSecondary(cmd);
+
+            // TODO: record engine drawcalls here
+            // vkCmdBindPipeline(...)
+            // vkCmdBindVertexBuffers(...)
+            // vkCmdBindIndexBuffer(...)
+            // vkCmdDrawIndexed(...)
+
+            if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
+                ok.store(false);
+            }
+            };
+
+        // NOTE:
+        // Command pools are NOT thread-safe in Vulkan.
+        // This is only valid if your swapchain provides one VkCommandPool per thread/secondary.
+        // If not, record these secondary command buffers sequentially on the main thread.
+        std::vector<std::thread> workers;
+        workers.reserve(engineCount);
+        for (uint32_t t = 0; t < engineCount; t++) {
+            workers.emplace_back(RecordWorker, t);
+        }
+        for (auto& th : workers) th.join();
+
+        if (!ok.load()) {
+            NV_LOG_ERROR("Engine secondary command buffer recording failed.");
+            return;
+        }
+
+        // Execute engine secondary command buffers inside the active render pass.
+        // This is valid because the render pass was begun with VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS.
+        vkCmdExecuteCommands(primary, engineCount, engineCBs.data());
     }
 
     void VK_Renderer::EndFrame() {
-        VkCommandBuffer cmd = m_CommandBuffers[m_CurrentImageIndex];
+        if (!m_FrameActive)
+            return;
 
-        vkCmdEndRenderPass(cmd);
-        CheckVkResult(vkEndCommandBuffer(cmd));
+        const uint32_t frameIndex = m_VKSwapchain.GetCurrentFrame();
+        VkCommandBuffer primary = m_VKSwapchain.GetPrimaryCommandBuffer(frameIndex);
 
-        VkSemaphore waitSemaphores[] = { m_ImageAvailableSemaphore };
+        // IMPORTANT ORDER REQUIREMENT:
+        // ImGuiLayer::OnEnd() must have been called BEFORE VK_Renderer::EndFrame().
+        //
+        // Why:
+        // - ImGuiLayer::OnEnd() records into the UI secondary command buffer that we began in BeginFrame().
+        // - Here we end + execute that command buffer, then we end the render pass and the primary command buffer.
+        //
+        // As a safety measure, clear the ImGui command buffer pointer first,
+        // so if OnEnd is mistakenly called after EndFrame, it won't record into a closed cmd buffer.
+        Nova::Core::ImGuiLayer& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
+        VkCommandBuffer uiCmd = m_VKSwapchain.GetSecondaryCommandBuffer(frameIndex, GetImGuiSecondaryIndex());
+        imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
+
+        // End the UI secondary (it must be in recording state here)
+        {
+            VkResult res = vkEndCommandBuffer(uiCmd);
+            CheckVkResult(res);
+        }
+
+        // Execute UI secondary inside the same subpass.
+        vkCmdExecuteCommands(primary, 1, &uiCmd);
+
+        // Now we can close the render pass and the primary command buffer.
+        vkCmdEndRenderPass(primary);
+        CheckVkResult(vkEndCommandBuffer(primary));
+
+        VkSemaphore waitSemaphores[] = { m_VKSwapchain.GetImageAvailableSemaphore() };
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore signalSemaphores[] = { m_RenderFinishedSemaphore };
+        VkSemaphore signalSemaphores[] = { m_VKSwapchain.GetRenderFinishedSemaphore() };
 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -276,244 +430,23 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         submitInfo.pWaitSemaphores = waitSemaphores;
         submitInfo.pWaitDstStageMask = waitStages;
         submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
+        submitInfo.pCommandBuffers = &primary;
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        CheckVkResult(vkQueueSubmit(m_VKDevice.GetGraphicsQueue(), 1, &submitInfo, m_InFlightFence));
-        VkPresentInfoKHR presentInfo{};
-        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = signalSemaphores;
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = &m_Swapchain;
-        presentInfo.pImageIndices = &m_CurrentImageIndex;
+        CheckVkResult(vkQueueSubmit(
+            m_VKDevice.GetGraphicsQueue(),
+            1,
+            &submitInfo,
+            m_VKSwapchain.GetInFlightFence()
+        ));
 
-        VkResult result = vkQueuePresentKHR(m_VKDevice.GetPresentQueue(), &presentInfo);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        s_HasSubmittedAtLeastOnce = true;
+
+        // Present
+        if (!m_VKSwapchain.Present(m_CurrentImageIndex)) {
             RecreateSwapchain();
         }
-        else if (result != VK_SUCCESS) {
-            NV_LOG_ERROR("Failed to present swap chain image");
-        }
-    }
-
-    // --- Creation helpers ----------------------------------------------------------------------
-
-    bool VK_Renderer::CreateSwapchain() {
-        SDL_Window* window = Nova::Core::Application::Get().GetWindow().GetSDLWindow();
-
-        SwapChainSupportDetails details = QuerySwapChainSupport(m_VKDevice.GetPhysicalDevice(), m_VKInstance.GetSurface());
-        if (details.formats.empty() || details.presentModes.empty()) {
-            NV_LOG_ERROR("Swapchain support is incomplete.");
-            return false;
-        }
-
-        VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(details.formats);
-        VkPresentModeKHR presentMode = ChoosePresentMode(details.presentModes);
-        VkExtent2D extent = ChooseSwapExtent(details.capabilities, window);
-
-        uint32_t imageCount = details.capabilities.minImageCount + 1;
-        if (details.capabilities.maxImageCount > 0 &&
-            imageCount > details.capabilities.maxImageCount) {
-            imageCount = details.capabilities.maxImageCount;
-        }
-        m_MinImageCount = details.capabilities.minImageCount;
-
-        VkSwapchainCreateInfoKHR ci{};
-        ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        ci.surface = m_VKInstance.GetSurface();
-        ci.minImageCount = imageCount;
-        ci.imageFormat = surfaceFormat.format;
-        ci.imageColorSpace = surfaceFormat.colorSpace;
-        ci.imageExtent = extent;
-        ci.imageArrayLayers = 1;
-        ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-        uint32_t queueFamilyIndices[] = { m_VKDevice.GetGraphicsQueueFamily(), m_VKDevice.GetPresentQueueFamily() };
-
-        if (m_VKDevice.GetGraphicsQueueFamily() != m_VKDevice.GetPresentQueueFamily()) {
-            ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-            ci.queueFamilyIndexCount = 2;
-            ci.pQueueFamilyIndices = queueFamilyIndices;
-        }
-        else {
-            ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            ci.queueFamilyIndexCount = 0;
-            ci.pQueueFamilyIndices = nullptr;
-        }
-
-        ci.preTransform = details.capabilities.currentTransform;
-        ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        ci.presentMode = presentMode;
-        ci.clipped = VK_TRUE;
-        ci.oldSwapchain = VK_NULL_HANDLE;
-
-        VkResult res = vkCreateSwapchainKHR(m_VKDevice.GetDevice(), &ci, nullptr, &m_Swapchain);
-        CheckVkResult(res);
-        if (res != VK_SUCCESS) return false;
-
-        vkGetSwapchainImagesKHR(m_VKDevice.GetDevice(), m_Swapchain, &imageCount, nullptr);
-        m_SwapchainImages.resize(imageCount);
-        vkGetSwapchainImagesKHR(m_VKDevice.GetDevice(), m_Swapchain, &imageCount, m_SwapchainImages.data());
-
-        m_SwapchainImageFormat = surfaceFormat.format;
-        m_SwapchainExtent = extent;
-
-        NV_LOG_INFO("Swapchain created.");
-        return true;
-    }
-
-    bool VK_Renderer::CreateImageViews() {
-        m_SwapchainImageViews.resize(m_SwapchainImages.size());
-
-        for (size_t i = 0; i < m_SwapchainImages.size(); ++i) {
-            VkImageViewCreateInfo ci{};
-            ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            ci.image = m_SwapchainImages[i];
-            ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            ci.format = m_SwapchainImageFormat;
-            ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-            ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-            ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-            ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-            ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            ci.subresourceRange.baseMipLevel = 0;
-            ci.subresourceRange.levelCount = 1;
-            ci.subresourceRange.baseArrayLayer = 0;
-            ci.subresourceRange.layerCount = 1;
-
-            VkResult res = vkCreateImageView(m_VKDevice.GetDevice(), &ci, nullptr, &m_SwapchainImageViews[i]);
-            CheckVkResult(res);
-            if (res != VK_SUCCESS) return false;
-        }
-
-        NV_LOG_INFO("Swapchain image views created.");
-        return true;
-    }
-
-    bool VK_Renderer::CreateRenderPass() {
-        VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = m_SwapchainImageFormat;
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-        VkAttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkSubpassDescription subpass{};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-
-        VkSubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.srcAccessMask = 0;
-        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-        VkRenderPassCreateInfo rpInfo{};
-        rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        rpInfo.attachmentCount = 1;
-        rpInfo.pAttachments = &colorAttachment;
-        rpInfo.subpassCount = 1;
-        rpInfo.pSubpasses = &subpass;
-        rpInfo.dependencyCount = 1;
-        rpInfo.pDependencies = &dependency;
-
-        VkResult res = vkCreateRenderPass(m_VKDevice.GetDevice(), &rpInfo, nullptr, &m_RenderPass);
-        CheckVkResult(res);
-        if (res != VK_SUCCESS) return false;
-
-        NV_LOG_INFO("Render pass created.");
-        return true;
-    }
-
-    bool VK_Renderer::CreateFramebuffers() {
-        m_SwapchainFramebuffers.resize(m_SwapchainImageViews.size());
-
-        for (size_t i = 0; i < m_SwapchainImageViews.size(); ++i) {
-            VkImageView attachments[] = { m_SwapchainImageViews[i] };
-
-            VkFramebufferCreateInfo fbInfo{};
-            fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            fbInfo.renderPass = m_RenderPass;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = attachments;
-            fbInfo.width = m_SwapchainExtent.width;
-            fbInfo.height = m_SwapchainExtent.height;
-            fbInfo.layers = 1;
-
-            VkResult res = vkCreateFramebuffer(m_VKDevice.GetDevice(), &fbInfo, nullptr, &m_SwapchainFramebuffers[i]);
-            CheckVkResult(res);
-            if (res != VK_SUCCESS) return false;
-        }
-
-        NV_LOG_INFO("Framebuffers created.");
-        return true;
-    }
-
-    bool VK_Renderer::CreateCommandPool() {
-        VkCommandPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        poolInfo.queueFamilyIndex = m_VKDevice.GetGraphicsQueueFamily();
-
-        VkResult res = vkCreateCommandPool(m_VKDevice.GetDevice(), &poolInfo, nullptr, &m_CommandPool);
-        CheckVkResult(res);
-        if (res != VK_SUCCESS) return false;
-
-        NV_LOG_INFO("Command pool created.");
-        return true;
-    }
-
-    bool VK_Renderer::AllocateCommandBuffers() {
-        m_CommandBuffers.resize(m_SwapchainFramebuffers.size());
-
-        VkCommandBufferAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = m_CommandPool;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = static_cast<uint32_t>(m_CommandBuffers.size());
-
-        VkResult res = vkAllocateCommandBuffers(m_VKDevice.GetDevice(), &allocInfo, m_CommandBuffers.data());
-        CheckVkResult(res);
-        if (res != VK_SUCCESS) return false;
-
-        NV_LOG_INFO("Command buffers allocated.");
-        return true;
-    }
-
-    bool VK_Renderer::CreateSyncObjects() {
-        VkSemaphoreCreateInfo semInfo{};
-        semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        VkFenceCreateInfo fenceInfo{};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-        VkResult res = vkCreateSemaphore(m_VKDevice.GetDevice(), &semInfo, nullptr, &m_ImageAvailableSemaphore);
-        CheckVkResult(res);
-        if (res != VK_SUCCESS) return false;
-
-        res = vkCreateSemaphore(m_VKDevice.GetDevice(), &semInfo, nullptr, &m_RenderFinishedSemaphore);
-        CheckVkResult(res);
-        if (res != VK_SUCCESS) return false;
-
-        res = vkCreateFence(m_VKDevice.GetDevice(), &fenceInfo, nullptr, &m_InFlightFence);
-        CheckVkResult(res);
-        if (res != VK_SUCCESS) return false;
-
-        NV_LOG_INFO("Sync objects created.");
-        return true;
     }
 
     bool VK_Renderer::CreateImGuiDescriptorPool() {
@@ -546,41 +479,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return true;
     }
 
-    void VK_Renderer::CleanupSwapchain() {
-        for (auto fb : m_SwapchainFramebuffers) {
-            vkDestroyFramebuffer(m_VKDevice.GetDevice(), fb, nullptr);
+    void VK_Renderer::DestroyImGuiDescriptorPool() {
+        if (m_ImGuiDescriptorPool != VK_NULL_HANDLE) {
+            vkDestroyDescriptorPool(m_VKDevice.GetDevice(), m_ImGuiDescriptorPool, nullptr);
+            m_ImGuiDescriptorPool = VK_NULL_HANDLE;
         }
-        m_SwapchainFramebuffers.clear();
-
-        if (m_RenderPass != VK_NULL_HANDLE) {
-            vkDestroyRenderPass(m_VKDevice.GetDevice(), m_RenderPass, nullptr);
-            m_RenderPass = VK_NULL_HANDLE;
-        }
-
-        for (auto view : m_SwapchainImageViews) {
-            vkDestroyImageView(m_VKDevice.GetDevice(), view, nullptr);
-        }
-        m_SwapchainImageViews.clear();
-
-        if (m_Swapchain != VK_NULL_HANDLE) {
-            vkDestroySwapchainKHR(m_VKDevice.GetDevice(), m_Swapchain, nullptr);
-            m_Swapchain = VK_NULL_HANDLE;
-        }
-    }
-
-    bool VK_Renderer::RecreateSwapchain() {
-        vkDeviceWaitIdle(m_VKDevice.GetDevice());
-
-        CleanupSwapchain();
-
-        if (!CreateSwapchain())      return false;
-        if (!CreateImageViews())     return false;
-        if (!CreateRenderPass())     return false;
-        if (!CreateFramebuffers())   return false;
-        if (!AllocateCommandBuffers()) return false; // reallocate to match framebuffer count
-
-        NV_LOG_INFO("Swapchain recreated.");
-        return true;
     }
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan
