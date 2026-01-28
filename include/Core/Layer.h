@@ -22,7 +22,9 @@ namespace Nova::Core {
 
         virtual void OnEvent(Event& event) {}
         virtual void OnUpdate(float deltaTime) {}
+        virtual void OnBegin() {}
         virtual void OnRender() {}
+        virtual void OnEnd() {}
 
     protected:
         std::string m_DebugName;

@@ -11,8 +11,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 	// ---------------------------------------------
 	// Public API
 	// ---------------------------------------------
-	bool VK_Swapchain::Create(
-		VkPhysicalDevice physicalDevice,
+	bool VK_Swapchain::Create(VkPhysicalDevice physicalDevice,
 		VkDevice device,
 		VkSurfaceKHR surface,
 		VkQueue graphicsQueue,
@@ -94,11 +93,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPresentModeKHR presentMode = ChoosePresentMode(support.presentModes);
 		VkExtent2D extent = ChooseExtent(support.capabilities, m_WindowExtent);
 
-		if (extent.width == 0 || extent.height == 0) {
-			NV_LOG_ERROR("CreateSwapchain aborted: extent is zero.");
-			return false;
-		}
-
 		// Image count (triple buffering conseillé, mais dépend de la surface)
 		uint32_t imageCount = support.capabilities.minImageCount + 1;
 		if (support.capabilities.maxImageCount > 0 && imageCount > support.capabilities.maxImageCount) {
@@ -130,12 +124,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		}
 
-		if (support.capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
-			createInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-		}
-		else {
-			createInfo.preTransform = support.capabilities.currentTransform;
-		}
+		createInfo.preTransform = support.capabilities.currentTransform;
 		createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 		createInfo.presentMode = presentMode;
 		createInfo.clipped = VK_TRUE;
@@ -395,22 +384,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 	}
 
 	VkExtent2D VK_Swapchain::ChooseExtent(const VkSurfaceCapabilitiesKHR& caps, VkExtent2D windowExtent) const {
-		const bool hasFixedExtent =
-			caps.currentExtent.width != std::numeric_limits<uint32_t>::max();
-
-		if (hasFixedExtent) {
-			// Certaines plateformes peuvent renvoyer 0,0 pendant shutdown/minimize
-			if (caps.currentExtent.width != 0 && caps.currentExtent.height != 0)
-				return caps.currentExtent;
+		if (caps.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+			return caps.currentExtent;
 		}
 
 		VkExtent2D actualExtent = windowExtent;
-		if (actualExtent.width == 0)  actualExtent.width = 1;
-		if (actualExtent.height == 0) actualExtent.height = 1;
-
 		actualExtent.width = std::clamp(actualExtent.width, caps.minImageExtent.width, caps.maxImageExtent.width);
 		actualExtent.height = std::clamp(actualExtent.height, caps.minImageExtent.height, caps.maxImageExtent.height);
-
 		return actualExtent;
 	}
 

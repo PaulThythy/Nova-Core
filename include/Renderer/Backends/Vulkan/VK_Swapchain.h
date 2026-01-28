@@ -14,10 +14,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VK_Swapchain() = default;
 		~VK_Swapchain() = default;
 
-		static constexpr int FRAMES_IN_FLIGHT = 3;
-		// TODO get number of threads of computer 
+		static constexpr uint32_t FRAMES_IN_FLIGHT = 3;
 		static constexpr uint32_t WORKER_THREAD_COUNT = 4;
 
+		// Create() doit recevoir ce dont la swapchain a besoin
 		bool Create(VkPhysicalDevice physicalDevice,
 			VkDevice device,
 			VkSurfaceKHR surface,
@@ -26,6 +26,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			uint32_t graphicsQueueFamily,
 			uint32_t presentQueueFamily,
 			VkExtent2D initialWindowExtent);
+
 		void Destroy();
 
 		bool CreateSwapchain();
@@ -41,17 +42,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		// ----------------------------
 		// Getters
 		// ----------------------------
-		VkSwapchainKHR	GetSwapchain() const { return m_Swapchain; }
-		VkFormat		GetImageFormat() const { return m_SwapchainImageFormat; }
-		VkExtent2D		GetExtent() const { return m_SwapchainExtent; }
-		uint32_t		GetMinImageCount() const { return m_MinImageCount; }
+		VkSwapchainKHR GetSwapchain() const { return m_Swapchain; }
+		VkFormat       GetImageFormat() const { return m_SwapchainImageFormat; }
+		VkExtent2D     GetExtent() const { return m_SwapchainExtent; }
+		uint32_t       GetMinImageCount() const { return m_MinImageCount; }
 
-		VkRenderPass	GetRenderPass() const { return m_RenderPass; }
+		VkRenderPass   GetRenderPass() const { return m_RenderPass; }
 
-		uint32_t		GetCurrentFrame() const { return m_CurrentFrame; }
-		uint32_t		GetCurrentImageIndex() const { return m_CurrentImageIndex; }
+		uint32_t       GetCurrentFrame() const { return m_CurrentFrame; }
+		uint32_t       GetCurrentImageIndex() const { return m_CurrentImageIndex; }
 
-		uint32_t		GetImageCount() const { return static_cast<uint32_t>(m_Frames.size()); }
+		uint32_t GetImageCount() const { return static_cast<uint32_t>(m_Frames.size()); }
 
 		// Framebuffers
 		VkFramebuffer GetFramebuffer(uint32_t imageIndex) const;
@@ -88,6 +89,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			std::vector<VkPresentModeKHR>   presentModes;
 		};
 
+	private:
 		// Query helpers
 		SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice physicalDevice) const;
 		VkSurfaceFormatKHR      ChooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) const;
@@ -106,6 +108,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		bool CreateCommandPoolsAndBuffers();
 		void DestroyCommandPoolsAndBuffers();
 
+	private:
+		// Vulkan handles nécessaires
 		VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
 		VkDevice         m_Device = VK_NULL_HANDLE;
 		VkSurfaceKHR     m_Surface = VK_NULL_HANDLE;
@@ -131,7 +135,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		uint32_t m_CurrentFrame = 0;
 		uint32_t m_CurrentImageIndex = 0;
 
-		// Track fence by image (to avoid reusing an image that is still in flight)
+		// Track fence par image (pour éviter de réutiliser une image encore en vol)
 		std::vector<VkFence> m_ImagesInFlight;
 
 		bool m_FramebufferResized = false;

@@ -82,6 +82,12 @@ namespace Nova::Core {
     }
 
     void ImGuiLayer::OnDetach() {
+        if (m_IsRendererInitialized && m_GraphicsAPI == GraphicsAPI::Vulkan) {
+            if (m_VulkanInitInfo.Device != VK_NULL_HANDLE) {
+                vkDeviceWaitIdle(m_VulkanInitInfo.Device);
+            }
+        }
+
         if(m_IsRendererInitialized) {
             switch (m_GraphicsAPI) {
                 case GraphicsAPI::OpenGL:

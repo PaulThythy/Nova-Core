@@ -126,6 +126,9 @@ namespace Nova::Core {
                 layer->OnUpdate(dt);
 
             for (Layer* layer : m_LayerStack)
+                layer->OnBegin();
+
+            for (Layer* layer : m_LayerStack)
                 layer->OnRender();
             
             if (m_ImGuiLayer) {
@@ -136,6 +139,9 @@ namespace Nova::Core {
 
                 m_ImGuiLayer->End();
             }
+
+            for (Layer* layer : m_LayerStack)
+                layer->OnEnd();
 
             m_LayerStack.ProcessPendingTransitions();
 
