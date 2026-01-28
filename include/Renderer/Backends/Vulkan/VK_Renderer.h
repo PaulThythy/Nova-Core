@@ -25,17 +25,35 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         bool Create();
         void Destroy();
 
-        bool Resize(int w, int h);
-        void Update(float dt);
+        bool Resize(int w, int h) override;
+        void Update(float dt) override;
 
-        void BeginFrame();
-        void Render();
-        void EndFrame();
+        void BeginFrame() override;
+        void Render() override;
+        void EndFrame() override;
+
+        static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
+
+        struct VK_FrameSync {
+            VkSemaphore m_ImageAvailableSemaphore = VK_NULL_HANDLE;
+            VkSemaphore m_RenderFinishedSemaphore = VK_NULL_HANDLE;
+            VkFence     m_InFlightFence = VK_NULL_HANDLE;
+        };
+
+        struct VK_Frame {
+            VkImage       m_VKImage = VK_NULL_HANDLE;
+            VkImageView   m_VKImageView = VK_NULL_HANDLE;
+            VkFramebuffer m_VKFramebuffer = VK_NULL_HANDLE;
+        };
+
+        struct SwapchainSupportDetails {
+            VkSurfaceCapabilitiesKHR        m_Capabilities{};
+            std::vector<VkSurfaceFormatKHR> m_Formats;
+            std::vector<VkPresentModeKHR>   m_PresentModes;
+        };
 
     private:
-        // ---------------------------------------------------------------------
         // Swapchain lifecycle
-        // ---------------------------------------------------------------------
         bool RecreateSwapchain();
         void CleanupSwapchain();
 
@@ -44,27 +62,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         bool CreateRenderPass();
         bool CreateFramebuffers();
 
-        // ---------------------------------------------------------------------
-        // Commands & sync (single frame in flight)
-        // ---------------------------------------------------------------------
+        // Commands & sync
         bool CreateCommandPoolAndBuffers();
+        bool RecreateCommandBuffers();
+
         bool CreateSyncObjects();
         void DestroySyncObjects();
 
-        // ------------------------------------------------------------
-        // Commands (one pool + one primary cmd buffer per swapchain image)
-        // ------------------------------------------------------------
-        bool RecreateCommandBuffers();
-
-        // ---------------------------------------------------------------------
-        // Minimal graphics pipeline (triangle)
-        // ---------------------------------------------------------------------
+        // Minimal pipeline
         void CreateTrianglePipeline();
         void DestroyTrianglePipeline();
 
-        // ---------------------------------------------------------------------
-        // ImGui (optional, but kept for your engine integration)
-        // ---------------------------------------------------------------------
+        // ImGui
         bool CreateImGuiDescriptorPool();
         void DestroyImGuiDescriptorPool();
 
@@ -77,32 +86,31 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkSwapchainKHR            m_Swapchain = VK_NULL_HANDLE;
         VkFormat                  m_SwapchainImageFormat = VK_FORMAT_UNDEFINED;
         VkExtent2D                m_SwapchainExtent{ 0, 0 };
-        std::vector<VkImage>      m_SwapchainImages;
-        std::vector<VkImageView>  m_SwapchainImageViews;
-        std::vector<VkFramebuffer> m_Framebuffers;
+
+        std::vector<VK_Frame> m_Frames;
 
         // Render pass
         VkRenderPass m_RenderPass = VK_NULL_HANDLE;
 
         // Pipeline (triangle)
-        VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
-        VkPipeline       m_GraphicsPipeline = VK_NULL_HANDLE;
+        VkPipeline       m_TrianglePipeline = VK_NULL_HANDLE;
+        VkPipelineLayout m_TrianglePipelineLayout = VK_NULL_HANDLE;
 
         // Commands (single primary command buffer)
         VkCommandPool   m_CommandPool = VK_NULL_HANDLE;
         std::vector<VkCommandBuffer>  m_CommandBuffers;
 
-        // Synchronization (single frame in flight)
-        VkSemaphore m_ImageAvailableSemaphore = VK_NULL_HANDLE;
-        std::vector<VkSemaphore> m_RenderFinishedSemaphores;
-        VkFence     m_InFlightFence = VK_NULL_HANDLE;
+        // Frames in flight : 3
+        std::array<VK_FrameSync, MAX_FRAMES_IN_FLIGHT> m_FrameSync{};
+        uint32_t m_CurrentFrame = 0;
+
+        std::vector<VkFence> m_ImagesInFlight;
 
         // ImGui resources
         VkDescriptorPool m_ImGuiDescriptorPool = VK_NULL_HANDLE;
 
         // Per-frame state
         uint32_t m_CurrentImageIndex = 0;
-        bool     m_FrameActive = false;
         bool     m_FramebufferResized = false;
 	};
 
