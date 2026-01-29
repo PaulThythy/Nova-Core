@@ -7,6 +7,8 @@
 #include <thread>
 #include <array>
 
+#include "Core/Application.h"
+
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
 	class VK_Swapchain {
@@ -15,7 +17,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		~VK_Swapchain() = default;
 
 		static constexpr uint32_t FRAMES_IN_FLIGHT = 3;
-		static constexpr uint32_t WORKER_THREAD_COUNT = 4;
 
 		// Create() doit recevoir ce dont la swapchain a besoin
 		bool Create(VkPhysicalDevice physicalDevice,
@@ -24,53 +25,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			VkQueue graphicsQueue,
 			VkQueue presentQueue,
 			uint32_t graphicsQueueFamily,
-			uint32_t presentQueueFamily,
-			VkExtent2D initialWindowExtent);
+			uint32_t presentQueueFamily);
 
 		void Destroy();
 
-		bool CreateSwapchain();
-		bool RecreateSwapchain(VkExtent2D newWindowExtent);
-		void DestroySwapchain();
-
-		// ----------------------------
-		// Frame lifecycle helpers
-		// ----------------------------
-		bool AcquireNextImage(uint32_t& outImageIndex);
-		bool Present(uint32_t imageIndex);
-
-		// ----------------------------
-		// Getters
-		// ----------------------------
-		VkSwapchainKHR GetSwapchain() const { return m_Swapchain; }
-		VkFormat       GetImageFormat() const { return m_SwapchainImageFormat; }
-		VkExtent2D     GetExtent() const { return m_SwapchainExtent; }
-		uint32_t       GetMinImageCount() const { return m_MinImageCount; }
-
-		VkRenderPass   GetRenderPass() const { return m_RenderPass; }
-
-		uint32_t       GetCurrentFrame() const { return m_CurrentFrame; }
-		uint32_t       GetCurrentImageIndex() const { return m_CurrentImageIndex; }
-
-		uint32_t GetImageCount() const { return static_cast<uint32_t>(m_Frames.size()); }
-
-		// Framebuffers
-		VkFramebuffer GetFramebuffer(uint32_t imageIndex) const;
-
-		// Sync objects for the current frame-in-flight
-		VkSemaphore GetImageAvailableSemaphore() const;
-		VkSemaphore GetRenderFinishedSemaphore() const;
-		VkFence     GetInFlightFence() const;
-
-		// Command buffers (par frame, par thread)
-		VkCommandBuffer GetPrimaryCommandBuffer(uint32_t frameIndex) const;
-		VkCommandBuffer GetSecondaryCommandBuffer(uint32_t frameIndex, uint32_t threadIndex) const;
-
-		// Resize flag (si tu veux le set depuis ton window callback)
-		void SetFramebufferResized(bool resized) { m_FramebufferResized = resized; }
-		bool WasFramebufferResized() const { return m_FramebufferResized; }
-
-	private:
 		struct VK_FrameSync {
 			VkSemaphore m_ImageAvailableSemaphore = VK_NULL_HANDLE;
 			VkSemaphore m_RenderFinishedSemaphore = VK_NULL_HANDLE;
@@ -78,37 +36,72 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		};
 
 		struct VK_Frame {
-			VkImage       m_VKImage = VK_NULL_HANDLE;
-			VkImageView   m_VKImageView = VK_NULL_HANDLE;
-			VkFramebuffer m_VKFramebuffer = VK_NULL_HANDLE;
+			VkImage       m_Image = VK_NULL_HANDLE;
+			VkImageView   m_ImageView = VK_NULL_HANDLE;
+			VkFramebuffer m_Framebuffer = VK_NULL_HANDLE;
 		};
 
-		struct SwapchainSupportDetails {
-			VkSurfaceCapabilitiesKHR        capabilities{};
-			std::vector<VkSurfaceFormatKHR> formats;
-			std::vector<VkPresentModeKHR>   presentModes;
+		struct VK_SwapchainSupportDetails {
+			VkSurfaceCapabilitiesKHR        m_Capabilities{};
+			std::vector<VkSurfaceFormatKHR> m_Formats;
+			std::vector<VkPresentModeKHR>   m_PresentModes;
 		};
+
+		VkSwapchainKHR& GetSwapchain() { return m_Swapchain; }
+		VkExtent2D& GetExtent() { return m_SwapchainExtent; }
+
+		VkRenderPass& GetRenderPass() { return m_RenderPass; }
+
+		VkDescriptorPool& GetImGuiDescriptorPool() { return m_ImGuiDescriptorPool; }
+
+		std::vector<VK_Frame>& GetFrames() { return m_Frames; }
+		std::vector<VkFence>& GetImagesInFlight() { return m_ImagesInFlight; }
+		std::array<VK_FrameSync, FRAMES_IN_FLIGHT>& GetFrameSync() { return m_FrameSync; }
+
+		void SetCurrentFrame(uint32_t frameIndex) { m_CurrentFrame = frameIndex; }
+		uint32_t GetCurrentFrame() { return m_CurrentFrame; }
+		void AdvanceFrame() { m_CurrentFrame = (m_CurrentFrame + 1) % FRAMES_IN_FLIGHT; }
+
+		// swapchain image aquired
+		void SetAcquiredImageIndex(uint32_t idx) { m_AquiredImage = idx; }
+		uint32_t GetAcquiredImageIndex() const { return m_AquiredImage; }
+
+		VkPipeline& GetTrianglePipeline() { return m_TrianglePipeline; }
+		VkPipelineLayout& GetTrianglePipelineLayout() { return m_TrianglePipelineLayout; }
+
+		std::vector<VkCommandBuffer>& GetCommandBuffers() { return m_CommandBuffers; }
+
+		bool RecreateSwapchain();
 
 	private:
-		// Query helpers
-		SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice physicalDevice) const;
-		VkSurfaceFormatKHR      ChooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) const;
-		VkPresentModeKHR        ChoosePresentMode(const std::vector<VkPresentModeKHR>& presentModes) const;
-		VkExtent2D              ChooseExtent(const VkSurfaceCapabilitiesKHR& caps, VkExtent2D windowExtent) const;
 
+		bool CreateSwapchain();
+		void DestroySwapchain();
+
+		bool CreateImageViews();
 		bool CreateRenderPass();
-		void DestroyRenderPass();
-
 		bool CreateFramebuffers();
-		void DestroyFramebuffers();
+
+		// Commands & sync
+		bool CreateCommandPoolAndBuffers();
+		bool RecreateCommandBuffers();
 
 		bool CreateSyncObjects();
 		void DestroySyncObjects();
 
-		bool CreateCommandPoolsAndBuffers();
-		void DestroyCommandPoolsAndBuffers();
+		// Minimal pipeline
+		void CreateTrianglePipeline();
+		void DestroyTrianglePipeline();
 
-	private:
+		// ImGui
+		bool CreateImGuiDescriptorPool();
+		void DestroyImGuiDescriptorPool();
+
+		VK_SwapchainSupportDetails QuerySwapChainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
+		VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+		VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+		VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
+
 		// Vulkan handles nécessaires
 		VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
 		VkDevice         m_Device = VK_NULL_HANDLE;
@@ -130,27 +123,29 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		std::vector<VK_Frame> m_Frames;
 
-		// Sync per frame-in-flight
-		std::array<VK_FrameSync, FRAMES_IN_FLIGHT> m_FrameSync{};
-		uint32_t m_CurrentFrame = 0;
-		uint32_t m_CurrentImageIndex = 0;
-
-		// Track fence par image (pour éviter de réutiliser une image encore en vol)
-		std::vector<VkFence> m_ImagesInFlight;
-
-		bool m_FramebufferResized = false;
-
-		// Render pass swapchain
+		// Render pass
 		VkRenderPass m_RenderPass = VK_NULL_HANDLE;
 
-		// Command pools + buffers
-		// - 1 primary CB per frame
-		// - 4 secondary CB per frame (1 per worker thread)
-		std::array<VkCommandPool, FRAMES_IN_FLIGHT> m_PrimaryCommandPools{};
-		std::array<VkCommandBuffer, FRAMES_IN_FLIGHT> m_PrimaryCommandBuffers{};
+		// Pipeline (triangle)
+		VkPipeline       m_TrianglePipeline = VK_NULL_HANDLE;
+		VkPipelineLayout m_TrianglePipelineLayout = VK_NULL_HANDLE;
 
-		std::array<std::array<VkCommandPool, WORKER_THREAD_COUNT>, FRAMES_IN_FLIGHT> m_SecondaryCommandPools{};
-		std::array<std::array<VkCommandBuffer, WORKER_THREAD_COUNT>, FRAMES_IN_FLIGHT> m_SecondaryCommandBuffers{};
+		// Commands (single primary command buffer)
+		VkCommandPool   m_CommandPool = VK_NULL_HANDLE;
+		std::vector<VkCommandBuffer>  m_CommandBuffers;
+
+		// Frames in flight : 3
+		std::array<VK_FrameSync, FRAMES_IN_FLIGHT> m_FrameSync{};
+
+		std::vector<VkFence> m_ImagesInFlight;
+
+		// ImGui resources
+		VkDescriptorPool m_ImGuiDescriptorPool = VK_NULL_HANDLE;
+
+		// Per-frame state
+		uint32_t m_CurrentFrame = 0;
+		uint32_t m_AquiredImage = 0;
+		bool     m_FramebufferResized = false;
 	};
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan
