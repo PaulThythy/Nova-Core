@@ -38,8 +38,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_Device   m_VKDevice;
         VK_Swapchain m_VKSwapchain;
 
-        // Per-frame state
-        bool     m_FramebufferResized = false;
+        bool m_FramebufferResized = false;
 	};
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan
