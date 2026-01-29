@@ -34,6 +34,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
+    private:
         struct VK_FrameSync {
             VkSemaphore m_ImageAvailableSemaphore = VK_NULL_HANDLE;
             VkSemaphore m_RenderFinishedSemaphore = VK_NULL_HANDLE;
@@ -46,13 +47,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             VkFramebuffer m_VKFramebuffer = VK_NULL_HANDLE;
         };
 
-        struct SwapchainSupportDetails {
+        struct VK_SwapchainSupportDetails {
             VkSurfaceCapabilitiesKHR        m_Capabilities{};
             std::vector<VkSurfaceFormatKHR> m_Formats;
             std::vector<VkPresentModeKHR>   m_PresentModes;
         };
 
-    private:
         // Swapchain lifecycle
         bool RecreateSwapchain();
         void CleanupSwapchain();
@@ -76,6 +76,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // ImGui
         bool CreateImGuiDescriptorPool();
         void DestroyImGuiDescriptorPool();
+
+        VK_SwapchainSupportDetails QuerySwapChainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
+        VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+        VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+        VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 
     private:
         // Core Vulkan objects (wrappers)

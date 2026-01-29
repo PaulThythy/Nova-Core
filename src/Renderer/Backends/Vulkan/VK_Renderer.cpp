@@ -53,106 +53,105 @@ static VkShaderModule CreateShaderModule(VkDevice device, const std::vector<char
     return module;
 }
 
-static Nova::Core::Renderer::Backends::Vulkan::VK_Renderer::SwapchainSupportDetails QuerySwapChainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
-    using Details = Nova::Core::Renderer::Backends::Vulkan::VK_Renderer::SwapchainSupportDetails;
-
-    Details details{};
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &details.m_Capabilities);
-
-    uint32_t formatCount = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, nullptr);
-    if (formatCount) {
-        details.m_Formats.resize(formatCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, details.m_Formats.data());
-    }
-
-    uint32_t presentModeCount = 0;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr);
-    if (presentModeCount) {
-        details.m_PresentModes.resize(presentModeCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, details.m_PresentModes.data());
-    }
-
-    return details;
-}
-
-static VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
-    // If the surface has no preferred format, choose one ourselves.
-    if (availableFormats.size() == 1 && availableFormats[0].format == VK_FORMAT_UNDEFINED) {
-        VkSurfaceFormatKHR fmt{};
-        fmt.format = VK_FORMAT_B8G8R8A8_UNORM;
-        fmt.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-        return fmt;
-    }
-
-    // Prefer SRGB if available (common for ImGui / standard rendering).
-    for (const auto& fmt : availableFormats) {
-        if (fmt.format == VK_FORMAT_B8G8R8A8_SRGB &&
-            fmt.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            return fmt;
-        }
-    }
-
-    // Fallback to UNORM if SRGB isn't available.
-    for (const auto& fmt : availableFormats) {
-        if (fmt.format == VK_FORMAT_B8G8R8A8_UNORM &&
-            fmt.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            return fmt;
-        }
-    }
-
-    // Otherwise just use the first available format.
-    return availableFormats[0];
-}
-
-static VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
-    // Mailbox = low latency, no tearing (if available).
-    for (const auto& pm : availablePresentModes) {
-        if (pm == VK_PRESENT_MODE_MAILBOX_KHR)
-            return pm;
-    }
-
-    // Immediate = tearing possible, but low latency.
-    for (const auto& pm : availablePresentModes) {
-        if (pm == VK_PRESENT_MODE_IMMEDIATE_KHR)
-            return pm;
-    }
-
-    // FIFO is guaranteed by the spec.
-    return VK_PRESENT_MODE_FIFO_KHR;
-}
-
-static VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
-    // If currentExtent is not UINT32_MAX, the surface size is defined and must be used.
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-        return capabilities.currentExtent;
-    }
-
-    // Otherwise, we choose based on the actual window size.
-    SDL_Window* window = Nova::Core::Application::Get().GetWindow().GetSDLWindow();
-    int w = 0, h = 0;
-    SDL_GetWindowSizeInPixels(window, &w, &h);
-
-    VkExtent2D actualExtent{};
-    actualExtent.width = static_cast<uint32_t>(std::max(1, w));
-    actualExtent.height = static_cast<uint32_t>(std::max(1, h));
-
-    actualExtent.width = std::clamp(
-        actualExtent.width,
-        capabilities.minImageExtent.width,
-        capabilities.maxImageExtent.width
-    );
-
-    actualExtent.height = std::clamp(
-        actualExtent.height,
-        capabilities.minImageExtent.height,
-        capabilities.maxImageExtent.height
-    );
-
-    return actualExtent;
-}
-
 namespace Nova::Core::Renderer::Backends::Vulkan {
+
+    VK_Renderer::VK_SwapchainSupportDetails VK_Renderer::QuerySwapChainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
+
+        VK_SwapchainSupportDetails details{};
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &details.m_Capabilities);
+
+        uint32_t formatCount = 0;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, nullptr);
+        if (formatCount) {
+            details.m_Formats.resize(formatCount);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, details.m_Formats.data());
+        }
+
+        uint32_t presentModeCount = 0;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr);
+        if (presentModeCount) {
+            details.m_PresentModes.resize(presentModeCount);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, details.m_PresentModes.data());
+        }
+
+        return details;
+    }
+
+    VkSurfaceFormatKHR VK_Renderer::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+        // If the surface has no preferred format, choose one ourselves.
+        if (availableFormats.size() == 1 && availableFormats[0].format == VK_FORMAT_UNDEFINED) {
+            VkSurfaceFormatKHR fmt{};
+            fmt.format = VK_FORMAT_B8G8R8A8_UNORM;
+            fmt.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+            return fmt;
+        }
+
+        // Prefer SRGB if available (common for ImGui / standard rendering).
+        for (const auto& fmt : availableFormats) {
+            if (fmt.format == VK_FORMAT_B8G8R8A8_SRGB &&
+                fmt.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+                return fmt;
+            }
+        }
+
+        // Fallback to UNORM if SRGB isn't available.
+        for (const auto& fmt : availableFormats) {
+            if (fmt.format == VK_FORMAT_B8G8R8A8_UNORM &&
+                fmt.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+                return fmt;
+            }
+        }
+
+        // Otherwise just use the first available format.
+        return availableFormats[0];
+    }
+
+    VkPresentModeKHR VK_Renderer::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+        // Mailbox = low latency, no tearing (if available).
+        for (const auto& pm : availablePresentModes) {
+            if (pm == VK_PRESENT_MODE_MAILBOX_KHR)
+                return pm;
+        }
+
+        // Immediate = tearing possible, but low latency.
+        for (const auto& pm : availablePresentModes) {
+            if (pm == VK_PRESENT_MODE_IMMEDIATE_KHR)
+                return pm;
+        }
+
+        // FIFO is guaranteed by the spec.
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    VkExtent2D VK_Renderer::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
+        // If currentExtent is not UINT32_MAX, the surface size is defined and must be used.
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+            return capabilities.currentExtent;
+        }
+
+        // Otherwise, we choose based on the actual window size.
+        SDL_Window* window = Nova::Core::Application::Get().GetWindow().GetSDLWindow();
+        int w = 0, h = 0;
+        SDL_GetWindowSizeInPixels(window, &w, &h);
+
+        VkExtent2D actualExtent{};
+        actualExtent.width = static_cast<uint32_t>(std::max(1, w));
+        actualExtent.height = static_cast<uint32_t>(std::max(1, h));
+
+        actualExtent.width = std::clamp(
+            actualExtent.width,
+            capabilities.minImageExtent.width,
+            capabilities.maxImageExtent.width
+        );
+
+        actualExtent.height = std::clamp(
+            actualExtent.height,
+            capabilities.minImageExtent.height,
+            capabilities.maxImageExtent.height
+        );
+
+        return actualExtent;
+    }
 
     // ------------------------------------------------------------
     // Public API
