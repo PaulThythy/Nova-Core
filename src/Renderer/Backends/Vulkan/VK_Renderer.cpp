@@ -69,7 +69,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         initInfo.ImageCount = m_VKSwapchain.GetFrames().size();
         initInfo.PipelineCache = VK_NULL_HANDLE;
 
-        initInfo.PipelineInfoMain.RenderPass = m_VKSwapchain.GetRenderPass();
+        initInfo.PipelineInfoMain.RenderPass = m_VKSwapchain.GetBackBufferRenderPass();
         initInfo.PipelineInfoMain.Subpass = 0;
         initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
@@ -192,7 +192,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkRenderPassBeginInfo rpBegin{};
         rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rpBegin.renderPass = m_VKSwapchain.GetRenderPass();
+        rpBegin.renderPass = m_VKSwapchain.GetBackBufferRenderPass();
         rpBegin.framebuffer = m_VKSwapchain.GetFrames()[imageIndex].m_Framebuffer; // imageIndex
         rpBegin.renderArea.offset = { 0, 0 };
         rpBegin.renderArea.extent = m_VKSwapchain.GetExtent();

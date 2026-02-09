@@ -167,7 +167,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		if (!CreateSwapchain())               return false;
 		if (!CreateImageViews())              return false;
-		if (!CreateRenderPass())              return false;
+		if (!CreateBackBufferRenderPass())              return false;
 		if (!CreateFramebuffers())            return false;
 
 		if (!CreateCommandPoolAndBuffers())   return false;
@@ -193,9 +193,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		DestroySwapchain();
 
-		if (m_RenderPass != VK_NULL_HANDLE) {
-			vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
-			m_RenderPass = VK_NULL_HANDLE;
+		if (m_BackBufferRenderPass != VK_NULL_HANDLE) {
+			vkDestroyRenderPass(m_Device, m_BackBufferRenderPass, nullptr);
+			m_BackBufferRenderPass = VK_NULL_HANDLE;
 		}
 
 		DestroySyncObjects();
@@ -338,9 +338,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		m_CurrentFrame = 0;
 	}
 
-	bool VK_Swapchain::CreateRenderPass() {
+	bool VK_Swapchain::CreateBackBufferRenderPass() {
 		// Create once. We keep it alive across swapchain recreations (format usually stays the same).
-		if (m_RenderPass != VK_NULL_HANDLE)
+		if (m_BackBufferRenderPass != VK_NULL_HANDLE)
 			return true;
 
 		VkAttachmentDescription colorAttachment{};
@@ -378,7 +378,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		renderPassInfo.dependencyCount = 1;
 		renderPassInfo.pDependencies = &dependency;
 
-		VkResult res = vkCreateRenderPass(m_Device, &renderPassInfo, nullptr, &m_RenderPass);
+		VkResult res = vkCreateRenderPass(m_Device, &renderPassInfo, nullptr, &m_BackBufferRenderPass);
 		CheckVkResult(res);
 		return (res == VK_SUCCESS);
 	}
@@ -391,7 +391,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 			VkFramebufferCreateInfo framebufferInfo{};
 			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferInfo.renderPass = m_RenderPass;
+			framebufferInfo.renderPass = m_BackBufferRenderPass;
 			framebufferInfo.attachmentCount = 1;
 			framebufferInfo.pAttachments = attachments;
 			framebufferInfo.width = m_SwapchainExtent.width;
@@ -670,7 +670,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		pipe.pColorBlendState = &blend;
 		pipe.pDynamicState = &dynamic;
 		pipe.layout = m_TrianglePipelineLayout;
-		pipe.renderPass = m_RenderPass;
+		pipe.renderPass = m_BackBufferRenderPass;
 		pipe.subpass = 0;
 
 		res = vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipe, nullptr, &m_TrianglePipeline);

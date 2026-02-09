@@ -50,7 +50,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkSwapchainKHR& GetSwapchain() { return m_Swapchain; }
 		VkExtent2D& GetExtent() { return m_SwapchainExtent; }
 
-		VkRenderPass& GetRenderPass() { return m_RenderPass; }
+		VkRenderPass& GetBackBufferRenderPass() { return m_BackBufferRenderPass; }
 
 		VkDescriptorPool& GetImGuiDescriptorPool() { return m_ImGuiDescriptorPool; }
 
@@ -79,7 +79,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		void DestroySwapchain();
 
 		bool CreateImageViews();
-		bool CreateRenderPass();
+		bool CreateBackBufferRenderPass();
 		bool CreateFramebuffers();
 
 		// Commands & sync
@@ -124,7 +124,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		std::vector<VK_Frame> m_Frames;
 
 		// Render pass
-		VkRenderPass m_RenderPass = VK_NULL_HANDLE;
+		VkRenderPass m_BackBufferRenderPass = VK_NULL_HANDLE;
 
 		// Pipeline (triangle)
 		VkPipeline       m_TrianglePipeline = VK_NULL_HANDLE;
