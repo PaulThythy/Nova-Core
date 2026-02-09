@@ -640,6 +640,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		blend.attachmentCount = 1;
 		blend.pAttachments = &blendAttachment;
 
+		// TODO add VK_DYNAMIC_STATE_CULL_MODE to change cull mode dynamically (call vkCmdSetCullMode)
+		// TODO add VK_DYNAMIC_STATE_POLYGON_MODE_EXT but only if VK_EXT_extended_dynamic_state3 extension is compatible
 		VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 		VkPipelineDynamicStateCreateInfo dynamic{};
 		dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
