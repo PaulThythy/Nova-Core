@@ -308,6 +308,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (!CreateFramebuffers())     return false;
 		if (!RecreateCommandBuffers()) return false;
 
+		// Recreate render finished semaphores for new image count
+		m_RenderFinishedSemaphores.resize(m_Frames.size());
+		VkSemaphoreCreateInfo semInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+		for (size_t i = 0; i < m_RenderFinishedSemaphores.size(); ++i) {
+			VkResult res = vkCreateSemaphore(m_Device, &semInfo, nullptr, &m_RenderFinishedSemaphores[i]);
+			CheckVkResult(res);
+			if (res != VK_SUCCESS) return false;
+		}
+
 		m_ImagesInFlight.assign(m_Frames.size(), VK_NULL_HANDLE);
 
 		return true;
@@ -333,6 +342,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			vkDestroySwapchainKHR(m_Device, m_Swapchain, nullptr);
 			m_Swapchain = VK_NULL_HANDLE;
 		}
+
+		// Destroy render finished semaphores for each swapchain image
+		for (auto& sem : m_RenderFinishedSemaphores) {
+			if (sem) {
+				vkDestroySemaphore(m_Device, sem, nullptr);
+				sem = VK_NULL_HANDLE;
+			}
+		}
+		m_RenderFinishedSemaphores.clear();
 
 		m_ImagesInFlight.clear();
 		m_CurrentFrame = 0;
@@ -435,16 +453,21 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
 		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
+		// Create image available semaphores and in-flight fences per frame
 		for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
 			VkResult res = vkCreateSemaphore(m_Device, &semInfo, nullptr, &m_FrameSync[i].m_ImageAvailableSemaphore);
 			CheckVkResult(res);
 			if (res != VK_SUCCESS) return false;
 
-			res = vkCreateSemaphore(m_Device, &semInfo, nullptr, &m_FrameSync[i].m_RenderFinishedSemaphore);
+			res = vkCreateFence(m_Device, &fenceInfo, nullptr, &m_FrameSync[i].m_InFlightFence);
 			CheckVkResult(res);
 			if (res != VK_SUCCESS) return false;
+		}
 
-			res = vkCreateFence(m_Device, &fenceInfo, nullptr, &m_FrameSync[i].m_InFlightFence);
+		// Create render finished semaphores per swapchain image
+		m_RenderFinishedSemaphores.resize(m_Frames.size());
+		for (size_t i = 0; i < m_RenderFinishedSemaphores.size(); ++i) {
+			VkResult res = vkCreateSemaphore(m_Device, &semInfo, nullptr, &m_RenderFinishedSemaphores[i]);
 			CheckVkResult(res);
 			if (res != VK_SUCCESS) return false;
 		}
@@ -462,15 +485,20 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 				vkDestroySemaphore(m_Device, m_FrameSync[i].m_ImageAvailableSemaphore, nullptr);
 				m_FrameSync[i].m_ImageAvailableSemaphore = VK_NULL_HANDLE;
 			}
-			if (m_FrameSync[i].m_RenderFinishedSemaphore) {
-				vkDestroySemaphore(m_Device, m_FrameSync[i].m_RenderFinishedSemaphore, nullptr);
-				m_FrameSync[i].m_RenderFinishedSemaphore = VK_NULL_HANDLE;
-			}
 			if (m_FrameSync[i].m_InFlightFence) {
 				vkDestroyFence(m_Device, m_FrameSync[i].m_InFlightFence, nullptr);
 				m_FrameSync[i].m_InFlightFence = VK_NULL_HANDLE;
 			}
 		}
+
+		for (auto& sem : m_RenderFinishedSemaphores) {
+			if (sem) {
+				vkDestroySemaphore(m_Device, sem, nullptr);
+				sem = VK_NULL_HANDLE;
+			}
+		}
+		m_RenderFinishedSemaphores.clear();
+
 		m_ImagesInFlight.clear();
 	}
 

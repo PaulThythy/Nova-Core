@@ -31,7 +31,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		struct VK_FrameSync {
 			VkSemaphore m_ImageAvailableSemaphore = VK_NULL_HANDLE;
-			VkSemaphore m_RenderFinishedSemaphore = VK_NULL_HANDLE;
 			VkFence     m_InFlightFence = VK_NULL_HANDLE;
 		};
 
@@ -71,6 +70,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		std::vector<VkCommandBuffer>& GetCommandBuffers() { return m_CommandBuffers; }
 
+		VkSemaphore GetRenderFinishedSemaphore(uint32_t imageIndex) const {
+			if (imageIndex < m_RenderFinishedSemaphores.size())
+				return m_RenderFinishedSemaphores[imageIndex];
+			return VK_NULL_HANDLE;
+		}
+
 		bool RecreateSwapchain();
 
 	private:
@@ -102,7 +107,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 		VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 
-		// Vulkan handles nécessaires
+		// Vulkan handles nï¿½cessaires
 		VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
 		VkDevice         m_Device = VK_NULL_HANDLE;
 		VkSurfaceKHR     m_Surface = VK_NULL_HANDLE;
@@ -136,6 +141,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		// Frames in flight : 3
 		std::array<VK_FrameSync, FRAMES_IN_FLIGHT> m_FrameSync{};
+
+		// Render finished semaphore per swapchain image (indexed by acquired image)
+		std::vector<VkSemaphore> m_RenderFinishedSemaphores;
 
 		std::vector<VkFence> m_ImagesInFlight;
 
