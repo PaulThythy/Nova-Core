@@ -6,38 +6,8 @@
 
 #include "Core/Log.h"
 #include "Renderer/Backends/Vulkan/VK_Common.h"
-
-static bool ReadFileBinary(const std::string& path, std::vector<char>& outData) {
-	std::ifstream file(path, std::ios::ate | std::ios::binary);
-	if (!file.is_open())
-		return false;
-
-	const std::streamsize size = file.tellg();
-	if (size <= 0)
-		return false;
-
-	outData.resize((size_t)size);
-	file.seekg(0);
-	file.read(outData.data(), size);
-	return true;
-}
-
-static VkShaderModule CreateShaderModule(VkDevice device, const std::vector<char>& code) {
-	if (code.empty())
-		return VK_NULL_HANDLE;
-
-	VkShaderModuleCreateInfo createInfo{};
-	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-	createInfo.codeSize = code.size();
-	createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-	VkShaderModule module = VK_NULL_HANDLE;
-	VkResult res = vkCreateShaderModule(device, &createInfo, nullptr, &module);
-	if (res != VK_SUCCESS)
-		return VK_NULL_HANDLE;
-
-	return module;
-}
+#include "Renderer/RHI/RHI_Shaders.h"
+#include "Renderer/Backends/Vulkan/VK_Shaders.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -567,70 +537,65 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		return (res == VK_SUCCESS);
 	}
 
-	// Optional: create a minimal triangle pipeline.
-	   // You need two SPIR-V files on disk:
-	   //   - shaders/triangle.vert.spv
-	   //   - shaders/triangle.frag.spv
-	   //
-	   // Example GLSL:
-	   //
-	   // triangle.vert
-	   // ------------
-	   // #version 450
-	   // vec2 pos[3] = vec2[](
-	   //     vec2( 0.0, -0.5),
-	   //     vec2( 0.5,  0.5),
-	   //     vec2(-0.5,  0.5)
-	   // );
-	   // void main() { gl_Position = vec4(pos[gl_VertexIndex], 0.0, 1.0); }
-	   //
-	   // triangle.frag
-	   // ------------
-	   // #version 450
-	   // layout(location=0) out vec4 outColor;
-	   // void main() { outColor = vec4(1, 0, 0, 1); }
-	   //
-	   // Compile:
-	   //   glslc triangle.vert -o triangle.vert.spv
-	   //   glslc triangle.frag -o triangle.frag.spv
-	   //
-
 	void VK_Swapchain::CreateTrianglePipeline() {
 		// If already created, do nothing.
 		if (m_TrianglePipeline != VK_NULL_HANDLE)
 			return;
 
 		// You can change these paths to whatever your project uses.
-		const std::string vertPath = "C:/Users/Pault/Desktop/Nova/Nova-Core/shaders/program.vert.spv";
-		const std::string fragPath = "C:/Users/Pault/Desktop/Nova/Nova-Core/shaders/program.frag.spv";
+		const std::filesystem::path vertPath = "C:/Users/Pault/Desktop/Nova/Nova-Core/shaders/program.vert";
+    	const std::filesystem::path fragPath = "C:/Users/Pault/Desktop/Nova/Nova-Core/shaders/program.frag";
 
+		Nova::Core::Renderer::RHI::RHI_ShaderCompileOptions compileOptions{};
+		compileOptions.m_TargetApi = Nova::Core::GraphicsAPI::Vulkan;
+		compileOptions.m_DebugInfo = true;
+		compileOptions.m_Optimize = true;
 
-		std::vector<char> vertCode, fragCode;
-		if (!ReadFileBinary(vertPath, vertCode) || !ReadFileBinary(fragPath, fragCode)) {
-			NV_LOG_WARN("Triangle shaders not found (shaders/triangle.vert.spv, shaders/triangle.frag.spv). Rendering will only clear the screen.");
+		// Vertex
+		Nova::Core::Renderer::RHI::RHI_ShaderDesc vertDesc{};
+		vertDesc.m_FilePath = vertPath;
+		vertDesc.m_Type = Nova::Core::Renderer::RHI::RHI_ShaderStage::Vertex;
+		vertDesc.m_EntryPoint = "main";
+		vertDesc.m_GlslVersion = 450;
+
+		Nova::Core::Renderer::RHI::RHI_ShaderCompilationOutput vertOut{};
+		if (!Nova::Core::Renderer::RHI::CompileShader(vertDesc, compileOptions, vertOut)) {
+			NV_LOG_WARN(("Vertex shader compilation failed:\n" + vertOut.m_Log).c_str());
 			return;
 		}
 
-		VkShaderModule vertModule = CreateShaderModule(m_Device, vertCode);
-		VkShaderModule fragModule = CreateShaderModule(m_Device, fragCode);
+		// Fragment
+		Nova::Core::Renderer::RHI::RHI_ShaderDesc fragDesc{};
+		fragDesc.m_FilePath = fragPath;
+		fragDesc.m_Type = Nova::Core::Renderer::RHI::RHI_ShaderStage::Fragment;
+		fragDesc.m_EntryPoint = "main";
+		fragDesc.m_GlslVersion = 450;
 
-		if (vertModule == VK_NULL_HANDLE || fragModule == VK_NULL_HANDLE) {
-			NV_LOG_WARN("Failed to create shader modules. Rendering will only clear the screen.");
-			if (vertModule) vkDestroyShaderModule(m_Device, vertModule, nullptr);
-			if (fragModule) vkDestroyShaderModule(m_Device, fragModule, nullptr);
+		Nova::Core::Renderer::RHI::RHI_ShaderCompilationOutput fragOut{};
+		if (!Nova::Core::Renderer::RHI::CompileShader(fragDesc, compileOptions, fragOut)) {
+			NV_LOG_WARN(("Fragment shader compilation failed:\n" + fragOut.m_Log).c_str());
+			return;
+		}
+
+		// Create Vulkan shader modules via VK_Shaders (Vulkan-only)
+		Nova::Core::Renderer::Backends::Vulkan::VK_ShaderModule vertModule;
+		Nova::Core::Renderer::Backends::Vulkan::VK_ShaderModule fragModule;
+
+		if (!vertModule.Create(m_Device, vertOut.m_Spirv) || !fragModule.Create(m_Device, fragOut.m_Spirv)) {
+			NV_LOG_WARN("Failed to create Vulkan shader modules from SPIR-V.");
 			return;
 		}
 
 		VkPipelineShaderStageCreateInfo vertStage{};
 		vertStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 		vertStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-		vertStage.module = vertModule;
+		vertStage.module = vertModule.GetModule();
 		vertStage.pName = "main";
 
 		VkPipelineShaderStageCreateInfo fragStage{};
 		fragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 		fragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-		fragStage.module = fragModule;
+		fragStage.module = fragModule.GetModule();
 		fragStage.pName = "main";
 
 		VkPipelineShaderStageCreateInfo stages[] = { vertStage, fragStage };
@@ -683,8 +648,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) {
 			NV_LOG_WARN("Failed to create pipeline layout. Rendering will only clear the screen.");
-			vkDestroyShaderModule(m_Device, vertModule, nullptr);
-			vkDestroyShaderModule(m_Device, fragModule, nullptr);
+			vkDestroyShaderModule(m_Device, vertModule.GetModule(), nullptr);
+			vkDestroyShaderModule(m_Device, fragModule.GetModule(), nullptr);
 			return;
 		}
 
@@ -705,9 +670,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		res = vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipe, nullptr, &m_TrianglePipeline);
 		CheckVkResult(res);
-
-		vkDestroyShaderModule(m_Device, vertModule, nullptr);
-		vkDestroyShaderModule(m_Device, fragModule, nullptr);
 
 		if (res != VK_SUCCESS) {
 			NV_LOG_WARN("Failed to create triangle pipeline. Rendering will only clear the screen.");
