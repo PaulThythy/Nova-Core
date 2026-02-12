@@ -3,7 +3,7 @@
 #include <string>
 #include <sstream>
 
-#include "Renderer/Backends/OpenGL/GL_Shader.h"
+#include "Renderer/Backends/OpenGL/GL_Shaders.h"
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
