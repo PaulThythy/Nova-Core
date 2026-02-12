@@ -542,9 +542,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (m_TrianglePipeline != VK_NULL_HANDLE)
 			return;
 
+		std::filesystem::path p = std::filesystem::current_path();
+		std::filesystem::path shaderDir = p / "Nova-Core" / "resources" / "engine" / "shaders";
+
 		// You can change these paths to whatever your project uses.
-		const std::filesystem::path vertPath = "C:/Users/Pault/Desktop/Nova/Nova-Core/shaders/program.vert";
-    	const std::filesystem::path fragPath = "C:/Users/Pault/Desktop/Nova/Nova-Core/shaders/program.frag";
+		const std::filesystem::path vertPath = shaderDir / "program.vert";
+    	const std::filesystem::path fragPath = shaderDir / "program.frag";
 
 		Nova::Core::Renderer::RHI::RHI_ShaderCompileOptions compileOptions{};
 		compileOptions.m_TargetApi = Nova::Core::GraphicsAPI::Vulkan;
