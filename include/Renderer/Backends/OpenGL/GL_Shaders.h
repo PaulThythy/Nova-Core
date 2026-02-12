@@ -1,5 +1,5 @@
-#ifndef GL_SHADER_HPP
-#define GL_SHADER_HPP
+#ifndef GL_SHADERS_HPP
+#define GL_SHADERS_HPP
 
 #include <glad/gl.h>
 #include <string>
@@ -16,4 +16,4 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
 } // namespace Nova::Core::Renderer::Backends::OpenGL
 
-#endif // GL_SHADER_HPP
+#endif // GL_SHADERS_HPP
