@@ -22,8 +22,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_Renderer() = default;
         ~VK_Renderer() = default;
 
-        bool Create();
-        void Destroy();
+        bool Create() override;
+        void Destroy() override;
 
         bool Resize(int w, int h) override;
         void Update(float dt) override;
