@@ -11,6 +11,7 @@ namespace Nova::Core::Renderer::RHI {
     std::mutex g_GlslangMutex;
     int g_GlslangRefCount = 0;
 
+    //TODO uncomment this function
     /*const TBuiltInResource& GetDefaultResources() {
         return DefaultTBuiltInResource;
     }*/
