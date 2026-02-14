@@ -543,7 +543,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			return;
 
 		std::filesystem::path p = std::filesystem::current_path();
-		std::filesystem::path shaderDir = p / "Nova-Core" / "resources" / "engine" / "shaders";
+		std::filesystem::path shaderDir = p / "Nova-Core" / "Resources" / "Engine" / "Shaders";
 
 		// You can change these paths to whatever your project uses.
 		const std::filesystem::path vertPath = shaderDir / "triangle.vert";
