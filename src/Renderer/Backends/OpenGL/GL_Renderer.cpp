@@ -36,7 +36,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         GLuint sh = glCreateShader(stage);
 
-        // L'enum est généralement ARB même en 4.6
+        // L'enum est gï¿½nï¿½ralement ARB mï¿½me en 4.6
 #ifndef GL_SHADER_BINARY_FORMAT_SPIR_V_ARB
 #define GL_SHADER_BINARY_FORMAT_SPIR_V_ARB 0x9551
 #endif
@@ -46,10 +46,10 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             spirv.data(),
             (GLsizei)(spirv.size() * sizeof(uint32_t)));
 
-        // Spécialisation : core 4.6 OU ARB
+        // Spï¿½cialisation : core 4.6 OU ARB
         bool specialized = false;
 
-        // Si ton GLAD est généré avec 4.6, cette variable + ce symbole existent.
+        // Si ton GLAD est gï¿½nï¿½rï¿½ avec 4.6, cette variable + ce symbole existent.
 #ifdef GL_VERSION_4_6
         if (GLAD_GL_VERSION_4_6 && glad_glSpecializeShader) {
             glad_glSpecializeShader(sh, entryPoint, 0, nullptr, nullptr);
@@ -57,7 +57,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         }
 #endif
 
-        // Si ton GLAD est généré avec GL_ARB_gl_spirv, ceux-ci existent.
+        // Si ton GLAD est gï¿½nï¿½rï¿½ avec GL_ARB_gl_spirv, ceux-ci existent.
 #ifdef GL_ARB_gl_spirv
         if (!specialized && GLAD_GL_ARB_gl_spirv && glad_glSpecializeShaderARB) {
             glad_glSpecializeShaderARB(sh, entryPoint, 0, nullptr, nullptr);
@@ -90,14 +90,20 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
         imguiLayer.SetImGuiBackend(GraphicsAPI::OpenGL);
 
+        //if (!glIsEnabled(GL_CONTEXT_CORE_PROFILE_BIT))
+            //return false;
+        //invert clip space to be the same as vulkan
+        //glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
+
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LEQUAL);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
 
-        //glGenVertexArrays(1, &m_EmptyVAO);
-        //glBindVertexArray(m_EmptyVAO);
+        // clip space changed, warning : change winding order
+        //glEnable(GL_CULL_FACE);
+        //glCullFace(GL_BACK);
+        //glFrontFace(GL_CW);
 
         std::filesystem::path p = std::filesystem::current_path();
         std::filesystem::path shaderDir = p / "Nova-Core" / "Resources" / "Engine" / "Shaders";
@@ -120,7 +126,14 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         auto frag = AssetManager::Get().Acquire<ShaderAsset>(fragPath, fDesc);
 
         if (!vert || !frag) return false;
-        if (!vert->Compile() || !frag->Compile()) return false;
+        if (!vert->Compile()) {
+            NV_LOG_ERROR(("Vertex shader compile failed:\n" + vert->GetLastLog()).c_str());
+            return false;
+        }
+        if (!frag->Compile()) {
+            NV_LOG_ERROR(("Fragment shader compile failed:\n" + frag->GetLastLog()).c_str());
+            return false;
+        }
 
         GLuint vs = 0, fs = 0;
         std::string log;
@@ -130,13 +143,6 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         fs = LoadSpirvShader(GL_FRAGMENT_SHADER, frag->GetSpirv(), "main", log);
         if (!fs) NV_LOG_WARN((std::string("SPIR-V FS failed, fallback GLSL: ") + log).c_str());
-
-        // Fallback GLSL si SPIR-V pas dispo / fail
-        if (!vs || !fs) {
-            // ... ton chemin GLSL existant (glShaderSource + glCompileShader) ...
-            // vsSrc = vert->GetGlsl(); fsSrc = frag->GetGlsl(); etc.
-            return false; // mets ici ton fallback réel
-        }
 
         GLuint prog = glCreateProgram();
         glAttachShader(prog, vs);
@@ -163,10 +169,10 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             glDeleteProgram(m_Program);
             m_Program = 0;
         }
-        //if (m_EmptyVAO) { glDeleteVertexArrays(1, &m_EmptyVAO); m_EmptyVAO = 0; }
 
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_BLEND);
+        //glDisable(GL_CULL_FACE);
 
         NV_LOG_INFO("OpenGL Renderer destroyed.");
     }
@@ -179,7 +185,11 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         (void)dt;
     }
 
-    void GL_Renderer::BeginFrame() {}
+    void GL_Renderer::BeginFrame() {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
 
     void GL_Renderer::Render() {
         if (!m_Program) return;
@@ -187,11 +197,11 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glUseProgram(m_Program);
 
         glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
 
+    void GL_Renderer::EndFrame() {
         glBindVertexArray(0);
         glUseProgram(0);
     }
-
-    void GL_Renderer::EndFrame() {}
 
 } // namespace Nova::Core::Renderer::Backends::OpenGL

@@ -187,25 +187,6 @@ namespace Nova::Core::Renderer::RHI {
             return false;
         }
 
-        RHI_ShaderCompileOptions opts = options;
-
-        if (opts.m_TargetApi == GraphicsAPI::Vulkan) {
-            //opts.m_Definitions.emplace_back("NV_GFX_VULKAN", "1");
-            //opts.m_Definitions.emplace_back("NV_GFX_OPENGL", "0");
-
-            // Convention: on force Vulkan à matcher OpenGL (Y up) via shader
-            opts.m_Definitions.emplace_back("NV_CLIP_Y_FLIP", "-1.0");
-            // (optionnel) profondeur: Vulkan = 0..1
-            //opts.m_Definitions.emplace_back("NV_ZERO_TO_ONE_DEPTH", "1");
-        }
-        else { // OpenGL
-            //opts.m_Definitions.emplace_back("NV_GFX_VULKAN", "0");
-            //opts.m_Definitions.emplace_back("NV_GFX_OPENGL", "1");
-
-            opts.m_Definitions.emplace_back("NV_CLIP_Y_FLIP", "1.0");
-            //opts.m_Definitions.emplace_back("NV_ZERO_TO_ONE_DEPTH", "0");
-        }
-
         const EShLanguage lang = ShaderStageToEShLanguage(stage);
         glslang::TShader shader(lang);
 
@@ -213,7 +194,7 @@ namespace Nova::Core::Renderer::RHI {
         shader.setStrings(strings, 1);
         shader.setEntryPoint(desc.m_EntryPoint.c_str());
 
-        const std::string preamble = MakePreamble(opts);
+        const std::string preamble = MakePreamble(options);
         if (!preamble.empty()) {
             shader.setPreamble(preamble.c_str());
         }
@@ -232,6 +213,7 @@ namespace Nova::Core::Renderer::RHI {
             shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
             messages = (EShMessages)(EShMsgSpvRules);
         }
+
 
         RHI_ShaderFileIncluder includer(
             desc.m_FilePath.has_parent_path() ? desc.m_FilePath.parent_path() : std::filesystem::current_path(),

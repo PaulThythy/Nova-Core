@@ -1,5 +1,6 @@
 #include "Asset/Assets/ShaderAsset.h"
 #include "Core/Application.h"
+#include "Core/Log.h"
 
 namespace Nova::Core::Asset::Assets {
 
@@ -22,6 +23,22 @@ namespace Nova::Core::Asset::Assets {
         }
     }
 
+    const std::vector<uint32_t>& ShaderAsset::GetSpirv() const {
+        return GetSpirv(m_LastCompiledApi);
+    }
+
+    const std::string& ShaderAsset::GetGlsl() const {
+        return GetGlsl(m_LastCompiledApi);
+    }
+
+    const std::vector<uint32_t>& ShaderAsset::GetSpirv(GraphicsAPI api) const {
+        return (api == GraphicsAPI::OpenGL) ? m_SpirvOpenGL : m_SpirvVulkan;
+    }
+
+    const std::string& ShaderAsset::GetGlsl(GraphicsAPI api) const {
+        return (api == GraphicsAPI::OpenGL) ? m_GlslOpenGL : m_GlslVulkan;
+    }
+
     bool ShaderAsset::Compile() {
         GraphicsAPI api = Application::Get().GetWindow().GetGraphicsAPI();
         return CompileInternal(api, false);
@@ -33,39 +50,53 @@ namespace Nova::Core::Asset::Assets {
     }
 
     bool ShaderAsset::CompileInternal(GraphicsAPI api, bool force) {
-        if (api == GraphicsAPI::Vulkan && m_CompiledVulkan && !force) return true;
-        if (api == GraphicsAPI::OpenGL && m_CompiledOpenGL && !force) return true;
+        if (api == GraphicsAPI::Vulkan && m_CompiledVulkan && !force) {
+            m_LastCompiledApi = api;
+            return true;
+        }
+        if (api == GraphicsAPI::OpenGL && m_CompiledOpenGL && !force) {
+            m_LastCompiledApi = api;
+            return true;
+        }
 
-        // On part d’une copie des options, et on override la target API
         RHI::RHI_ShaderCompileOptions opts = m_Options;
         opts.m_TargetApi = api;
 
-        // On s’assure que le filepath est bien celui de l’asset
         RHI::RHI_ShaderDesc shaderDesc = m_Desc;
         shaderDesc.m_FilePath = m_Path;
+
+        // --- Defines "plateforme" minimalistes ---
+        if (api == GraphicsAPI::Vulkan) {
+            opts.m_Definitions.emplace_back("gl_VertexID", "gl_VertexIndex");
+        }
+        else {
+            opts.m_Definitions.emplace_back("gl_VertexIndex", "gl_VertexID");
+        }
 
         RHI::RHI_ShaderCompilationOutput out{};
         const bool ok = RHI::CompileShader(shaderDesc, opts, out);
 
         m_LastLog = out.m_Log;
-
         if (!ok) {
             if (api == GraphicsAPI::Vulkan) m_CompiledVulkan = false;
             if (api == GraphicsAPI::OpenGL) m_CompiledOpenGL = false;
             return false;
         }
 
+        // On stocke TOUJOURS le SPIR-V (désormais commun aux 2 backends)
         if (api == GraphicsAPI::Vulkan) {
-            m_Spirv = std::move(out.m_Spirv);
+            m_SpirvVulkan = std::move(out.m_Spirv);
+            m_GlslVulkan = std::move(out.m_Glsl); // debug éventuel
             m_CompiledVulkan = true;
         }
         else {
-            m_Glsl = std::move(out.m_Glsl);
+            m_SpirvOpenGL = std::move(out.m_Spirv);
+            m_GlslOpenGL = std::move(out.m_Glsl); // debug éventuel
             m_CompiledOpenGL = true;
         }
 
-        // au cas où le stage a été ajusté
         m_Desc.m_Stage = out.m_Stage;
+        m_LastCompiledApi = api;
         return true;
     }
 
