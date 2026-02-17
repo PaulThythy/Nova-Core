@@ -1,4 +1,4 @@
-#include "Renderer/RHI/RHI_Shaders.h"
+﻿#include "Renderer/RHI/RHI_Shaders.h"
 
 #include <algorithm>
 #include <fstream>
@@ -161,7 +161,7 @@ namespace Nova::Core::Renderer::RHI {
         out = RHI_ShaderCompilationOutput{};
         out.m_TargetApi = options.m_TargetApi;
 
-        RHI_ShaderStage stage = desc.m_Type;
+        RHI_ShaderStage stage = desc.m_Stage;
         if (stage == RHI_ShaderStage::Unknown && desc.m_FilePath.has_extension()) {
             stage = ShaderStageFromFileExtension(desc.m_FilePath);
         }
@@ -187,6 +187,25 @@ namespace Nova::Core::Renderer::RHI {
             return false;
         }
 
+        RHI_ShaderCompileOptions opts = options;
+
+        if (opts.m_TargetApi == GraphicsAPI::Vulkan) {
+            //opts.m_Definitions.emplace_back("NV_GFX_VULKAN", "1");
+            //opts.m_Definitions.emplace_back("NV_GFX_OPENGL", "0");
+
+            // Convention: on force Vulkan à matcher OpenGL (Y up) via shader
+            opts.m_Definitions.emplace_back("NV_CLIP_Y_FLIP", "-1.0");
+            // (optionnel) profondeur: Vulkan = 0..1
+            //opts.m_Definitions.emplace_back("NV_ZERO_TO_ONE_DEPTH", "1");
+        }
+        else { // OpenGL
+            //opts.m_Definitions.emplace_back("NV_GFX_VULKAN", "0");
+            //opts.m_Definitions.emplace_back("NV_GFX_OPENGL", "1");
+
+            opts.m_Definitions.emplace_back("NV_CLIP_Y_FLIP", "1.0");
+            //opts.m_Definitions.emplace_back("NV_ZERO_TO_ONE_DEPTH", "0");
+        }
+
         const EShLanguage lang = ShaderStageToEShLanguage(stage);
         glslang::TShader shader(lang);
 
@@ -194,7 +213,7 @@ namespace Nova::Core::Renderer::RHI {
         shader.setStrings(strings, 1);
         shader.setEntryPoint(desc.m_EntryPoint.c_str());
 
-        const std::string preamble = MakePreamble(options);
+        const std::string preamble = MakePreamble(opts);
         if (!preamble.empty()) {
             shader.setPreamble(preamble.c_str());
         }
@@ -208,9 +227,10 @@ namespace Nova::Core::Renderer::RHI {
             messages = (EShMessages)(EShMsgSpvRules | EShMsgVulkanRules);
         }
         else {
-            shader.setEnvInput(glslang::EShSourceGlsl, lang, glslang::EShClientOpenGL, 100);
+            shader.setEnvInput(glslang::EShSourceGlsl, lang, glslang::EShClientOpenGL, 450);
             shader.setEnvClient(glslang::EShClientOpenGL, glslang::EShTargetOpenGL_450);
-            messages = EShMsgDefault;
+            shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
+            messages = (EShMessages)(EShMsgSpvRules);
         }
 
         RHI_ShaderFileIncluder includer(
@@ -263,32 +283,27 @@ namespace Nova::Core::Renderer::RHI {
         // Outputs
         out.m_Log = log;
 
-        if (options.m_TargetApi == GraphicsAPI::Vulkan) {
-            const glslang::TIntermediate* intermediate = program.getIntermediate(lang);
-            if (!intermediate) {
-                out.m_Log += "No intermediate representation available\n";
-                return false;
-            }
+        const glslang::TIntermediate* intermediate = program.getIntermediate(lang);
+        if (!intermediate) {
+            out.m_Log += "No intermediate representation available\n";
+            return false;
+        }
 
-            glslang::SpvOptions spvOptions{};
-            spvOptions.generateDebugInfo = options.m_DebugInfo;
-            spvOptions.disableOptimizer = !options.m_Optimize;
+        glslang::SpvOptions spvOptions{};
+        spvOptions.generateDebugInfo = options.m_DebugInfo;
+        spvOptions.disableOptimizer = !options.m_Optimize;
 
-            try {
-                glslang::GlslangToSpv(*intermediate, out.m_Spirv, &spvOptions);
-            }
-            catch (...) {
-                out.m_Log += "GlslangToSpv threw an exception\n";
-                return false;
-            }
+        try {
+            glslang::GlslangToSpv(*intermediate, out.m_Spirv, &spvOptions);
+        }
+        catch (...) {
+            out.m_Log += "GlslangToSpv threw an exception\n";
+            return false;
+        }
 
-            if (out.m_Spirv.empty()) {
-                out.m_Log += "SPIR-V output is empty\n";
-                return false;
-            }
-
-            out.m_Success = true;
-            return true;
+        if (out.m_Spirv.empty()) {
+            out.m_Log += "SPIR-V output is empty\n";
+            return false;
         }
 
         // OpenGL path: return the validated GLSL.

@@ -29,6 +29,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         //TODO GetViewportTextureID()
     private:
         GLuint m_Program{ 0 };
+        //GLuint m_EmptyVAO{ 0 };
     };
 
 } // namespace Nova::Core::Renderer::Backends::OpenGL

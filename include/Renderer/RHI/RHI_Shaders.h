@@ -33,7 +33,7 @@ namespace Nova::Core::Renderer::RHI {
     };
 
     struct RHI_ShaderDesc {
-        RHI_ShaderStage m_Type = RHI_ShaderStage::Unknown;
+        RHI_ShaderStage m_Stage = RHI_ShaderStage::Unknown;
         std::filesystem::path m_FilePath;
         std::string m_EntryPoint = "main"; // Optional: default to "main"
         int m_GlslVersion = 130;

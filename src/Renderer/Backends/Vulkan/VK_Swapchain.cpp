@@ -9,6 +9,9 @@
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/Backends/Vulkan/VK_Shaders.h"
 
+#include "Asset/AssetManager.h"
+#include "Asset/Assets/ShaderAsset.h"
+
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
 	VK_Swapchain::VK_SwapchainSupportDetails VK_Swapchain::QuerySwapChainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
@@ -549,42 +552,34 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		const std::filesystem::path vertPath = shaderDir / "triangle.vert";
     	const std::filesystem::path fragPath = shaderDir / "triangle.frag";
 
-		Nova::Core::Renderer::RHI::RHI_ShaderCompileOptions compileOptions{};
-		compileOptions.m_TargetApi = Nova::Core::GraphicsAPI::Vulkan;
-		compileOptions.m_DebugInfo = true;
-		compileOptions.m_Optimize = true;
+		using Nova::Core::Asset::AssetManager;
+		using Nova::Core::Asset::Assets::ShaderAsset;
 
-		// Vertex
-		Nova::Core::Renderer::RHI::RHI_ShaderDesc vertDesc{};
-		vertDesc.m_FilePath = vertPath;
-		vertDesc.m_Type = Nova::Core::Renderer::RHI::RHI_ShaderStage::Vertex;
-		vertDesc.m_EntryPoint = "main";
-		vertDesc.m_GlslVersion = 450;
+		// Acquire + compile via AssetManager/ShaderAsset
+		auto vertAsset = AssetManager::Get().Acquire<ShaderAsset>(vertPath);
+		auto fragAsset = AssetManager::Get().Acquire<ShaderAsset>(fragPath);
 
-		Nova::Core::Renderer::RHI::RHI_ShaderCompilationOutput vertOut{};
-		if (!Nova::Core::Renderer::RHI::CompileShader(vertDesc, compileOptions, vertOut)) {
-			NV_LOG_WARN(("Vertex shader compilation failed:\n" + vertOut.m_Log).c_str());
+		if (!vertAsset || !fragAsset) {
+			NV_LOG_WARN("Failed to acquire shader assets.");
 			return;
 		}
 
-		// Fragment
-		Nova::Core::Renderer::RHI::RHI_ShaderDesc fragDesc{};
-		fragDesc.m_FilePath = fragPath;
-		fragDesc.m_Type = Nova::Core::Renderer::RHI::RHI_ShaderStage::Fragment;
-		fragDesc.m_EntryPoint = "main";
-		fragDesc.m_GlslVersion = 450;
-
-		Nova::Core::Renderer::RHI::RHI_ShaderCompilationOutput fragOut{};
-		if (!Nova::Core::Renderer::RHI::CompileShader(fragDesc, compileOptions, fragOut)) {
-			NV_LOG_WARN(("Fragment shader compilation failed:\n" + fragOut.m_Log).c_str());
+		if (!vertAsset->Compile()) {
+			NV_LOG_WARN(("Vertex shader compilation failed:\n" + vertAsset->GetLastLog()).c_str());
+			return;
+		}
+		if (!fragAsset->Compile()) {
+			NV_LOG_WARN(("Fragment shader compilation failed:\n" + fragAsset->GetLastLog()).c_str());
 			return;
 		}
 
-		// Create Vulkan shader modules via VK_Shaders (Vulkan-only)
+		// Ensuite tu utilises vertAsset->GetSpirv() / fragAsset->GetSpirv()
 		Nova::Core::Renderer::Backends::Vulkan::VK_ShaderModule vertModule;
 		Nova::Core::Renderer::Backends::Vulkan::VK_ShaderModule fragModule;
 
-		if (!vertModule.Create(m_Device, vertOut.m_Spirv) || !fragModule.Create(m_Device, fragOut.m_Spirv)) {
+		if (!vertModule.Create(m_Device, vertAsset->GetSpirv()) ||
+			!fragModule.Create(m_Device, fragAsset->GetSpirv()))
+		{
 			NV_LOG_WARN("Failed to create Vulkan shader modules from SPIR-V.");
 			return;
 		}
