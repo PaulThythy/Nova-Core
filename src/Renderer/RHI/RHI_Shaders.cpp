@@ -190,8 +190,13 @@ namespace Nova::Core::Renderer::RHI {
         const EShLanguage lang = ShaderStageToEShLanguage(stage);
         glslang::TShader shader(lang);
 
+        const std::string fileNameStr = desc.m_FilePath.string();
+
         const char* strings[] = { source.c_str() };
-        shader.setStrings(strings, 1);
+        const int lengths[] = { (int)source.size() };
+        const char* names[] = { fileNameStr.c_str() };
+
+        shader.setStringsWithLengthsAndNames(strings, lengths, names, 1);
         shader.setEntryPoint(desc.m_EntryPoint.c_str());
 
         const std::string preamble = MakePreamble(options);
@@ -295,27 +300,16 @@ namespace Nova::Core::Renderer::RHI {
     }
 
     glslang::TShader::Includer::IncludeResult* RHI_ShaderFileIncluder::includeSystem(const char* headerName, const char* includerName, size_t inclusionDepth) {
-        // Try to resolve the header path directly; return nullptr if not found or cannot be read.
-        std::filesystem::path path(headerName);
-        if (!std::filesystem::exists(path)) {
-            return nullptr;
+        (void)includerName;
+        (void)inclusionDepth;
+
+        std::filesystem::path p(headerName ? headerName : "");
+        if (p.is_absolute()) {
+            if (auto* r = TryIncludeInDir(p.filename().string().c_str(), p.parent_path()))
+                return r;
         }
 
-        std::string content;
-        std::string error;
-        if (!ReadTextFile(path, content, error)) {
-            return nullptr;
-        }
-
-        // Allocate copies for the includer result (glslang expects ownership to be transferred).
-        char* contentCopy = new char[content.size() + 1];
-        std::memcpy(contentCopy, content.c_str(), content.size() + 1);
-
-        const std::string headerPathStr = path.string();
-        char* headerCopy = new char[headerPathStr.size() + 1];
-        std::memcpy(headerCopy, headerPathStr.c_str(), headerPathStr.size() + 1);
-
-        return new glslang::TShader::Includer::IncludeResult(headerCopy, contentCopy, content.size(), nullptr);
+        return TryInclude(headerName, /*isSystem*/true);
     }
 
     glslang::TShader::Includer::IncludeResult* RHI_ShaderFileIncluder::includeLocal(const char* headerName, const char* includerName, size_t inclusionDepth) {
@@ -339,10 +333,7 @@ namespace Nova::Core::Renderer::RHI {
     }
 
     void RHI_ShaderFileIncluder::releaseInclude(glslang::TShader::Includer::IncludeResult* result) {
-        if (!result)
-            return;
-
-        // userData holds the allocated std::string
+        if (!result) return;
         delete reinterpret_cast<std::string*>(result->userData);
         delete result;
     }

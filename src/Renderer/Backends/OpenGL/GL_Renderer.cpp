@@ -108,8 +108,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         std::filesystem::path p = std::filesystem::current_path();
         std::filesystem::path shaderDir = p / "Nova-Core" / "Resources" / "Engine" / "Shaders";
-        std::filesystem::path vertPath = shaderDir / "triangle.vert";
-        std::filesystem::path fragPath = shaderDir / "triangle.frag";
+        std::filesystem::path vertPath = shaderDir / "shader.vert";
+        std::filesystem::path fragPath = shaderDir / "shader.frag";
 
         using Nova::Core::Asset::AssetManager;
         using Nova::Core::Asset::Assets::ShaderAsset;

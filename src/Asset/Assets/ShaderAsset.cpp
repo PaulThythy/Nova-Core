@@ -62,6 +62,15 @@ namespace Nova::Core::Asset::Assets {
         RHI::RHI_ShaderCompileOptions opts = m_Options;
         opts.m_TargetApi = api;
 
+        const std::filesystem::path engineShaderRoot =
+            std::filesystem::current_path() / "Nova-Core" / "Resources" / "Engine" / "Shaders";
+
+        const std::filesystem::path editorShaderRoot =
+            std::filesystem::current_path() / "Nova-Editor" / "Resources" / "Editor" / "Shaders";
+
+        opts.m_IncludeDirs.push_back(engineShaderRoot);
+        opts.m_IncludeDirs.push_back(editorShaderRoot);
+
         RHI::RHI_ShaderDesc shaderDesc = m_Desc;
         shaderDesc.m_FilePath = m_Path;
 
