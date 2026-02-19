@@ -17,6 +17,11 @@ namespace Nova::Core::Asset {
         Script
     };
 
+    //TODO add:
+    /*
+    enum class AssetState { Unloaded, Loading, Ready, Failed };
+    */
+
     class Asset {
     public:
         Asset(AssetType type, std::filesystem::path path) : m_Type(type), m_Path(std::move(path)) {}
