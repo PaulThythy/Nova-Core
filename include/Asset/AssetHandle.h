@@ -21,7 +21,7 @@ namespace Nova::Core::Asset {
 
         explicit operator bool() const { return (bool)m_AssetRef; }
 
-        std::shared_ptr<T> GetShared() const { return m_AssetRef; }
+        std::shared_ptr<T> GetAssetRef() const { return m_AssetRef; }
 
     private:
         std::shared_ptr<T> m_AssetRef;
