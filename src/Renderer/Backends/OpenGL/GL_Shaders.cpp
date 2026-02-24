@@ -7,17 +7,78 @@
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
-    std::string ReadFile(const std::string& filePath) {
-        std::ifstream file(filePath);
-        if (!file.is_open())
-        {
-            std::cerr << "Failed to open shader file: " << filePath << std::endl;
-            return "";
+    bool CheckGLProgram(GLuint prog, std::string& outLog) { 
+        GLint ok = 0; 
+        glGetProgramiv(prog, GL_LINK_STATUS, &ok); 
+        if (ok == GL_TRUE) return true; 
+        
+        GLint len = 0; 
+        glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &len); 
+        outLog.resize((len > 0) ? (size_t)len : 1); 
+        glGetProgramInfoLog(prog, len, nullptr, outLog.data()); 
+        NV_LOG_ERROR((std::string("[OpenGL] Program link failed:\n") + outLog).c_str()); 
+        return false; 
+    }
+
+    GLuint LoadSpirvShader(GLenum stage,
+        const std::vector<uint32_t>& spirv,
+        const char* entryPoint,
+        std::string& outLog)
+    {
+        if (spirv.empty()) {
+            outLog = "Empty SPIR-V buffer.";
+            return 0;
         }
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-        file.close();
-        return buffer.str();
+
+        GLuint sh = glCreateShader(stage);
+
+        // L'enum est g�n�ralement ARB m�me en 4.6
+#ifndef GL_SHADER_BINARY_FORMAT_SPIR_V_ARB
+#define GL_SHADER_BINARY_FORMAT_SPIR_V_ARB 0x9551
+#endif
+
+        glShaderBinary(1, &sh,
+            GL_SHADER_BINARY_FORMAT_SPIR_V_ARB,
+            spirv.data(),
+            (GLsizei)(spirv.size() * sizeof(uint32_t)));
+
+        // Sp�cialisation : core 4.6 OU ARB
+        bool specialized = false;
+
+        // Si ton GLAD est g�n�r� avec 4.6, cette variable + ce symbole existent.
+#ifdef GL_VERSION_4_6
+        if (GLAD_GL_VERSION_4_6 && glad_glSpecializeShader) {
+            glad_glSpecializeShader(sh, entryPoint, 0, nullptr, nullptr);
+            specialized = true;
+        }
+#endif
+
+        // Si ton GLAD est g�n�r� avec GL_ARB_gl_spirv, ceux-ci existent.
+#ifdef GL_ARB_gl_spirv
+        if (!specialized && GLAD_GL_ARB_gl_spirv && glad_glSpecializeShaderARB) {
+            glad_glSpecializeShaderARB(sh, entryPoint, 0, nullptr, nullptr);
+            specialized = true;
+        }
+#endif
+
+        if (!specialized) {
+            outLog = "Missing OpenGL 4.6 glSpecializeShader or GL_ARB_gl_spirv support (GLAD not generated or context not compatible).";
+            glDeleteShader(sh);
+            return 0;
+        }
+
+        GLint ok = 0;
+        glGetShaderiv(sh, GL_COMPILE_STATUS, &ok);
+        if (!ok) {
+            GLint len = 0;
+            glGetShaderiv(sh, GL_INFO_LOG_LENGTH, &len);
+            outLog.resize((len > 0) ? (size_t)len : 1);
+            glGetShaderInfoLog(sh, len, nullptr, outLog.data());
+            glDeleteShader(sh);
+            return 0;
+        }
+
+        return sh;
     }
 
     GLuint CompileShader(GLenum shaderType, const std::string& shaderCode) {
@@ -83,28 +144,4 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         return programID;
     }
 
-    GLuint LoadRenderShader(const std::string& vertexPath, const std::string& fragmentPath) {
-        std::string vertexCode = ReadFile(vertexPath);
-        GLuint vertexID = CompileShader(GL_VERTEX_SHADER, vertexCode);
-        if (!vertexID)
-            return 0;
-
-        std::string fragmentCode = ReadFile(fragmentPath);
-        GLuint fragmentID = CompileShader(GL_FRAGMENT_SHADER, fragmentCode);
-        if (!fragmentID)
-            return 0;
-
-        GLuint programID = LinkProgram({ vertexID, fragmentID });
-        return programID;
-    }
-
-    GLuint LoadComputeShader(const std::string& computePath) {
-        std::string computeCode = ReadFile(computePath);
-        GLuint computeID = CompileShader(GL_COMPUTE_SHADER, computeCode);
-        if (!computeID)
-            return 0;
-
-        GLuint programID = LinkProgram({ computeID });
-        return programID;
-    }
 } // namespace Nova::Core::Renderer::Backends::OpenGL

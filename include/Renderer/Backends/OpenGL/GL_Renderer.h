@@ -2,6 +2,8 @@
 #define GL_RENDERER_H
 
 #include "Renderer/RHI/RHI_Renderer.h"
+#include "Renderer/Backends/OpenGL/GL_Shaders.h"
+
 #include <glad/gl.h>
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
