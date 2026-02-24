@@ -32,6 +32,7 @@ namespace Nova::Core {
 
         SDL_Window* sdlWindow = m_Window.GetSDLWindow();
         ImGui_ImplSDL3_InitForOther(sdlWindow);
+        m_IsRendererInitializedWithoutBackend = true;
     }
 
     void ImGuiLayer::SetImGuiBackend(GraphicsAPI api) {
@@ -39,15 +40,21 @@ namespace Nova::Core {
             NV_LOG_WARN("ImGui backend already initialized");
             return;
         }
+        if(m_IsRendererInitializedWithoutBackend) {
+            ImGui_ImplSDL3_Shutdown();
+            m_IsRendererInitializedWithoutBackend = false;
+        }
 
         m_GraphicsAPI = api;
         switch(m_GraphicsAPI) {
             case GraphicsAPI::OpenGL:
+                ImGui_ImplSDL3_InitForOpenGL(m_Window.GetSDLWindow(), m_Window.GetGLContext());
                 ImGui_ImplOpenGL3_Init(m_Window.GetGLSLVersion());
                 m_IsRendererInitialized = true;
                 NV_LOG_INFO("ImGui OpenGL3 backend initialized");
                 break;
             case GraphicsAPI::SDLRenderer:
+                ImGui_ImplSDL3_InitForSDLRenderer(m_Window.GetSDLWindow(), m_Window.GetSDLRenderer());
                 ImGui_ImplSDLRenderer3_Init(m_Window.GetSDLRenderer());
                 m_IsRendererInitialized = true;
                 NV_LOG_INFO("ImGui SDLRenderer3 backend initialized");
@@ -70,6 +77,7 @@ namespace Nova::Core {
         m_VulkanInitInfo = info;
 
         if(m_GraphicsAPI == GraphicsAPI::Vulkan) {
+            ImGui_ImplSDL3_InitForVulkan(m_Window.GetSDLWindow());
             ImGui_ImplVulkan_Init(&m_VulkanInitInfo);
 
             // init_info.Allocator = m_VulkanInitInfo.m_Allocator;

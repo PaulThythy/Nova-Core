@@ -47,6 +47,7 @@ namespace Nova::Core {
         GraphicsAPI m_GraphicsAPI;
 
         bool m_IsRendererInitialized = false;
+        bool m_IsRendererInitializedWithoutBackend = false;
 
         ImGui_ImplVulkan_InitInfo m_VulkanInitInfo{};
         VkCommandBuffer m_CurrentCommandBuffer = VK_NULL_HANDLE;
