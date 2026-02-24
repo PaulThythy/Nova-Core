@@ -18,7 +18,7 @@ namespace Nova::Core::Renderer::Graphics {
         std::vector<Vertex> vertices;
         vertices.reserve(6); // 2 triangles * 3 vertices
 
-        std::vector<int> indices;
+        std::vector<uint32_t> indices;
         indices.reserve(6);
 
         glm::vec3 p0{ -1.0f, 0.0f, -1.0f }; // bottom-left
@@ -92,7 +92,7 @@ namespace Nova::Core::Renderer::Graphics {
 
     std::shared_ptr<Mesh> Mesh::CreateCube(float halfExtent) {
         std::vector<Vertex> vertices;
-        std::vector<int>    indices;
+        std::vector<uint32_t>    indices;
 
         // 6 faces * 2 triangles * 3 vertices
         vertices.reserve(6 * 2 * 3);
@@ -116,7 +116,7 @@ namespace Nova::Core::Renderer::Graphics {
                             const glm::vec2& uv2 = {1.0f, 1.0f})
         {
             // Add one triangle (3 unique vertices)
-            int baseIndex = static_cast<int>(vertices.size());
+            uint32_t baseIndex = static_cast<uint32_t>(vertices.size());
 
             Vertex v0, v1, v2;
             v0.m_Position = p0;
@@ -274,7 +274,7 @@ namespace Nova::Core::Renderer::Graphics {
 
         // Final mesh data: each triangle has its own 3 vertices
         std::vector<Vertex> vertices;
-        std::vector<int>    indices;
+        std::vector<uint32_t>    indices;
 
         const glm::vec3 triColors[3] = {
             {1.0f, 1.0f, 0.0f}, // yellow
@@ -285,7 +285,7 @@ namespace Nova::Core::Renderer::Graphics {
         vertices.reserve(latitudeSegments * longitudeSegments * 6); // 2 tris * 3 verts
         indices.reserve(latitudeSegments * longitudeSegments * 6);
 
-        auto makeVertex = [&](int gridIndex, const glm::vec3& color) {
+        auto makeVertex = [&](uint32_t gridIndex, const glm::vec3& color) {
             Vertex v;
             v.m_Position  = positions[gridIndex];
             v.m_Normal    = normals[gridIndex];

@@ -22,6 +22,9 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         void Render() override;
         void EndFrame() override;
 
+        void Draw(const RHI::RHI_DrawCommand& cmd) override;
+        void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;
+
         GLuint GetProgram() const { return m_Program; }
 
         //TODO add framebuffer field
@@ -29,6 +32,11 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         //TODO GetViewportTextureID()
     private:
         GLuint m_Program{ 0 };
+
+        GLint m_LocModel = 0;
+        GLint m_LocView  = 4;
+        GLint m_LocProj  = 8;
+        GLint m_LocMVP   = -1;
     };
 
 } // namespace Nova::Core::Renderer::Backends::OpenGL
