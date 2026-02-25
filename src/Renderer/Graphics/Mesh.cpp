@@ -80,19 +80,19 @@ namespace Nova::Core::Renderer::Graphics {
         vertices.push_back(v5);
 
         indices.push_back(0);
-        indices.push_back(1);
         indices.push_back(2);
+        indices.push_back(1);
 
         indices.push_back(3);
-        indices.push_back(4);
         indices.push_back(5);
+        indices.push_back(4);
 
         return std::make_shared<Mesh>(std::move(vertices), std::move(indices));
     }
 
     std::shared_ptr<Mesh> Mesh::CreateCube(float halfExtent) {
         std::vector<Vertex> vertices;
-        std::vector<uint32_t>    indices;
+        std::vector<uint32_t> indices;
 
         // 6 faces * 2 triangles * 3 vertices
         vertices.reserve(6 * 2 * 3);
@@ -143,8 +143,8 @@ namespace Nova::Core::Renderer::Graphics {
             vertices.push_back(v2);
 
             indices.push_back(baseIndex + 0);
-            indices.push_back(baseIndex + 2);
             indices.push_back(baseIndex + 1);
+            indices.push_back(baseIndex + 2);
         };
 
         auto addFace = [&](const glm::vec3& p0,
@@ -274,7 +274,7 @@ namespace Nova::Core::Renderer::Graphics {
 
         // Final mesh data: each triangle has its own 3 vertices
         std::vector<Vertex> vertices;
-        std::vector<uint32_t>    indices;
+        std::vector<uint32_t> indices;
 
         const glm::vec3 triColors[3] = {
             {1.0f, 1.0f, 0.0f}, // yellow
@@ -296,7 +296,7 @@ namespace Nova::Core::Renderer::Graphics {
             return v;
         };
 
-        // Build triangles (CW) with per-vertex color R/G/B
+        // Build triangles (CCW) with per-vertex color Y/M/C
         for (int y = 0; y < latitudeSegments; ++y) {
             for (int x = 0; x < longitudeSegments; ++x) {
                 int i0 =  y * (longitudeSegments + 1) + x;
@@ -304,26 +304,26 @@ namespace Nova::Core::Renderer::Graphics {
                 int i2 = (y + 1) * (longitudeSegments + 1) + x;
                 int i3 =  i2 + 1;
 
-                // First triangle (CW): i0, i2, i1
+                // First triangle (CCW): i0, i1, i2
                 {
                     int base = static_cast<int>(vertices.size());
 
-                    vertices.push_back(makeVertex(i0, triColors[0])); // red
-                    vertices.push_back(makeVertex(i2, triColors[1])); // green
-                    vertices.push_back(makeVertex(i1, triColors[2])); // blue
+                    vertices.push_back(makeVertex(i0, triColors[0]));
+                    vertices.push_back(makeVertex(i1, triColors[1]));
+                    vertices.push_back(makeVertex(i2, triColors[2]));
 
                     indices.push_back(base + 0);
                     indices.push_back(base + 1);
                     indices.push_back(base + 2);
                 }
 
-                // Second triangle (CW): i1, i2, i3
+                // Second triangle (CCW): i1, i3, i2
                 {
                     int base = static_cast<int>(vertices.size());
 
-                    vertices.push_back(makeVertex(i1, triColors[0])); // red
-                    vertices.push_back(makeVertex(i2, triColors[1])); // green
-                    vertices.push_back(makeVertex(i3, triColors[2])); // blue
+                    vertices.push_back(makeVertex(i1, triColors[0]));
+                    vertices.push_back(makeVertex(i3, triColors[1]));
+                    vertices.push_back(makeVertex(i2, triColors[2]));
 
                     indices.push_back(base + 0);
                     indices.push_back(base + 1);

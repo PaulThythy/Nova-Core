@@ -58,10 +58,10 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         // clip space changed, warning : change winding order
-        //glEnable(GL_CULL_FACE);
-        //glCullFace(GL_BACK);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
         // inverted winding as vulkan, due to clipspace inversion
-        //glFrontFace(GL_CCW);
+        glFrontFace(GL_CCW);
 
         std::filesystem::path p = std::filesystem::current_path();
         std::filesystem::path shaderDir = p / "Nova-Core" / "Resources" / "Engine" / "Shaders";
