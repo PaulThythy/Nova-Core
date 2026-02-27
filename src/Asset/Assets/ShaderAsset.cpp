@@ -77,9 +77,11 @@ namespace Nova::Core::Asset::Assets {
         // --- Defines "plateforme" minimalistes ---
         if (api == GraphicsAPI::Vulkan) {
             opts.m_Definitions.emplace_back("gl_VertexID", "gl_VertexIndex");
+            opts.m_Definitions.emplace_back("NOVA_VULKAN", "1");
         }
         else {
             opts.m_Definitions.emplace_back("gl_VertexIndex", "gl_VertexID");
+            opts.m_Definitions.emplace_back("NOVA_OPENGL", "1");
         }
 
         RHI::RHI_ShaderCompilationOutput out{};
