@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <glm/glm.hpp>
+#include <variant>
 
 #include <glslang/Include/glslang_c_interface.h>
 #include <glslang/Public/ShaderLang.h>
@@ -13,6 +15,50 @@
 #include "Core/GraphicsAPI.h"
 
 namespace Nova::Core::Renderer::RHI {
+
+    enum class RHI_UniformType {
+        Float,
+        Int,
+        Vec2, Vec3, Vec4,
+        Mat3, Mat4,
+        // : Sampler2D, etc.
+    };
+
+    using RHI_UniformValue = std::variant<
+        float,
+        int,
+        glm::vec2,
+        glm::vec3,
+        glm::vec4,
+        glm::mat3,
+        glm::mat4
+    >;
+
+    class IShaderProgram {
+    public:
+        virtual ~IShaderProgram() = default;
+
+        virtual void Bind()   const = 0;
+        virtual void Unbind() const = 0;
+
+        // Scalaires / vecteurs / matrices — stockés dans un UBO côté OpenGL,
+        // via push constants ou descriptor sets côté Vulkan.
+        virtual void SetFloat(const std::string& name, float v) = 0;
+        virtual void SetInt(const std::string& name, int v) = 0;
+        virtual void SetVec2(const std::string& name, const glm::vec2& v) = 0;
+        virtual void SetVec3(const std::string& name, const glm::vec3& v) = 0;
+        virtual void SetVec4(const std::string& name, const glm::vec4& v) = 0;
+        virtual void SetMat3(const std::string& name, const glm::mat3& v) = 0;
+        virtual void SetMat4(const std::string& name, const glm::mat4& v) = 0;
+
+        // Upload effectif vers le GPU (flush le UBO / push constant)
+        // Appeler une fois par draw, après tous les Set*.
+        virtual void UploadUniforms() = 0;
+
+        // Introspection minimale
+        virtual bool   IsLinked()  const = 0;
+        virtual const std::string& GetName() const = 0;
+    };
     
     enum class RHI_ShaderStage {
         Unknown = 0,

@@ -117,16 +117,21 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             return false;
         }
 
-        m_Program = prog;
+        m_ShaderProgram = std::make_unique<GL_ShaderProgram>(
+            "ModelShader",
+            prog,          // GLuint du programme déjà lié
+            /*uboBinding=*/0
+        );
+
         NV_LOG_INFO("OpenGL Renderer created. Triangle program linked from SPIR-V.");
         return true;
     }
 
     void GL_Renderer::Destroy() {
-        if (m_Program != 0) {
+        /*if (m_Program != 0) {
             glDeleteProgram(m_Program);
             m_Program = 0;
-        }
+        }*/
 
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_BLEND);
@@ -152,37 +157,32 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     }
 
     void GL_Renderer::Render() {
-        if (!m_Program) return;
+        /*if (!m_Program) return;
 
         glUseProgram(m_Program);
 
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawArrays(GL_TRIANGLES, 0, 3);*/
     }
 
     void GL_Renderer::EndFrame() {
-        glBindVertexArray(0);
-        glUseProgram(0);
+        m_ShaderProgram->Unbind();
     }
 
     void GL_Renderer::Draw(const RHI::RHI_DrawCommand& cmd) {
-        if (!m_Program || !cmd.m_Mesh) return;
+        if (!cmd.m_Mesh) return;
 
         auto glMesh = std::dynamic_pointer_cast<GL_Mesh>(cmd.m_Mesh);
         if (!glMesh) {
             NV_LOG_WARN("GL_Renderer::Draw - mesh is not a GL_Mesh");
             return;
         }
+        
+        m_ShaderProgram->Bind();
 
-        glUseProgram(m_Program);
-
-        if (m_LocModel >= 0) glUniformMatrix4fv(m_LocModel, 1, GL_FALSE, glm::value_ptr(cmd.m_Model));
-        if (m_LocView  >= 0) glUniformMatrix4fv(m_LocView,  1, GL_FALSE, glm::value_ptr(cmd.m_View));
-        if (m_LocProj  >= 0) glUniformMatrix4fv(m_LocProj,  1, GL_FALSE, glm::value_ptr(cmd.m_Proj));
-
-        if (m_LocMVP >= 0) {
-            const glm::mat4 mvp = cmd.m_Proj * cmd.m_View * cmd.m_Model;
-            glUniformMatrix4fv(m_LocMVP, 1, GL_FALSE, glm::value_ptr(mvp));
-        }
+        m_ShaderProgram->SetMat4("u_Model", cmd.m_Model);
+        m_ShaderProgram->SetMat4("u_View", cmd.m_View);
+        m_ShaderProgram->SetMat4("u_Proj", cmd.m_Proj);
+        m_ShaderProgram->UploadUniforms();
 
         glMesh->Bind();
 
@@ -207,7 +207,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     }
 
     void GL_Renderer::DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) {
-        if (!m_Program || !cmd.m_Mesh) return;
+        if (!cmd.m_Mesh) return;
 
         auto glMesh = std::dynamic_pointer_cast<GL_Mesh>(cmd.m_Mesh);
         if (!glMesh) {
@@ -215,16 +215,12 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             return;
         }
 
-        glUseProgram(m_Program);
+        m_ShaderProgram->Bind();
 
-        if (m_LocModel >= 0) glUniformMatrix4fv(m_LocModel, 1, GL_FALSE, glm::value_ptr(cmd.m_Model));
-        if (m_LocView  >= 0) glUniformMatrix4fv(m_LocView,  1, GL_FALSE, glm::value_ptr(cmd.m_View));
-        if (m_LocProj  >= 0) glUniformMatrix4fv(m_LocProj,  1, GL_FALSE, glm::value_ptr(cmd.m_Proj));
-
-        if (m_LocMVP >= 0) {
-            const glm::mat4 mvp = cmd.m_Proj * cmd.m_View * cmd.m_Model;
-            glUniformMatrix4fv(m_LocMVP, 1, GL_FALSE, glm::value_ptr(mvp));
-        }
+        m_ShaderProgram->SetMat4("u_Model", cmd.m_Model);
+        m_ShaderProgram->SetMat4("u_View", cmd.m_View);
+        m_ShaderProgram->SetMat4("u_Proj", cmd.m_Proj);
+        m_ShaderProgram->UploadUniforms();
 
         glMesh->Bind();
 
