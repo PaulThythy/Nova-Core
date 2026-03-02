@@ -109,11 +109,7 @@ namespace Nova::Core::Asset::Assets {
                 m_Desc.m_LongitudeSegments);
             break;
         case MeshPrimitive::Cylinder:
-            /*m_CPUMesh = Mesh::CreateCylinder(
-                m_Desc.m_Radius,
-                m_Desc.m_Height,
-                m_Desc.m_RadialSegments,
-                m_Desc.m_HeightSegments);*/
+            NV_LOG_WARN("MeshAsset: Cylinder primitive not implemented yet.");
             break;
         case MeshPrimitive::Capsule:
             NV_LOG_WARN("MeshAsset: Capsule primitive not implemented yet.");

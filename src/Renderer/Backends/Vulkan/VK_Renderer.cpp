@@ -188,7 +188,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         CheckVkResult(vkBeginCommandBuffer(cmd, &beginInfo));
 
         VkClearValue clearColor{};
-        clearColor.color = { 0.1f, 0.1f, 0.12f, 1.0f };
+        clearColor.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
         VkRenderPassBeginInfo rpBegin{};
         rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;

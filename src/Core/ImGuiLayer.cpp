@@ -76,6 +76,9 @@ namespace Nova::Core {
         }
         m_VulkanInitInfo = info;
 
+        //because initialized for other
+        ImGui_ImplSDL3_Shutdown();
+
         if(m_GraphicsAPI == GraphicsAPI::Vulkan) {
             ImGui_ImplSDL3_InitForVulkan(m_Window.GetSDLWindow());
             ImGui_ImplVulkan_Init(&m_VulkanInitInfo);
