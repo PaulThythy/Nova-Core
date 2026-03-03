@@ -100,6 +100,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (m_VKDevice.GetDevice() != VK_NULL_HANDLE) {
             vkDeviceWaitIdle(m_VKDevice.GetDevice());
         }
+
+        for (auto& [key, mesh] : m_MeshCache) {
+            if (mesh) {
+                mesh->Release();
+            }
+        }
+        m_MeshCache.clear();
+
         m_VKSwapchain.Destroy();
         m_VKDevice.Destroy();
         m_VKInstance.Destroy();
@@ -187,17 +195,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         CheckVkResult(vkBeginCommandBuffer(cmd, &beginInfo));
 
-        VkClearValue clearColor{};
-        clearColor.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        std::array<VkClearValue, 2> clearValues{};
+        clearValues[0].color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        clearValues[1].depthStencil = { 1.0f, 0 };
 
         VkRenderPassBeginInfo rpBegin{};
         rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         rpBegin.renderPass = m_VKSwapchain.GetBackBufferRenderPass();
-        rpBegin.framebuffer = m_VKSwapchain.GetFrames()[imageIndex].m_Framebuffer; // imageIndex
-        rpBegin.renderArea.offset = { 0, 0 };
-        rpBegin.renderArea.extent = m_VKSwapchain.GetExtent();
-        rpBegin.clearValueCount = 1;
-        rpBegin.pClearValues = &clearColor;
+        rpBegin.framebuffer = m_VKSwapchain.GetFrames()[imageIndex].m_Framebuffer;
+        rpBegin.renderArea = { {0,0}, m_VKSwapchain.GetExtent() };
+        rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        rpBegin.pClearValues = clearValues.data();
 
         vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -225,22 +233,68 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::Render() {
-        if (!s_FrameActive)
-            return;
+        /*empty*/
+    }
 
-        VkCommandBuffer cmd = m_VKSwapchain.GetCommandBuffers()[m_VKSwapchain.GetAcquiredImageIndex()];
+    void VK_Renderer::DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) {
+        if (!s_FrameActive) return;
+        if (!cmd.m_Mesh)    return;
 
-        // Minimal triangle draw (if pipeline exists).
-        // If you haven't provided shaders, this simply does nothing (you still get a clear color).
-        if (m_VKSwapchain.GetTrianglePipeline() != VK_NULL_HANDLE) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VKSwapchain.GetTrianglePipeline());
-            vkCmdDraw(cmd, 3, 1, 0, 0);
-        }
+        auto vkMesh = GetOrUploadMesh(cmd.m_Mesh);
+        if (!vkMesh) return;
 
-        // NOTE:
-        // ImGui rendering is NOT done here. Your ImGuiLayer::OnEnd() will call
-        // ImGui_ImplVulkan_RenderDrawData(drawData, cmd) when it runs.
-        // This is why the render pass must still be active until EndFrame().
+        VkCommandBuffer vkCmd = m_VKSwapchain.GetCommandBuffers()[m_VKSwapchain.GetAcquiredImageIndex()];
+
+        // Bind pipeline
+        if (m_VKSwapchain.GetModelPipeline() != VK_NULL_HANDLE)
+            vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VKSwapchain.GetModelPipeline());
+
+        // Push constants: model, view, proj
+        struct MVPPushConstants {
+            glm::mat4 model;
+            glm::mat4 view;
+            glm::mat4 proj;
+        } mvp{ cmd.m_Model, cmd.m_View, cmd.m_Proj };
+
+        vkCmdPushConstants(vkCmd,
+            m_VKSwapchain.GetModelPipelineLayout(),
+            VK_SHADER_STAGE_VERTEX_BIT,
+            0, sizeof(MVPPushConstants), &mvp);
+
+        // Bind mesh buffers
+        vkMesh->SetCommandBuffer(vkCmd);
+        vkMesh->Bind();
+
+        // Draw
+        vkCmdDrawIndexed(vkCmd,
+            static_cast<uint32_t>(cmd.m_IndexCount),
+            1,
+            static_cast<uint32_t>(cmd.m_FirstIndex),
+            cmd.m_VertexOffset,
+            0);
+    }
+
+    std::shared_ptr<VK_Mesh> VK_Renderer::GetOrUploadMesh(
+        const std::shared_ptr<Renderer::Graphics::Mesh>& cpuMesh)
+    {
+        auto it = m_MeshCache.find(cpuMesh.get());
+        if (it != m_MeshCache.end())
+            return it->second;
+
+        auto vkMesh = std::make_shared<VK_Mesh>(*cpuMesh);
+        vkMesh->Init(
+            m_VKDevice.GetDevice(),
+            m_VKDevice.GetPhysicalDevice(),
+            m_VKSwapchain.GetCommandPool(), // on vole temporairement le command pool
+            m_VKDevice.GetGraphicsQueue()
+        );
+
+        // IMPORTANT : Init() a besoin du command pool, pas d'un command buffer.
+        // On doit passer le command pool directement - voir note ci-dessous.
+        vkMesh->Upload(*cpuMesh);
+
+        m_MeshCache[cpuMesh.get()] = vkMesh;
+        return vkMesh;
     }
 
     void VK_Renderer::EndFrame() {

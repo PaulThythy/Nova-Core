@@ -1,24 +1,13 @@
-#version 450 core
+#version 450
 
-layout(location = 0) in vec3 v_WorldPos;
+layout(location = 0) in vec3 v_Color;
 layout(location = 1) in vec3 v_Normal;
-layout(location = 2) in vec3 v_Color;
 
-layout(location = 0) out vec4 o_Color;
+layout(location = 0) out vec4 outColor;
 
-void main()
-{
-    vec3 N = normalize(v_Normal);
-
-    // Lumière directionnelle simple
-    vec3 L = normalize(vec3(0.5, 1.0, 0.3));
-    float ndotl = max(dot(N, L), 0.0);
-
-    // Si la couleur vertex n'est pas renseignée (0,0,0), fallback vers gris clair
-    vec3 baseColor = (length(v_Color) > 0.001) ? v_Color : vec3(0.8, 0.8, 0.85);
-
-    float ambient = 0.20;
-    vec3 litColor = baseColor * (ambient + ndotl * 0.80);
-
-    o_Color = vec4(litColor, 1.0);
+void main() {
+    vec3 lightDir = normalize(vec3(1.0, 2.0, 1.0));
+    vec3 normal = normalize(v_Normal);
+    float diff = max(dot(normal, lightDir), 0.15);
+    outColor   = vec4(v_Color * diff, 1.0);
 }

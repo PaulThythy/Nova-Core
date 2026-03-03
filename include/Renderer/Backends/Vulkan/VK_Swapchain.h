@@ -53,6 +53,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		VkDescriptorPool& GetImGuiDescriptorPool() { return m_ImGuiDescriptorPool; }
 
+		VkCommandPool GetCommandPool() { return m_CommandPool; }
+
 		std::vector<VK_Frame>& GetFrames() { return m_Frames; }
 		std::vector<VkFence>& GetImagesInFlight() { return m_ImagesInFlight; }
 		std::array<VK_FrameSync, FRAMES_IN_FLIGHT>& GetFrameSync() { return m_FrameSync; }
@@ -65,8 +67,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		void SetAcquiredImageIndex(uint32_t idx) { m_AquiredImage = idx; }
 		uint32_t GetAcquiredImageIndex() const { return m_AquiredImage; }
 
-		VkPipeline& GetTrianglePipeline() { return m_TrianglePipeline; }
-		VkPipelineLayout& GetTrianglePipelineLayout() { return m_TrianglePipelineLayout; }
+		VkPipeline& GetModelPipeline() { return m_ModelPipeline; }
+		VkPipelineLayout& GetModelPipelineLayout() { return m_ModelPipelineLayout; }
 
 		std::vector<VkCommandBuffer>& GetCommandBuffers() { return m_CommandBuffers; }
 
@@ -95,8 +97,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		void DestroySyncObjects();
 
 		// Minimal pipeline
-		void CreateTrianglePipeline();
-		void DestroyTrianglePipeline();
+		void CreateModelPipeline();
+		void DestroyModelPipeline();
+		bool CreateDepthResources();
+		void DestroyDepthResources();
 
 		// ImGui
 		bool CreateImGuiDescriptorPool();
@@ -132,8 +136,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkRenderPass m_BackBufferRenderPass = VK_NULL_HANDLE;
 
 		// Pipeline (triangle)
-		VkPipeline       m_TrianglePipeline = VK_NULL_HANDLE;
-		VkPipelineLayout m_TrianglePipelineLayout = VK_NULL_HANDLE;
+		VkPipeline       m_ModelPipeline = VK_NULL_HANDLE;
+		VkPipelineLayout m_ModelPipelineLayout = VK_NULL_HANDLE;
+
+		// Depth buffer
+		VkImage        m_DepthImage = VK_NULL_HANDLE;
+		VkDeviceMemory m_DepthImageMemory = VK_NULL_HANDLE;
+		VkImageView    m_DepthImageView = VK_NULL_HANDLE;
+		VkFormat       m_DepthFormat = VK_FORMAT_D32_SFLOAT;
 
 		// Commands (single primary command buffer)
 		VkCommandPool   m_CommandPool = VK_NULL_HANDLE;

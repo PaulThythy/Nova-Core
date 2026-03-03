@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <vulkan/vulkan.h>
+#include <unordered_map>
 
 #include "Renderer/RHI/RHI_Renderer.h"
 
@@ -14,6 +15,7 @@
 #include "Renderer/Backends/Vulkan/VK_Instance.h"
 #include "Renderer/Backends/Vulkan/VK_Device.h"
 #include "Renderer/Backends/Vulkan/VK_Swapchain.h"
+#include "Renderer/Backends/Vulkan/VK_Mesh.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -33,13 +35,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void EndFrame() override;
 
         void Draw(const RHI::RHI_DrawCommand& cmd) override {}
-        void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override {}
+        void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;
 
     private:
         // Core Vulkan objects (wrappers)
         VK_Instance m_VKInstance;
         VK_Device   m_VKDevice;
         VK_Swapchain m_VKSwapchain;
+
+        std::unordered_map<const Renderer::Graphics::Mesh*, std::shared_ptr<VK_Mesh>> m_MeshCache;
+
+        std::shared_ptr<VK_Mesh> GetOrUploadMesh(const std::shared_ptr<Renderer::Graphics::Mesh>& cpuMesh);
 
         bool m_FramebufferResized = false;
 	};

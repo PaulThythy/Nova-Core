@@ -8,6 +8,7 @@
 #include "Renderer/Backends/Vulkan/VK_Common.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/Backends/Vulkan/VK_Shaders.h"
+#include "Renderer/Graphics/Vertex.h"
 
 #include "Asset/AssetManager.h"
 #include "Asset/Assets/ShaderAsset.h"
@@ -139,6 +140,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		m_PresentQueueFamily = presentQueueFamily;
 
 		if (!CreateSwapchain())               return false;
+		if (!CreateDepthResources())	      return false;
 		if (!CreateImageViews())              return false;
 		if (!CreateBackBufferRenderPass())              return false;
 		if (!CreateFramebuffers())            return false;
@@ -146,7 +148,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (!CreateCommandPoolAndBuffers())   return false;
 		if (!CreateSyncObjects())             return false;
 
-		CreateTrianglePipeline(); // optional
+		CreateModelPipeline(); // optional
 
 		if (!CreateImGuiDescriptorPool())     return false;
 
@@ -160,7 +162,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		vkDeviceWaitIdle(m_Device);
 
-		DestroyTrianglePipeline();
+		DestroyModelPipeline();
+
+		DestroyDepthResources();
 
 		DestroyImGuiDescriptorPool();
 
@@ -273,10 +277,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			return false;
 
 		vkDeviceWaitIdle(m_Device);
-
 		DestroySwapchain();
+		DestroyDepthResources();
 
 		if (!CreateSwapchain())        return false;
+		if (!CreateDepthResources())   return false;
 		if (!CreateImageViews())       return false;
 		if (!CreateFramebuffers())     return false;
 		if (!RecreateCommandBuffers()) return false;
@@ -330,10 +335,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 	}
 
 	bool VK_Swapchain::CreateBackBufferRenderPass() {
-		// Create once. We keep it alive across swapchain recreations (format usually stays the same).
 		if (m_BackBufferRenderPass != VK_NULL_HANDLE)
 			return true;
 
+		// Color attachment
 		VkAttachmentDescription colorAttachment{};
 		colorAttachment.format = m_SwapchainImageFormat;
 		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -344,26 +349,47 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-		VkAttachmentReference colorAttachmentRef{};
-		colorAttachmentRef.attachment = 0;
-		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		// Depth attachment
+		VkAttachmentDescription depthAttachment{};
+		depthAttachment.format = m_DepthFormat;
+		depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference colorRef{};
+		colorRef.attachment = 0;
+		colorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference depthRef{};
+		depthRef.attachment = 1;
+		depthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &colorAttachmentRef;
+		subpass.pColorAttachments = &colorRef;
+		subpass.pDepthStencilAttachment = &depthRef;
 
 		VkSubpassDependency dependency{};
 		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 		dependency.dstSubpass = 0;
-		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+			| VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+			| VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+			| VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+		std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
 
 		VkRenderPassCreateInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		renderPassInfo.attachmentCount = 1;
-		renderPassInfo.pAttachments = &colorAttachment;
+		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+		renderPassInfo.pAttachments = attachments.data();
 		renderPassInfo.subpassCount = 1;
 		renderPassInfo.pSubpasses = &subpass;
 		renderPassInfo.dependencyCount = 1;
@@ -377,14 +403,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 	bool VK_Swapchain::CreateFramebuffers() {
 		for (auto& f : m_Frames) f.m_Framebuffer = VK_NULL_HANDLE;
 
-		for (size_t i = 0; i < m_Frames.size(); i++) {
-			VkImageView attachments[] = { m_Frames[i].m_ImageView };
+		for (size_t i = 0; i < m_Frames.size(); ++i) {
+			std::array<VkImageView, 2> attachments = {
+				m_Frames[i].m_ImageView,
+				m_DepthImageView            // <-- depth
+			};
 
 			VkFramebufferCreateInfo framebufferInfo{};
 			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 			framebufferInfo.renderPass = m_BackBufferRenderPass;
-			framebufferInfo.attachmentCount = 1;
-			framebufferInfo.pAttachments = attachments;
+			framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+			framebufferInfo.pAttachments = attachments.data();
 			framebufferInfo.width = m_SwapchainExtent.width;
 			framebufferInfo.height = m_SwapchainExtent.height;
 			framebufferInfo.layers = 1;
@@ -540,67 +569,76 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		return (res == VK_SUCCESS);
 	}
 
-	void VK_Swapchain::CreateTrianglePipeline() {
-		// If already created, do nothing.
-		if (m_TrianglePipeline != VK_NULL_HANDLE)
-			return;
+	void VK_Swapchain::CreateModelPipeline() {
+		if (m_ModelPipeline != VK_NULL_HANDLE) return;
 
-		std::filesystem::path p = std::filesystem::current_path();
-		std::filesystem::path shaderDir = p / "Nova-Core" / "Resources" / "Engine" / "Shaders";
-
-		// You can change these paths to whatever your project uses.
-		const std::filesystem::path vertPath = shaderDir / "shader.vert";
-    	const std::filesystem::path fragPath = shaderDir / "shader.frag";
+		std::filesystem::path shaderDir = std::filesystem::current_path()
+			/ "Nova-Core" / "Resources" / "Engine" / "Shaders";
 
 		using Nova::Core::Asset::AssetManager;
 		using Nova::Core::Asset::Assets::ShaderAsset;
+		using Nova::Core::Renderer::RHI::RHI_ShaderStage;
 
-		// Acquire + compile via AssetManager/ShaderAsset
-		auto vertAsset = AssetManager::Get().Acquire<ShaderAsset>(vertPath);
-		auto fragAsset = AssetManager::Get().Acquire<ShaderAsset>(fragPath);
+		Nova::Core::Renderer::RHI::RHI_ShaderDesc vDesc{};
+		vDesc.m_Stage = RHI_ShaderStage::Vertex;
+		vDesc.m_GlslVersion = 450;
 
-		if (!vertAsset || !fragAsset) {
-			NV_LOG_WARN("Failed to acquire shader assets.");
-			return;
-		}
+		Nova::Core::Renderer::RHI::RHI_ShaderDesc fDesc{};
+		fDesc.m_Stage = RHI_ShaderStage::Fragment;
+		fDesc.m_GlslVersion = 450;
 
-		if (!vertAsset->Compile()) {
-			NV_LOG_WARN(("Vertex shader compilation failed:\n" + vertAsset->GetLastLog()).c_str());
-			return;
-		}
-		if (!fragAsset->Compile()) {
-			NV_LOG_WARN(("Fragment shader compilation failed:\n" + fragAsset->GetLastLog()).c_str());
-			return;
-		}
+		auto vertAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "model.vert", vDesc);
+		auto fragAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "model.frag", fDesc);
 
-		// Ensuite tu utilises vertAsset->GetSpirv() / fragAsset->GetSpirv()
-		Nova::Core::Renderer::Backends::Vulkan::VK_ShaderModule vertModule;
-		Nova::Core::Renderer::Backends::Vulkan::VK_ShaderModule fragModule;
+		if (!vertAsset || !fragAsset) { NV_LOG_WARN("CreateModelPipeline: failed to acquire shaders"); return; }
+		if (!vertAsset->Compile()) { NV_LOG_WARN(("VS compile failed:\n" + vertAsset->GetLastLog()).c_str()); return; }
+		if (!fragAsset->Compile()) { NV_LOG_WARN(("FS compile failed:\n" + fragAsset->GetLastLog()).c_str()); return; }
 
+		VK_Shaders vertModule, fragModule;
 		if (!vertModule.Create(m_Device, vertAsset->GetSpirv()) ||
 			!fragModule.Create(m_Device, fragAsset->GetSpirv()))
 		{
-			NV_LOG_WARN("Failed to create Vulkan shader modules from SPIR-V.");
+			NV_LOG_WARN("CreateModelPipeline: failed to create shader modules");
 			return;
 		}
 
-		VkPipelineShaderStageCreateInfo vertStage{};
-		vertStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		vertStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-		vertStage.module = vertModule.GetModule();
-		vertStage.pName = "main";
+		VkPipelineShaderStageCreateInfo stages[2]{};
+		stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+		stages[0].module = vertModule.GetModule();
+		stages[0].pName = "main";
 
-		VkPipelineShaderStageCreateInfo fragStage{};
-		fragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		fragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-		fragStage.module = fragModule.GetModule();
-		fragStage.pName = "main";
+		stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		stages[1].module = fragModule.GetModule();
+		stages[1].pName = "main";
 
-		VkPipelineShaderStageCreateInfo stages[] = { vertStage, fragStage };
+		// ---- Vertex input matching Vertex struct ----
+		// location 0 = position (vec3)
+		// location 1 = normal   (vec3)
+		// location 2 = texcoord (vec2)
+		// location 3 = color    (vec3)
+		// location 4 = tangent  (vec3)
+		// location 5 = bitangent(vec3)
+		VkVertexInputBindingDescription binding{};
+		binding.binding = 0;
+		binding.stride = sizeof(Renderer::Graphics::Vertex);
+		binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-		// No vertex buffers (positions generated in vertex shader via gl_VertexIndex)
+		std::array<VkVertexInputAttributeDescription, 6> attrs{};
+		attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Position) };
+		attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Normal) };
+		attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(Renderer::Graphics::Vertex, m_TexCoord) };
+		attrs[3] = { 3, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Color) };
+		attrs[4] = { 4, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Tangent) };
+		attrs[5] = { 5, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Bitangent) };
+
 		VkPipelineVertexInputStateCreateInfo vertexInput{};
 		vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		vertexInput.vertexBindingDescriptionCount = 1;
+		vertexInput.pVertexBindingDescriptions = &binding;
+		vertexInput.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrs.size());
+		vertexInput.pVertexAttributeDescriptions = attrs.data();
 
 		VkPipelineInputAssemblyStateCreateInfo inputAsm{};
 		inputAsm.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -615,41 +653,50 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 		raster.polygonMode = VK_POLYGON_MODE_FILL;
 		raster.cullMode = VK_CULL_MODE_BACK_BIT;
-		raster.frontFace = VK_FRONT_FACE_CLOCKWISE; // depends on your coordinate system; change if needed
+		raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 		raster.lineWidth = 1.0f;
 
 		VkPipelineMultisampleStateCreateInfo msaa{};
 		msaa.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 		msaa.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
+		// ---- Depth test ----
+		VkPipelineDepthStencilStateCreateInfo depthStencil{};
+		depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		depthStencil.depthTestEnable = VK_TRUE;
+		depthStencil.depthWriteEnable = VK_TRUE;
+		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+
 		VkPipelineColorBlendAttachmentState blendAttachment{};
 		blendAttachment.colorWriteMask =
-			VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+			VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+			VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
 		VkPipelineColorBlendStateCreateInfo blend{};
 		blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 		blend.attachmentCount = 1;
 		blend.pAttachments = &blendAttachment;
 
-		// TODO add VK_DYNAMIC_STATE_CULL_MODE to change cull mode dynamically (call vkCmdSetCullMode)
-		// TODO add VK_DYNAMIC_STATE_POLYGON_MODE_EXT but only if VK_EXT_extended_dynamic_state3 extension is compatible
 		VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 		VkPipelineDynamicStateCreateInfo dynamic{};
 		dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
 		dynamic.dynamicStateCount = 2;
 		dynamic.pDynamicStates = dynamicStates;
 
+		// ---- Push constants: MVP matrices (3 × mat4 = 192 bytes) ----
+		VkPushConstantRange pushRange{};
+		pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		pushRange.offset = 0;
+		pushRange.size = sizeof(glm::mat4) * 3; // model + view + proj
+
 		VkPipelineLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		layoutInfo.pushConstantRangeCount = 1;
+		layoutInfo.pPushConstantRanges = &pushRange;
 
-		VkResult res = vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_TrianglePipelineLayout);
+		VkResult res = vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_ModelPipelineLayout);
 		CheckVkResult(res);
-		if (res != VK_SUCCESS) {
-			NV_LOG_WARN("Failed to create pipeline layout. Rendering will only clear the screen.");
-			vkDestroyShaderModule(m_Device, vertModule.GetModule(), nullptr);
-			vkDestroyShaderModule(m_Device, fragModule.GetModule(), nullptr);
-			return;
-		}
+		if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to create pipeline layout"); return; }
 
 		VkGraphicsPipelineCreateInfo pipe{};
 		pipe.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -660,33 +707,117 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		pipe.pViewportState = &viewportState;
 		pipe.pRasterizationState = &raster;
 		pipe.pMultisampleState = &msaa;
+		pipe.pDepthStencilState = &depthStencil;
 		pipe.pColorBlendState = &blend;
 		pipe.pDynamicState = &dynamic;
-		pipe.layout = m_TrianglePipelineLayout;
+		pipe.layout = m_ModelPipelineLayout;
 		pipe.renderPass = m_BackBufferRenderPass;
 		pipe.subpass = 0;
 
-		res = vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipe, nullptr, &m_TrianglePipeline);
+		res = vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipe, nullptr, &m_ModelPipeline);
 		CheckVkResult(res);
 
-		if (res != VK_SUCCESS) {
-			NV_LOG_WARN("Failed to create triangle pipeline. Rendering will only clear the screen.");
-			DestroyTrianglePipeline();
+		if (res == VK_SUCCESS) NV_LOG_INFO("Model pipeline created.");
+		else { NV_LOG_WARN("CreateModelPipeline: pipeline creation failed."); DestroyModelPipeline(); }
+	}
+
+	void VK_Swapchain::DestroyModelPipeline() {
+		if (m_ModelPipeline != VK_NULL_HANDLE) {
+			vkDestroyPipeline(m_Device, m_ModelPipeline, nullptr);
+			m_ModelPipeline = VK_NULL_HANDLE;
 		}
-		else {
-			NV_LOG_INFO("Triangle pipeline created.");
+		if (m_ModelPipelineLayout != VK_NULL_HANDLE) {
+			vkDestroyPipelineLayout(m_Device, m_ModelPipelineLayout, nullptr);
+			m_ModelPipelineLayout = VK_NULL_HANDLE;
 		}
 	}
 
-	void VK_Swapchain::DestroyTrianglePipeline() {
-		if (m_TrianglePipeline != VK_NULL_HANDLE) {
-			vkDestroyPipeline(m_Device, m_TrianglePipeline, nullptr);
-			m_TrianglePipeline = VK_NULL_HANDLE;
+	bool VK_Swapchain::CreateDepthResources() {
+		// Find supported depth format
+		const std::vector<VkFormat> candidates = {
+			VK_FORMAT_D32_SFLOAT,
+			VK_FORMAT_D32_SFLOAT_S8_UINT,
+			VK_FORMAT_D24_UNORM_S8_UINT
+		};
+		m_DepthFormat = VK_FORMAT_UNDEFINED;
+		for (VkFormat fmt : candidates) {
+			VkFormatProperties props;
+			vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, fmt, &props);
+			if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+				m_DepthFormat = fmt;
+				break;
+			}
 		}
-		if (m_TrianglePipelineLayout != VK_NULL_HANDLE) {
-			vkDestroyPipelineLayout(m_Device, m_TrianglePipelineLayout, nullptr);
-			m_TrianglePipelineLayout = VK_NULL_HANDLE;
+		if (m_DepthFormat == VK_FORMAT_UNDEFINED) {
+			NV_LOG_ERROR("VK_Swapchain: no supported depth format found");
+			return false;
 		}
+
+		// Create depth image
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageInfo.extent.width = m_SwapchainExtent.width;
+		imageInfo.extent.height = m_SwapchainExtent.height;
+		imageInfo.extent.depth = 1;
+		imageInfo.mipLevels = 1;
+		imageInfo.arrayLayers = 1;
+		imageInfo.format = m_DepthFormat;
+		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		CheckVkResult(vkCreateImage(m_Device, &imageInfo, nullptr, &m_DepthImage));
+
+		VkMemoryRequirements memReq;
+		vkGetImageMemoryRequirements(m_Device, m_DepthImage, &memReq);
+
+		// Find memory type
+		VkPhysicalDeviceMemoryProperties memProps;
+		vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProps);
+		uint32_t memTypeIndex = UINT32_MAX;
+		for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+			if ((memReq.memoryTypeBits & (1u << i)) &&
+				(memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+			{
+				memTypeIndex = i;
+				break;
+			}
+		}
+		if (memTypeIndex == UINT32_MAX) {
+			NV_LOG_ERROR("VK_Swapchain: no suitable memory for depth image");
+			return false;
+		}
+
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = memReq.size;
+		allocInfo.memoryTypeIndex = memTypeIndex;
+		CheckVkResult(vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_DepthImageMemory));
+		vkBindImageMemory(m_Device, m_DepthImage, m_DepthImageMemory, 0);
+
+		// Image view
+		VkImageViewCreateInfo viewInfo{};
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = m_DepthImage;
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		viewInfo.format = m_DepthFormat;
+		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.levelCount = 1;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.layerCount = 1;
+		CheckVkResult(vkCreateImageView(m_Device, &viewInfo, nullptr, &m_DepthImageView));
+
+		return true;
+	}
+
+	void VK_Swapchain::DestroyDepthResources() {
+		if (m_DepthImageView != VK_NULL_HANDLE) { vkDestroyImageView(m_Device, m_DepthImageView, nullptr); m_DepthImageView = VK_NULL_HANDLE; }
+		if (m_DepthImage != VK_NULL_HANDLE) { vkDestroyImage(m_Device, m_DepthImage, nullptr); m_DepthImage = VK_NULL_HANDLE; }
+		if (m_DepthImageMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_DepthImageMemory, nullptr); m_DepthImageMemory = VK_NULL_HANDLE; }
 	}
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

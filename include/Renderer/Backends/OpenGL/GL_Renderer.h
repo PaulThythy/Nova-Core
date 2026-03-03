@@ -35,10 +35,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     private:
         GLuint m_Program{ 0 };
 
-        GLint m_LocModel = 0;
-        GLint m_LocView  = 4;
-        GLint m_LocProj  = 8;
-        GLint m_LocMVP   = -1;
+        GLuint m_UBO_MVP = 0;
     };
 
 } // namespace Nova::Core::Renderer::Backends::OpenGL

@@ -2,7 +2,7 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    bool VK_ShaderModule::Create(VkDevice device, const std::vector<uint32_t>& spirv) {
+    bool VK_Shaders::Create(VkDevice device, const std::vector<uint32_t>& spirv) {
         Destroy();
 
         if (device == VK_NULL_HANDLE || spirv.empty())
@@ -24,7 +24,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return true;
     }
 
-    void VK_ShaderModule::Destroy() {
+    void VK_Shaders::Destroy() {
         if (m_Module != VK_NULL_HANDLE) {
             vkDestroyShaderModule(m_Device, m_Module, nullptr);
             m_Module = VK_NULL_HANDLE;

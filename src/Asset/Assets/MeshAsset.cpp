@@ -5,6 +5,7 @@
 
 #include "Renderer/Graphics/Mesh.h"
 #include "Renderer/Backends/OpenGL/GL_Mesh.h"
+#include "Renderer/Backends/Vulkan/VK_Mesh.h"
 
 namespace Nova::Core::Asset::Assets {
 
@@ -129,6 +130,12 @@ namespace Nova::Core::Asset::Assets {
             auto glMesh = std::make_shared<Renderer::Backends::OpenGL::GL_Mesh>(*m_CPUMesh);
             glMesh->Upload(*m_CPUMesh);
             m_GPUMesh = std::move(glMesh);
+            return true;
+        }
+        if (api == GraphicsAPI::Vulkan) {
+            auto vkMesh = std::make_shared<Renderer::Backends::Vulkan::VK_Mesh>(*m_CPUMesh);
+            //vkMesh->Upload(*m_CPUMesh); commented because to upload vulkan mesh, a vk device has to be created
+            m_GPUMesh = std::move(vkMesh);
             return true;
         }
 

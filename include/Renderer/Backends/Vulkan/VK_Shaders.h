@@ -6,16 +6,16 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    class VK_ShaderModule {
+    class VK_Shaders {
     public:
-        VK_ShaderModule() = default;
-        ~VK_ShaderModule() { Destroy(); }
+        VK_Shaders() = default;
+        ~VK_Shaders() { Destroy(); }
 
-        VK_ShaderModule(const VK_ShaderModule&) = delete;
-        VK_ShaderModule& operator=(const VK_ShaderModule&) = delete;
+        VK_Shaders(const VK_Shaders&) = delete;
+        VK_Shaders& operator=(const VK_Shaders&) = delete;
 
-        VK_ShaderModule(VK_ShaderModule&& other) noexcept { MoveFrom(other); }
-        VK_ShaderModule& operator=(VK_ShaderModule&& other) noexcept {
+        VK_Shaders(VK_Shaders&& other) noexcept { MoveFrom(other); }
+        VK_Shaders& operator=(VK_Shaders&& other) noexcept {
             if (this != &other) {
                 Destroy();
                 MoveFrom(other);
@@ -30,7 +30,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         bool IsValid() const { return m_Module != VK_NULL_HANDLE; }
 
     private:
-        void MoveFrom(VK_ShaderModule& other) noexcept {
+        void MoveFrom(VK_Shaders& other) noexcept {
             m_Device = other.m_Device;
             m_Module = other.m_Module;
             other.m_Device = VK_NULL_HANDLE;

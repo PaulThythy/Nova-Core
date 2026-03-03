@@ -117,6 +117,14 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             return false;
         }
 
+        glGenBuffers(1, &m_UBO_MVP);
+        glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::mat4) * 3, nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        // vulkan push constants emulated with UBOs layout(binding=0)
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
+
         m_Program = prog;
         NV_LOG_INFO("OpenGL Renderer created. Triangle program linked from SPIR-V.");
         return true;
@@ -126,6 +134,11 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         if (m_Program != 0) {
             glDeleteProgram(m_Program);
             m_Program = 0;
+        }
+
+        if (m_UBO_MVP != 0) {
+            glDeleteBuffers(1, &m_UBO_MVP);
+            m_UBO_MVP = 0;
         }
 
         glDisable(GL_DEPTH_TEST);
@@ -175,32 +188,32 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         glUseProgram(m_Program);
 
-        if (m_LocModel >= 0) glUniformMatrix4fv(m_LocModel, 1, GL_FALSE, glm::value_ptr(cmd.m_Model));
-        if (m_LocView  >= 0) glUniformMatrix4fv(m_LocView,  1, GL_FALSE, glm::value_ptr(cmd.m_View));
-        if (m_LocProj  >= 0) glUniformMatrix4fv(m_LocProj,  1, GL_FALSE, glm::value_ptr(cmd.m_Proj));
+        struct MVPBlock {
+            glm::mat4 model;
+            glm::mat4 view;
+            glm::mat4 proj;
+        } mvp{ cmd.m_Model, cmd.m_View, cmd.m_Proj };
+        // inverted projection matrix, due to clip space differences with vulkan
+        mvp.proj[1][1] *= -1.0f;
 
-        if (m_LocMVP >= 0) {
-            const glm::mat4 mvp = cmd.m_Proj * cmd.m_View * cmd.m_Model;
-            glUniformMatrix4fv(m_LocMVP, 1, GL_FALSE, glm::value_ptr(mvp));
-        }
+        glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(MVPBlock), &mvp);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
 
         glMesh->Bind();
 
         const GLenum mode = ToGLTopology(cmd.m_Topology);
-
         if (cmd.m_InstanceCount > 1) {
-            glDrawArraysInstanced(
-                mode,
+            glDrawArraysInstanced(mode,
                 static_cast<GLint>(cmd.m_FirstVertex),
                 static_cast<GLsizei>(cmd.m_VertexCount),
-                static_cast<GLsizei>(cmd.m_InstanceCount)
-            );
-        } else {
-            glDrawArrays(
-                mode,
+                static_cast<GLsizei>(cmd.m_InstanceCount));
+        }
+        else {
+            glDrawArrays(mode,
                 static_cast<GLint>(cmd.m_FirstVertex),
-                static_cast<GLsizei>(cmd.m_VertexCount)
-            );
+                static_cast<GLsizei>(cmd.m_VertexCount));
         }
 
         glMesh->Unbind();
@@ -217,59 +230,46 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         glUseProgram(m_Program);
 
-        if (m_LocModel >= 0) glUniformMatrix4fv(m_LocModel, 1, GL_FALSE, glm::value_ptr(cmd.m_Model));
-        if (m_LocView  >= 0) glUniformMatrix4fv(m_LocView,  1, GL_FALSE, glm::value_ptr(cmd.m_View));
-        if (m_LocProj  >= 0) glUniformMatrix4fv(m_LocProj,  1, GL_FALSE, glm::value_ptr(cmd.m_Proj));
+        // ---- Mise à jour du UBO MVP (binding 0) ----
+        struct MVPBlock {
+            glm::mat4 model;
+            glm::mat4 view;
+            glm::mat4 proj;
+        } mvp{ cmd.m_Model, cmd.m_View, cmd.m_Proj };
+        // inverted projection matrix, due to clip space differences with vulkan
+        mvp.proj[1][1] *= -1.0f;
 
-        if (m_LocMVP >= 0) {
-            const glm::mat4 mvp = cmd.m_Proj * cmd.m_View * cmd.m_Model;
-            glUniformMatrix4fv(m_LocMVP, 1, GL_FALSE, glm::value_ptr(mvp));
-        }
+        glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(MVPBlock), &mvp);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        // S'assurer que le UBO est toujours lié au binding 0
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
 
         glMesh->Bind();
 
         const GLenum mode = ToGLTopology(cmd.m_Topology);
         const GLenum glIndexType = ToGLIndexType(cmd.m_IndexType);
-
         const size_t offsetBytes = static_cast<size_t>(cmd.m_FirstIndex) * IndexTypeSize(cmd.m_IndexType);
-        const void* indexOffsetPtr = reinterpret_cast<const void*>(offsetBytes);
+        const void* indexOffset = reinterpret_cast<const void*>(offsetBytes);
 
-        // BaseVertex + instancing
         if (cmd.m_InstanceCount > 1) {
             if (cmd.m_VertexOffset != 0) {
-                glDrawElementsInstancedBaseVertex(
-                    mode,
-                    static_cast<GLsizei>(cmd.m_IndexCount),
-                    glIndexType,
-                    indexOffsetPtr,
-                    static_cast<GLsizei>(cmd.m_InstanceCount),
-                    cmd.m_VertexOffset
-                );
-            } else {
-                glDrawElementsInstanced(
-                    mode,
-                    static_cast<GLsizei>(cmd.m_IndexCount),
-                    glIndexType,
-                    indexOffsetPtr,
-                    static_cast<GLsizei>(cmd.m_InstanceCount)
-                );
+                glDrawElementsInstancedBaseVertex(mode, static_cast<GLsizei>(cmd.m_IndexCount),
+                    glIndexType, indexOffset, static_cast<GLsizei>(cmd.m_InstanceCount), cmd.m_VertexOffset);
             }
-        } else {
+            else {
+                glDrawElementsInstanced(mode, static_cast<GLsizei>(cmd.m_IndexCount),
+                    glIndexType, indexOffset, static_cast<GLsizei>(cmd.m_InstanceCount));
+            }
+        }
+        else {
             if (cmd.m_VertexOffset != 0) {
-                glDrawElementsBaseVertex(
-                    mode,
-                    static_cast<GLsizei>(cmd.m_IndexCount),
-                    glIndexType,
-                    indexOffsetPtr,
-                    cmd.m_VertexOffset
-                );
-            } else {
-                glDrawElements(
-                    mode,
-                    static_cast<GLsizei>(cmd.m_IndexCount),
-                    glIndexType,
-                    indexOffsetPtr
-                );
+                glDrawElementsBaseVertex(mode, static_cast<GLsizei>(cmd.m_IndexCount),
+                    glIndexType, indexOffset, cmd.m_VertexOffset);
+            }
+            else {
+                glDrawElements(mode, static_cast<GLsizei>(cmd.m_IndexCount), glIndexType, indexOffset);
             }
         }
 
