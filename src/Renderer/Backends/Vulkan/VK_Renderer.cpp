@@ -232,8 +232,54 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         s_FrameActive = true;
     }
 
-    void VK_Renderer::Render() {
-        /*empty*/
+    void VK_Renderer::Draw(const RHI::RHI_DrawCommand& cmd) {
+        if (!s_FrameActive) return;
+        if (!cmd.m_Mesh)    return;
+
+        // Get or upload the GPU mesh for this CPU mesh
+        auto vkMesh = GetOrUploadMesh(cmd.m_Mesh);
+        if (!vkMesh) return;
+
+        const uint32_t imageIndex = m_VKSwapchain.GetAcquiredImageIndex();
+        VkCommandBuffer vkCmd = m_VKSwapchain.GetCommandBuffers()[imageIndex];
+
+        // Bind graphics pipeline if available
+        if (m_VKSwapchain.GetModelPipeline() != VK_NULL_HANDLE) {
+            vkCmdBindPipeline(
+                vkCmd,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                m_VKSwapchain.GetModelPipeline()
+            );
+        }
+
+        // Push constants: model, view, proj
+        struct MVPPushConstants {
+            glm::mat4 model;
+            glm::mat4 view;
+            glm::mat4 proj;
+        } mvp{ cmd.m_Model, cmd.m_View, cmd.m_Proj };
+
+        vkCmdPushConstants(
+            vkCmd,
+            m_VKSwapchain.GetModelPipelineLayout(),
+            VK_SHADER_STAGE_VERTEX_BIT,
+            0,
+            sizeof(MVPPushConstants),
+            &mvp
+        );
+
+        // Bind vertex (and optionally index) buffers
+        vkMesh->SetCommandBuffer(vkCmd);
+        vkMesh->Bind();
+
+        // Non-indexed draw
+        vkCmdDraw(
+            vkCmd,
+            static_cast<uint32_t>(cmd.m_VertexCount),
+            static_cast<uint32_t>(cmd.m_InstanceCount),
+            static_cast<uint32_t>(cmd.m_FirstVertex),
+            static_cast<uint32_t>(cmd.m_FirstInstance)
+        );
     }
 
     void VK_Renderer::DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) {

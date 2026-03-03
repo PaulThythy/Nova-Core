@@ -21,7 +21,6 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         void Update(float dt) override;
 
         void BeginFrame() override;
-        void Render() override;
         void EndFrame() override;
 
         void Draw(const RHI::RHI_DrawCommand& cmd) override;

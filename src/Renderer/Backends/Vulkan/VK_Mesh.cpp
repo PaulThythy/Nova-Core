@@ -4,6 +4,10 @@
 
 #include "Core/Log.h"
 
+#include <cstdint>
+#include <cstring>
+#include <iostream>
+
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
     VK_Mesh::VK_Mesh(const Renderer::Graphics::Mesh& mesh) : Renderer::Graphics::Mesh(mesh.GetVertices(), mesh.GetIndices()) {}

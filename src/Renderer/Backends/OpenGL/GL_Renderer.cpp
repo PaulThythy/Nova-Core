@@ -164,14 +164,6 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
-    void GL_Renderer::Render() {
-        if (!m_Program) return;
-
-        glUseProgram(m_Program);
-
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-    }
-
     void GL_Renderer::EndFrame() {
         glBindVertexArray(0);
         glUseProgram(0);
@@ -230,7 +222,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         glUseProgram(m_Program);
 
-        // ---- Mise à jour du UBO MVP (binding 0) ----
+        // ---- Mise ï¿½ jour du UBO MVP (binding 0) ----
         struct MVPBlock {
             glm::mat4 model;
             glm::mat4 view;
@@ -243,7 +235,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(MVPBlock), &mvp);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        // S'assurer que le UBO est toujours lié au binding 0
+        // S'assurer que le UBO est toujours liï¿½ au binding 0
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
 
         glMesh->Bind();

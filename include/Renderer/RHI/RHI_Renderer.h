@@ -67,7 +67,6 @@ namespace Nova::Core::Renderer::RHI {
         virtual void Update(float dt) = 0;
 
         virtual void BeginFrame() = 0;
-        virtual void Render() = 0;
         virtual void EndFrame() = 0;
 
         virtual void Draw(const RHI_DrawCommand& cmd) = 0;

@@ -31,10 +31,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void Update(float dt) override;
 
         void BeginFrame() override;
-        void Render() override;
         void EndFrame() override;
 
-        void Draw(const RHI::RHI_DrawCommand& cmd) override {}
+        void Draw(const RHI::RHI_DrawCommand& cmd) override;
         void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;
 
     private:
