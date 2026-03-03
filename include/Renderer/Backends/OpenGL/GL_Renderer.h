@@ -26,15 +26,23 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         void Draw(const RHI::RHI_DrawCommand& cmd) override;
         void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;
 
-        GLuint GetProgram() const { return m_Program; }
+        // ImGui-compatible texture identifier for the viewport render target.
+        void* GetViewportTextureID() const override;
 
-        //TODO add framebuffer field
-
-        //TODO GetViewportTextureID()
+        GLuint GetProgram() const { return m_Program; } 
     private:
         GLuint m_Program{ 0 };
+        GLuint m_UBO_MVP{ 0 };
 
-        GLuint m_UBO_MVP = 0;
+        // Offscreen framebuffer used as viewport render target.
+        GLuint m_Framebuffer{ 0 };
+        GLuint m_ColorAttachment{ 0 };
+        GLuint m_DepthAttachment{ 0 };
+        int m_ViewportWidth{ 0 };
+        int m_ViewportHeight{ 0 };
+
+        bool CreateFramebuffer(int width, int height);
+        void DestroyFramebuffer();
     };
 
 } // namespace Nova::Core::Renderer::Backends::OpenGL

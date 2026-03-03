@@ -72,9 +72,11 @@ namespace Nova::Core::Renderer::RHI {
         virtual void Draw(const RHI_DrawCommand& cmd) = 0;
         virtual void DrawIndexed(const RHI_DrawIndexedCommand& cmd) = 0;
 
-        //TODO get framebuffer, swapchain, etc.
-
-        //TODO GetViewportTextureID()
+        // Returns an API-specific ImGui texture identifier for the current viewport
+        // render target, or nullptr if the renderer does not expose one.
+        // OpenGL: typically a GLuint cast to ImTextureID.
+        // Vulkan: typically a VkDescriptorSet cast to ImTextureID.
+        virtual void* GetViewportTextureID() const = 0;
     };
 
 } // namespace Nova::Core::Renderer::RHI

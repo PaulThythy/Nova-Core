@@ -36,6 +36,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void Draw(const RHI::RHI_DrawCommand& cmd) override;
         void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;
 
+        // For now, the Vulkan backend does not expose a dedicated viewport texture.
+        // The scene is rendered directly into the swapchain. Returning nullptr here
+        // tells the client not to attempt ImGui::Image with a Vulkan texture yet.
+        void* GetViewportTextureID() const override { return nullptr; }
+
     private:
         // Core Vulkan objects (wrappers)
         VK_Instance m_VKInstance;

@@ -5,6 +5,7 @@
 #include <glad/gl.h>
 #include <filesystem>
 #include <string>
+#include <cstdint>
 #include <glm/gtc/type_ptr.hpp>
 
 #include "Asset/AssetManager.h"
@@ -126,6 +127,11 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
 
         m_Program = prog;
+
+        // Defer framebuffer creation to the first Resize() call from the client.
+        m_ViewportWidth = 0;
+        m_ViewportHeight = 0;
+
         NV_LOG_INFO("OpenGL Renderer created. Triangle program linked from SPIR-V.");
         return true;
     }
@@ -141,6 +147,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             m_UBO_MVP = 0;
         }
 
+        DestroyFramebuffer();
+
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_BLEND);
         glDisable(GL_CULL_FACE);
@@ -150,7 +158,18 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
     bool GL_Renderer::Resize(int w, int h) {
         if (w <= 0 || h <= 0) return false;
-        glViewport(0, 0, w, h);
+
+        if (w == m_ViewportWidth && h == m_ViewportHeight && m_Framebuffer != 0)
+            return true;
+
+        DestroyFramebuffer();
+        if (!CreateFramebuffer(w, h)) {
+            NV_LOG_ERROR("GL_Renderer::Resize - failed to create framebuffer.");
+            return false;
+        }
+
+        m_ViewportWidth = w;
+        m_ViewportHeight = h;
         return true;
     }
 
@@ -159,7 +178,14 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     }
 
     void GL_Renderer::BeginFrame() {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        // If no offscreen framebuffer is available yet, fall back to the default framebuffer.
+        if (m_Framebuffer != 0) {
+            glBindFramebuffer(GL_FRAMEBUFFER, m_Framebuffer);
+            glViewport(0, 0, m_ViewportWidth, m_ViewportHeight);
+        } else {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
@@ -209,6 +235,66 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         }
 
         glMesh->Unbind();
+
+        // Return to default framebuffer so ImGui can render its own draw data.
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    bool GL_Renderer::CreateFramebuffer(int width, int height) {
+        if (width <= 0 || height <= 0)
+            return false;
+
+        glGenFramebuffers(1, &m_Framebuffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_Framebuffer);
+
+        // Color texture
+        glGenTextures(1, &m_ColorAttachment);
+        glBindTexture(GL_TEXTURE_2D, m_ColorAttachment);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_ColorAttachment, 0);
+
+        // Depth-stencil renderbuffer
+        glGenRenderbuffers(1, &m_DepthAttachment);
+        glBindRenderbuffer(GL_RENDERBUFFER, m_DepthAttachment);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_DepthAttachment);
+
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            NV_LOG_ERROR("GL_Renderer::CreateFramebuffer - framebuffer is incomplete.");
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            DestroyFramebuffer();
+            return false;
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return true;
+    }
+
+    void GL_Renderer::DestroyFramebuffer() {
+        if (m_DepthAttachment != 0) {
+            glDeleteRenderbuffers(1, &m_DepthAttachment);
+            m_DepthAttachment = 0;
+        }
+        if (m_ColorAttachment != 0) {
+            glDeleteTextures(1, &m_ColorAttachment);
+            m_ColorAttachment = 0;
+        }
+        if (m_Framebuffer != 0) {
+            glDeleteFramebuffers(1, &m_Framebuffer);
+            m_Framebuffer = 0;
+        }
+    }
+
+    void* GL_Renderer::GetViewportTextureID() const {
+        if (m_ColorAttachment == 0) {
+            NV_LOG_ERROR("GL_Renderer::GetViewportTextureID - color attachment is not set");
+            return nullptr;
+        }
+        return reinterpret_cast<void*>(static_cast<intptr_t>(m_ColorAttachment));
     }
 
     void GL_Renderer::DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) {
@@ -222,7 +308,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         glUseProgram(m_Program);
 
-        // ---- Mise � jour du UBO MVP (binding 0) ----
+        // ---- Update MVP (binding 0) ----
         struct MVPBlock {
             glm::mat4 model;
             glm::mat4 view;
@@ -266,6 +352,9 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         }
 
         glMesh->Unbind();
+
+        // Return to default framebuffer so ImGui can render its own draw data.
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
 } // namespace Nova::Core::Renderer::Backends::OpenGL

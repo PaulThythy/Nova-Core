@@ -18,10 +18,12 @@ namespace Nova::Core::Renderer::RHI {
             renderer = std::make_unique<Backends::Vulkan::VK_Renderer>();
             break;
         default:
+            NV_LOG_ERROR("IRenderer::Create - unsupported graphics API");
             return nullptr;
         }
 
         if (!renderer->Create()) {
+            NV_LOG_ERROR("IRenderer::Create - backend Create() failed");
             return nullptr;
         }
 
