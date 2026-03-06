@@ -170,6 +170,15 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         m_ViewportWidth = w;
         m_ViewportHeight = h;
+
+        // The viewport texture may be displayed in ImGui before the next BeginFrame().
+        // Clear it here so the user never sees undefined texture contents while resizing.
+        glBindFramebuffer(GL_FRAMEBUFFER, m_Framebuffer);
+        glViewport(0, 0, m_ViewportWidth, m_ViewportHeight);
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
         return true;
     }
 
@@ -290,10 +299,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     }
 
     void* GL_Renderer::GetViewportTextureID() const {
-        if (m_ColorAttachment == 0) {
-            NV_LOG_ERROR("GL_Renderer::GetViewportTextureID - color attachment is not set");
-            return nullptr;
-        }
+        if (m_ColorAttachment == 0) return nullptr;
         return reinterpret_cast<void*>(static_cast<intptr_t>(m_ColorAttachment));
     }
 
