@@ -151,7 +151,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		CreateModelPipeline(); // optional
 
 		if (!CreateViewportRenderPass())      return false;
-		CreateViewportPipeline();
 
 		if (!CreateImGuiDescriptorPool())     return false;
 
@@ -166,7 +165,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		vkDeviceWaitIdle(m_Device);
 
 		DestroyModelPipeline();
-		DestroyViewportPipelineAndPass();
+		DestroyViewportRenderPass();
 
 		DestroyDepthResources();
 
@@ -467,138 +466,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		return (res == VK_SUCCESS);
 	}
 
-	void VK_Swapchain::CreateViewportPipeline() {
-		if (m_ViewportPipeline != VK_NULL_HANDLE || m_ViewportRenderPass == VK_NULL_HANDLE || m_ModelPipelineLayout == VK_NULL_HANDLE)
-			return;
-
-		std::filesystem::path shaderDir = std::filesystem::current_path()
-			/ "Nova-Core" / "Resources" / "Engine" / "Shaders";
-
-		using Nova::Core::Asset::AssetManager;
-		using Nova::Core::Asset::Assets::ShaderAsset;
-		using Nova::Core::Renderer::RHI::RHI_ShaderStage;
-
-		Nova::Core::Renderer::RHI::RHI_ShaderDesc vDesc{};
-		vDesc.m_Stage = RHI_ShaderStage::Vertex;
-		vDesc.m_GlslVersion = 450;
-		Nova::Core::Renderer::RHI::RHI_ShaderDesc fDesc{};
-		fDesc.m_Stage = RHI_ShaderStage::Fragment;
-		fDesc.m_GlslVersion = 450;
-
-		auto vertAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "model.vert", vDesc);
-		auto fragAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "model.frag", fDesc);
-
-		if (!vertAsset || !fragAsset) { NV_LOG_WARN("CreateViewportPipeline: failed to acquire shaders"); return; }
-		if (!vertAsset->Compile()) { NV_LOG_WARN(("Viewport VS compile failed:\n" + vertAsset->GetLastLog()).c_str()); return; }
-		if (!fragAsset->Compile()) { NV_LOG_WARN(("Viewport FS compile failed:\n" + fragAsset->GetLastLog()).c_str()); return; }
-
-		VK_Shaders vertModule, fragModule;
-		if (!vertModule.Create(m_Device, vertAsset->GetSpirv()) ||
-			!fragModule.Create(m_Device, fragAsset->GetSpirv()))
-		{
-			NV_LOG_WARN("CreateViewportPipeline: failed to create shader modules");
-			return;
-		}
-
-		VkPipelineShaderStageCreateInfo stages[2]{};
-		stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-		stages[0].module = vertModule.GetModule();
-		stages[0].pName = "main";
-		stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-		stages[1].module = fragModule.GetModule();
-		stages[1].pName = "main";
-
-		VkVertexInputBindingDescription binding{};
-		binding.binding = 0;
-		binding.stride = sizeof(Renderer::Graphics::Vertex);
-		binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-		std::array<VkVertexInputAttributeDescription, 6> attrs{};
-		attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Position) };
-		attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Normal) };
-		attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(Renderer::Graphics::Vertex, m_TexCoord) };
-		attrs[3] = { 3, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Color) };
-		attrs[4] = { 4, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Tangent) };
-		attrs[5] = { 5, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Bitangent) };
-
-		VkPipelineVertexInputStateCreateInfo vertexInput{};
-		vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		vertexInput.vertexBindingDescriptionCount = 1;
-		vertexInput.pVertexBindingDescriptions = &binding;
-		vertexInput.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrs.size());
-		vertexInput.pVertexAttributeDescriptions = attrs.data();
-
-		VkPipelineInputAssemblyStateCreateInfo inputAsm{};
-		inputAsm.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-		inputAsm.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-		VkPipelineViewportStateCreateInfo viewportState{};
-		viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-		viewportState.viewportCount = 1;
-		viewportState.scissorCount = 1;
-
-		VkPipelineRasterizationStateCreateInfo raster{};
-		raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-		raster.polygonMode = VK_POLYGON_MODE_FILL;
-		raster.cullMode = VK_CULL_MODE_BACK_BIT;
-		raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-		raster.lineWidth = 1.0f;
-
-		VkPipelineMultisampleStateCreateInfo msaa{};
-		msaa.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-		msaa.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-		VkPipelineDepthStencilStateCreateInfo depthStencil{};
-		depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-		depthStencil.depthTestEnable = VK_TRUE;
-		depthStencil.depthWriteEnable = VK_TRUE;
-		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-
-		VkPipelineColorBlendAttachmentState blendAttachment{};
-		blendAttachment.colorWriteMask =
-			VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-			VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-
-		VkPipelineColorBlendStateCreateInfo blend{};
-		blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-		blend.attachmentCount = 1;
-		blend.pAttachments = &blendAttachment;
-
-		VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-		VkPipelineDynamicStateCreateInfo dynamic{};
-		dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-		dynamic.dynamicStateCount = 2;
-		dynamic.pDynamicStates = dynamicStates;
-
-		VkGraphicsPipelineCreateInfo pipe{};
-		pipe.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-		pipe.stageCount = 2;
-		pipe.pStages = stages;
-		pipe.pVertexInputState = &vertexInput;
-		pipe.pInputAssemblyState = &inputAsm;
-		pipe.pViewportState = &viewportState;
-		pipe.pRasterizationState = &raster;
-		pipe.pMultisampleState = &msaa;
-		pipe.pDepthStencilState = &depthStencil;
-		pipe.pColorBlendState = &blend;
-		pipe.pDynamicState = &dynamic;
-		pipe.layout = m_ModelPipelineLayout;
-		pipe.renderPass = m_ViewportRenderPass;
-		pipe.subpass = 0;
-
-		VkResult res = vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipe, nullptr, &m_ViewportPipeline);
-		CheckVkResult(res);
-		if (res == VK_SUCCESS) NV_LOG_INFO("Viewport pipeline created.");
-		else NV_LOG_WARN("CreateViewportPipeline: pipeline creation failed.");
-	}
-
-	void VK_Swapchain::DestroyViewportPipelineAndPass() {
-		if (m_ViewportPipeline != VK_NULL_HANDLE) {
-			vkDestroyPipeline(m_Device, m_ViewportPipeline, nullptr);
-			m_ViewportPipeline = VK_NULL_HANDLE;
-		}
+	void VK_Swapchain::DestroyViewportRenderPass() {
 		if (m_ViewportRenderPass != VK_NULL_HANDLE) {
 			vkDestroyRenderPass(m_Device, m_ViewportRenderPass, nullptr);
 			m_ViewportRenderPass = VK_NULL_HANDLE;
@@ -888,7 +756,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		dynamic.dynamicStateCount = 2;
 		dynamic.pDynamicStates = dynamicStates;
 
-		// ---- Push constants: MVP matrices (3 ù mat4 = 192 bytes) ----
+		// ---- Push constants: MVP matrices (3 ? mat4 = 192 bytes) ----
 		VkPushConstantRange pushRange{};
 		pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 		pushRange.offset = 0;

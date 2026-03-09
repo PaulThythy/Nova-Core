@@ -70,9 +70,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPipeline& GetModelPipeline() { return m_ModelPipeline; }
 		VkPipelineLayout& GetModelPipelineLayout() { return m_ModelPipelineLayout; }
 
-		// Viewport offscreen: same as back buffer but color finalLayout = SHADER_READ_ONLY for ImGui
+		// Viewport offscreen: render pass only (same pipeline as main window = model pipeline)
 		VkRenderPass GetViewportRenderPass() const { return m_ViewportRenderPass; }
-		VkPipeline GetViewportPipeline() const { return m_ViewportPipeline; }
 		VkFormat GetSwapchainImageFormat() const { return m_SwapchainImageFormat; }
 		VkFormat GetDepthFormat() const { return m_DepthFormat; }
 
@@ -106,8 +105,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		void CreateModelPipeline();
 		void DestroyModelPipeline();
 		bool CreateViewportRenderPass();
-		void CreateViewportPipeline();
-		void DestroyViewportPipelineAndPass();
+		void DestroyViewportRenderPass();
 		bool CreateDepthResources();
 		void DestroyDepthResources();
 
@@ -148,9 +146,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPipeline       m_ModelPipeline = VK_NULL_HANDLE;
 		VkPipelineLayout m_ModelPipelineLayout = VK_NULL_HANDLE;
 
-		// Viewport offscreen render pass & pipeline (color finalLayout = SHADER_READ_ONLY)
+		// Viewport offscreen render pass only (color finalLayout = SHADER_READ_ONLY for ImGui)
 		VkRenderPass m_ViewportRenderPass = VK_NULL_HANDLE;
-		VkPipeline   m_ViewportPipeline = VK_NULL_HANDLE;
 
 		// Depth buffer
 		VkImage        m_DepthImage = VK_NULL_HANDLE;

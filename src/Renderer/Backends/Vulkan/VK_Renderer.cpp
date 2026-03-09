@@ -258,8 +258,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             scissor.extent = { static_cast<uint32_t>(m_ViewportWidth), static_cast<uint32_t>(m_ViewportHeight) };
             vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-            if (m_VKSwapchain.GetViewportPipeline() != VK_NULL_HANDLE)
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VKSwapchain.GetViewportPipeline());
+            if (m_VKSwapchain.GetModelPipeline() != VK_NULL_HANDLE)
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VKSwapchain.GetModelPipeline());
 
             m_RenderedToViewportThisFrame = true;
         } else {
@@ -309,8 +309,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const uint32_t imageIndex = m_VKSwapchain.GetAcquiredImageIndex();
         VkCommandBuffer vkCmd = m_VKSwapchain.GetCommandBuffers()[imageIndex];
 
-        // Bind graphics pipeline (viewport or swapchain)
-        VkPipeline pipeline = m_RenderedToViewportThisFrame ? m_VKSwapchain.GetViewportPipeline() : m_VKSwapchain.GetModelPipeline();
+        // Bind graphics pipeline (same pipeline for window and viewport)
+        VkPipeline pipeline = m_VKSwapchain.GetModelPipeline();
         if (pipeline != VK_NULL_HANDLE) {
             vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         }
@@ -355,8 +355,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkCommandBuffer vkCmd = m_VKSwapchain.GetCommandBuffers()[m_VKSwapchain.GetAcquiredImageIndex()];
 
-        // Bind pipeline (viewport or swapchain)
-        VkPipeline pipeline = m_RenderedToViewportThisFrame ? m_VKSwapchain.GetViewportPipeline() : m_VKSwapchain.GetModelPipeline();
+        // Bind pipeline (same pipeline for window and viewport)
+        VkPipeline pipeline = m_VKSwapchain.GetModelPipeline();
         if (pipeline != VK_NULL_HANDLE)
             vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
