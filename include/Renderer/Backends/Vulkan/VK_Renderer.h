@@ -71,6 +71,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkDescriptorSet m_ViewportDescriptorSet = VK_NULL_HANDLE;
         bool m_RenderedToViewportThisFrame = false;
         bool m_ViewportImageFirstUse = true; // true until first viewport pass (image in UNDEFINED)
+        bool m_FrameActive = false;
 	};
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

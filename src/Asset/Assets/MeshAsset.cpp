@@ -134,7 +134,7 @@ namespace Nova::Core::Asset::Assets {
         }
         if (api == GraphicsAPI::Vulkan) {
             auto vkMesh = std::make_shared<Renderer::Backends::Vulkan::VK_Mesh>(*m_CPUMesh);
-            //vkMesh->Upload(*m_CPUMesh); commented because to upload vulkan mesh, a vk device has to be created
+            // vkMesh->Upload(*m_CPUMesh); deferred because Vulkan mesh upload requires a live device.
             m_GPUMesh = std::move(vkMesh);
             return true;
         }

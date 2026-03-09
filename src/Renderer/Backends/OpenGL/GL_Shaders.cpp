@@ -32,7 +32,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         GLuint sh = glCreateShader(stage);
 
-        // L'enum est g�n�ralement ARB m�me en 4.6
+        // The enum usually comes from ARB even on OpenGL 4.6.
 #ifndef GL_SHADER_BINARY_FORMAT_SPIR_V_ARB
 #define GL_SHADER_BINARY_FORMAT_SPIR_V_ARB 0x9551
 #endif
@@ -42,10 +42,10 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             spirv.data(),
             (GLsizei)(spirv.size() * sizeof(uint32_t)));
 
-        // Sp�cialisation : core 4.6 OU ARB
+        // Shader specialization can come from core 4.6 or the ARB extension.
         bool specialized = false;
 
-        // Si ton GLAD est g�n�r� avec 4.6, cette variable + ce symbole existent.
+        // If GLAD was generated with 4.6 support, this variable and symbol exist.
 #ifdef GL_VERSION_4_6
         if (GLAD_GL_VERSION_4_6 && glad_glSpecializeShader) {
             glad_glSpecializeShader(sh, entryPoint, 0, nullptr, nullptr);
@@ -53,7 +53,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         }
 #endif
 
-        // Si ton GLAD est g�n�r� avec GL_ARB_gl_spirv, ceux-ci existent.
+        // If GLAD was generated with GL_ARB_gl_spirv support, these symbols exist.
 #ifdef GL_ARB_gl_spirv
         if (!specialized && GLAD_GL_ARB_gl_spirv && glad_glSpecializeShaderARB) {
             glad_glSpecializeShaderARB(sh, entryPoint, 0, nullptr, nullptr);

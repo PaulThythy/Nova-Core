@@ -14,10 +14,10 @@ namespace Nova::Core::Asset::Assets {
 
         bool Compile();
 
-        // Force recompilation (utile reload)
+        // Force recompilation, useful for hot reload workflows.
         bool Recompile();
 
-        // Accessors (après compile)
+        // Accessors populated after compilation.
         const std::vector<uint32_t>& GetSpirv() const;
         const std::string& GetGlsl() const;
         const std::string& GetLastLog() const { return m_LastLog; }

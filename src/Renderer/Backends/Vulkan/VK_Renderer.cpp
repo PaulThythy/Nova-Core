@@ -20,10 +20,6 @@
 #include <vector>
 #include <filesystem>
 
-// Tracks whether BeginFrame successfully started recording this frame.
-// This protects you from calling Render()/EndFrame() when BeginFrame early-returned.
-static bool s_FrameActive = false;
-
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
     bool VK_Renderer::Create() {
@@ -91,7 +87,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // Start with "no command buffer" until BeginFrame successfully starts recording.
         imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
 
-        s_FrameActive = false;
+        m_FrameActive = false;
 
         NV_LOG_INFO("Vulkan renderer created successfully (minimal mode).");
         return true;
@@ -117,7 +113,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_VKDevice.Destroy();
         m_VKInstance.Destroy();
 
-        s_FrameActive = false;
+        m_FrameActive = false;
 
         NV_LOG_INFO("Vulkan renderer destroyed.");
     }
@@ -143,9 +139,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::BeginFrame() {
-        s_FrameActive = false;
+        m_FrameActive = false;
 
-        // ImGui safe default (ne pas laisser ImGui �crire dans un cmd buffer invalide)
+        // Safe ImGui default: never let ImGui write into an invalid command buffer.
         {
             auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
             imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
@@ -155,7 +151,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED)
             return;
 
-        // Recreate swapchain si demand� AVANT acquire
+        // Recreate the swapchain if requested before acquiring an image.
         if (m_FramebufferResized) {
             m_FramebufferResized = false;
             if (!m_VKSwapchain.RecreateSwapchain())
@@ -166,10 +162,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const uint32_t frameIndex = m_VKSwapchain.GetCurrentFrame();
         auto& fs = m_VKSwapchain.GetFrameSync()[frameIndex];
 
-        // Attendre que la frame-in-flight soit libre
+        // Wait until the current frame-in-flight is available.
         CheckVkResult(vkWaitForFences(m_VKDevice.GetDevice(), 1, &fs.m_InFlightFence, VK_TRUE, UINT64_MAX));
 
-        // Acquire image (renvoie un index d'image swapchain)
+        // Acquire a swapchain image and retrieve its image index.
         uint32_t imageIndex = 0;
         VkResult acquireRes = vkAcquireNextImageKHR(
             m_VKDevice.GetDevice(),
@@ -189,18 +185,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return;
         }
 
-        // Stocker l�index d�image acquise dans la swapchain (plus besoin dans VK_Renderer)
+        // Store the acquired image index in the swapchain state.
         m_VKSwapchain.SetAcquiredImageIndex(imageIndex);
 
-        // Attendre si cette image swapchain est d�j� utilis�e par une frame pr�c�dente
+        // Wait if that swapchain image is still used by an older frame.
         auto& imagesInFlight = m_VKSwapchain.GetImagesInFlight();
         if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
             CheckVkResult(vkWaitForFences(m_VKDevice.GetDevice(), 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX));
         }
-        // Marquer cette image comme "in flight" via la fence de la frame courante
+        // Mark that image as in flight through the current frame fence.
         imagesInFlight[imageIndex] = fs.m_InFlightFence;
 
-        // IMPORTANT: cmd buffer index� par IMAGE (pas par frame-in-flight)
+        // IMPORTANT: command buffers are indexed by swapchain image, not by frame-in-flight.
         VkCommandBuffer cmd = m_VKSwapchain.GetCommandBuffers()[imageIndex];
         CheckVkResult(vkResetCommandBuffer(cmd, 0));
 
@@ -293,17 +289,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             vkCmdSetScissor(cmd, 0, 1, &scissor);
         }
 
-        // ImGui enregistre dans le cmd buffer de CETTE image
+        // ImGui records into the command buffer of this acquired image.
         {
             auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
             imguiLayer.SetVulkanCommandBuffer(cmd);
         }
 
-        s_FrameActive = true;
+        m_FrameActive = true;
     }
 
     void VK_Renderer::Draw(const RHI::RHI_DrawCommand& cmd) {
-        if (!s_FrameActive) return;
+        if (!m_FrameActive) return;
         if (!cmd.m_Mesh)    return;
 
         // Get or upload the GPU mesh for this CPU mesh
@@ -351,7 +347,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) {
-        if (!s_FrameActive) return;
+        if (!m_FrameActive) return;
         if (!cmd.m_Mesh)    return;
 
         auto vkMesh = GetOrUploadMesh(cmd.m_Mesh);
@@ -380,13 +376,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         vkMesh->SetCommandBuffer(vkCmd);
         vkMesh->Bind();
 
+        if (cmd.m_IndexType != RHI::RHI_IndexType::UInt32) {
+            NV_LOG_WARN("VK_Renderer::DrawIndexed currently supports only UInt32 index buffers.");
+            return;
+        }
+
         // Draw
         vkCmdDrawIndexed(vkCmd,
             static_cast<uint32_t>(cmd.m_IndexCount),
-            1,
+            static_cast<uint32_t>(cmd.m_InstanceCount),
             static_cast<uint32_t>(cmd.m_FirstIndex),
             cmd.m_VertexOffset,
-            0);
+            static_cast<uint32_t>(cmd.m_FirstInstance));
     }
 
     std::shared_ptr<VK_Mesh> VK_Renderer::GetOrUploadMesh(
@@ -400,12 +401,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         vkMesh->Init(
             m_VKDevice.GetDevice(),
             m_VKDevice.GetPhysicalDevice(),
-            m_VKSwapchain.GetCommandPool(), // on vole temporairement le command pool
+            m_VKSwapchain.GetCommandPool(), // temporarily reuse the renderer command pool
             m_VKDevice.GetGraphicsQueue()
         );
 
-        // IMPORTANT : Init() a besoin du command pool, pas d'un command buffer.
-        // On doit passer le command pool directement - voir note ci-dessous.
+        // IMPORTANT: Init() needs the command pool, not a command buffer.
         vkMesh->Upload(*cpuMesh);
 
         m_MeshCache[cpuMesh.get()] = vkMesh;
@@ -597,7 +597,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::PrepareForImGui() {
-        if (!s_FrameActive || !m_RenderedToViewportThisFrame)
+        if (!m_FrameActive || !m_RenderedToViewportThisFrame)
             return;
 
         const uint32_t imageIndex = m_VKSwapchain.GetAcquiredImageIndex();
@@ -644,10 +644,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::EndFrame() {
-        if (!s_FrameActive)
+        if (!m_FrameActive)
             return;
 
-        // Empêcher ImGui d'écrire après la fermeture du cmd buffer
+        // Prevent ImGui from writing after the command buffer has been closed.
         {
             auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
             imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
@@ -663,10 +663,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         vkCmdEndRenderPass(cmd);
         CheckVkResult(vkEndCommandBuffer(cmd));
 
-        // Reset fence juste avant submit (pattern safe)
+        // Reset the fence right before queue submission.
         CheckVkResult(vkResetFences(m_VKDevice.GetDevice(), 1, &fs.m_InFlightFence));
 
-        VkSemaphore waitSemaphores[] = { fs.m_ImageAvailableSemaphore };   // celle du acquire de cette frame
+        VkSemaphore waitSemaphores[] = { fs.m_ImageAvailableSemaphore };   // signaled by this frame's acquire
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         VkSemaphore renderFinishedSemaphore = m_VKSwapchain.GetRenderFinishedSemaphore(imageIndex);
         VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };
@@ -701,7 +701,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             NV_LOG_ERROR("vkQueuePresentKHR failed");
         }
 
-        s_FrameActive = false;
+        m_FrameActive = false;
 
         // next frame-in-flight
         m_VKSwapchain.AdvanceFrame();

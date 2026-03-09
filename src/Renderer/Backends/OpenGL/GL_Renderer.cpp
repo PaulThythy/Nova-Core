@@ -123,7 +123,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::mat4) * 3, nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        // vulkan push constants emulated with UBOs layout(binding=0)
+        // Emulate Vulkan push constants with a UBO bound at binding 0.
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
 
         m_Program = prog;
@@ -220,7 +220,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             glm::mat4 view;
             glm::mat4 proj;
         } mvp{ cmd.m_Model, cmd.m_View, cmd.m_Proj };
-        // inverted projection matrix, due to clip space differences with vulkan
+        // Flip the projection matrix to match Vulkan clip-space conventions.
         mvp.proj[1][1] *= -1.0f;
 
         glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
@@ -327,7 +327,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(MVPBlock), &mvp);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        // S'assurer que le UBO est toujours li� au binding 0
+        // Ensure the UBO stays bound to binding 0.
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
 
         glMesh->Bind();

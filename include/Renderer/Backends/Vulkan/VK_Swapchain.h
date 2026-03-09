@@ -18,7 +18,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		static constexpr uint32_t FRAMES_IN_FLIGHT = 3;
 
-		// Create() doit recevoir ce dont la swapchain a besoin
+		// Create() should receive every dependency required by the swapchain.
 		bool Create(VkPhysicalDevice physicalDevice,
 			VkDevice device,
 			VkSurfaceKHR surface,
@@ -63,7 +63,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		uint32_t GetCurrentFrame() { return m_CurrentFrame; }
 		void AdvanceFrame() { m_CurrentFrame = (m_CurrentFrame + 1) % FRAMES_IN_FLIGHT; }
 
-		// swapchain image aquired
+		// Currently acquired swapchain image
 		void SetAcquiredImageIndex(uint32_t idx) { m_AquiredImage = idx; }
 		uint32_t GetAcquiredImageIndex() const { return m_AquiredImage; }
 
@@ -120,7 +120,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 		VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 
-		// Vulkan handles n�cessaires
+		// Required Vulkan handles
 		VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
 		VkDevice         m_Device = VK_NULL_HANDLE;
 		VkSurfaceKHR     m_Surface = VK_NULL_HANDLE;
@@ -162,7 +162,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkCommandPool   m_CommandPool = VK_NULL_HANDLE;
 		std::vector<VkCommandBuffer>  m_CommandBuffers;
 
-		// Frames in flight : 3
+		// Frames in flight: 3
 		std::array<VK_FrameSync, FRAMES_IN_FLIGHT> m_FrameSync{};
 
 		// Render finished semaphore per swapchain image (indexed by acquired image)

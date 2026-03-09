@@ -14,10 +14,10 @@ namespace Nova::Core::Asset::Assets {
         m_Desc(std::move(desc)),
         m_Options(std::move(options))
     {
-        // Le filepath vient de Asset::m_Path => on l’impose ici
+        // The shader file path comes from Asset::m_Path, so keep it as the source of truth here.
         m_Desc.m_FilePath = m_Path;
 
-        // Déduire le stage si besoin
+        // Infer the shader stage when it was not provided explicitly.
         if (m_Desc.m_Stage == RHI::RHI_ShaderStage::Unknown) {
             m_Desc.m_Stage = RHI::ShaderStageFromFileExtension(m_Path);
         }
@@ -74,7 +74,7 @@ namespace Nova::Core::Asset::Assets {
         RHI::RHI_ShaderDesc shaderDesc = m_Desc;
         shaderDesc.m_FilePath = m_Path;
 
-        // --- Defines "plateforme" minimalistes ---
+        // --- Minimal platform-specific defines ---
         if (api == GraphicsAPI::Vulkan) {
             opts.m_Definitions.emplace_back("gl_VertexID", "gl_VertexIndex");
             opts.m_Definitions.emplace_back("NOVA_VULKAN", "1");
@@ -94,15 +94,15 @@ namespace Nova::Core::Asset::Assets {
             return false;
         }
 
-        // On stocke TOUJOURS le SPIR-V (désormais commun aux 2 backends)
+        // Always store the generated SPIR-V, which is now shared by both backends.
         if (api == GraphicsAPI::Vulkan) {
             m_SpirvVulkan = std::move(out.m_Spirv);
-            m_GlslVulkan = std::move(out.m_Glsl); // debug éventuel
+            m_GlslVulkan = std::move(out.m_Glsl); // useful for debugging
             m_CompiledVulkan = true;
         }
         else {
             m_SpirvOpenGL = std::move(out.m_Spirv);
-            m_GlslOpenGL = std::move(out.m_Glsl); // debug éventuel
+            m_GlslOpenGL = std::move(out.m_Glsl); // useful for debugging
             m_CompiledOpenGL = true;
         }
 

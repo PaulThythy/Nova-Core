@@ -44,8 +44,8 @@ namespace Nova::Core::Asset {
                     if (casted) {
                         return AssetHandle<T>(std::move(casted));
                     }
-                    // Même chemin mais type différent => c'est une erreur de design/usage
-                    // (tu peux assert ici)
+                    // Same path but different asset type: this indicates an API usage error.
+                    // Consider asserting here in debug builds.
                     return AssetHandle<T>();
                 }
             }
@@ -63,7 +63,7 @@ namespace Nova::Core::Asset {
         template <typename T>
         bool Reload(const AssetHandle<T>& handle) {
             if (!handle) return false;
-            return handle->Reload(); // si tu ajoutes Reload() virtuel sur Asset
+            return handle->Reload(); // assumes Asset exposes a virtual Reload()
         }
 
         //TODO acquire resources by UUID
@@ -78,12 +78,12 @@ namespace Nova::Core::Asset {
             auto abs = std::filesystem::absolute(p, ec);
             if (ec) abs = p;
 
-            // lexically_normal ne touche pas au FS => pas d'échec si fichier absent
+            // lexically_normal does not touch the filesystem, so it still works for missing files.
             return abs.lexically_normal();
         }
 
         static std::string PathKey(const std::filesystem::path& p) {
-            // Sur Windows, tu peux vouloir case-insensitive
+            // On Windows, you may want this key to be case-insensitive.
             std::string s = p.generic_string();
 #if defined(_WIN32)
             std::transform(s.begin(), s.end(), s.begin(),

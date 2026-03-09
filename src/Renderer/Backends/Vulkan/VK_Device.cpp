@@ -143,7 +143,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
-        // Petit helper local: choisir les queues “best effort”
+        // Small local helper: pick queue families with a best-effort strategy.
         struct SelectedQueues {
             uint32_t graphics = UINT32_MAX;
             uint32_t present = UINT32_MAX;

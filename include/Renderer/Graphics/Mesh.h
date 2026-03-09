@@ -26,7 +26,7 @@ namespace Nova::Core::Renderer::Graphics {
 		virtual void Draw()   const;
 		virtual void Unbind() const;
 
-		//primitives
+		// Primitive factories
 		static std::shared_ptr<Mesh> CreatePlane();
 		static std::shared_ptr<Mesh> CreateCube(float halfExtent = 0.5f);
 		static std::shared_ptr<Mesh> CreateSphere(float radius = 0.5f, int latitudeSegments = 16, int longitudeSegments = 32);

@@ -17,7 +17,7 @@ namespace Nova::Core::Asset {
         Script
     };
 
-    //TODO add:
+    // TODO: add:
     /*
     enum class AssetState { Unloaded, Loading, Ready, Failed };
     */
