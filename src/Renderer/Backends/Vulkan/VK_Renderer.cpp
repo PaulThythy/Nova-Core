@@ -535,6 +535,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkDevice device = m_VKDevice.GetDevice();
         if (device == VK_NULL_HANDLE) return;
 
+        // Wait for all submitted work to finish so no command buffer still references
+        // the viewport framebuffer, descriptor set, or images (VUID-vkFreeDescriptorSets-00309, etc.).
+        CheckVkResult(vkDeviceWaitIdle(device));
+
         // Free descriptor set directly: at shutdown ImGui may already be destroyed, so do not
         // call ImGui_ImplVulkan_RemoveTexture() which would use freed backend data.
         if (m_ViewportDescriptorSet != VK_NULL_HANDLE) {
