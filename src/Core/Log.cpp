@@ -33,14 +33,17 @@ namespace Nova::Core {
         }
     }
 
-    void Log::Print(Level level, const char* message) {
+    void Log::Print(Level level, const char* message, const char* file, int line) {
         // Errors and fatal go to std::cerr, others to std::cout
         std::ostream& out = (level >= Level::ERROR) ? std::cerr : std::cout;
 
-        out
-            << GetColorCode(level)
-            << "[" << GetLevelString(level) << "] "
-            << message
+        out << GetColorCode(level)
+            << "[" << GetLevelString(level) << "] ";
+
+        if (file && line > 0)
+            out << "(" << file << ":" << line << ") ";
+
+        out << message
             << ColorReset()
             << std::endl;
     }
