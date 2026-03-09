@@ -1,6 +1,7 @@
 #include "Core/Application.h"
+#include "Core/Log.h"
 
-#include <iostream>
+#include <cstdlib>
 #include <filesystem>
 #include <ranges>
 
@@ -10,7 +11,7 @@ namespace Nova::Core {
 
     Application::Application(const Window::WindowDesc& windowDesc) : m_IsRunning(false) {
         if (s_Instance) {
-            std::cerr << "Warning: Application instance already exists\n";
+            NV_LOG_WARN("Application instance already exists");
         }
         s_Instance = this;
 
@@ -181,7 +182,7 @@ namespace Nova::Core {
     void Application::InitWindow(const Window::WindowDesc& windowDesc) {
         m_Window = new Window;
         if (!m_Window->Create(windowDesc)) {
-            std::cerr << "Failed to create window\n";
+            NV_LOG_FATAL("Failed to create window");
             exit(EXIT_FAILURE);
         }
     }

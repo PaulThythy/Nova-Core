@@ -98,7 +98,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
             std::string log(logLength, '\0');
             glGetShaderInfoLog(shaderID, logLength, nullptr, &log[0]);
-            std::cerr << "Shader compilation error:\n" << log << std::endl;
+            NV_LOG_ERROR(std::string("Shader compilation error:\n") + log);
 
             glDeleteShader(shaderID);
             return 0;
@@ -126,7 +126,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
             std::string log(logLength, '\0');
             glGetProgramInfoLog(programID, logLength, nullptr, &log[0]);
-            std::cerr << "Program linking error:\n" << log << std::endl;
+            NV_LOG_ERROR(std::string("Program linking error:\n") + log);
 
             glDeleteProgram(programID);
             return 0;
