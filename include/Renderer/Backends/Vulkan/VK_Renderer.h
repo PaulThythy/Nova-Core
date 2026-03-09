@@ -15,7 +15,10 @@
 #include "Renderer/Backends/Vulkan/VK_Instance.h"
 #include "Renderer/Backends/Vulkan/VK_Device.h"
 #include "Renderer/Backends/Vulkan/VK_Swapchain.h"
+#include "Renderer/Backends/Vulkan/VK_Shaders.h"
 #include "Renderer/Backends/Vulkan/VK_Mesh.h"
+
+#include <memory>
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -41,6 +44,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         void PrepareForImGui() override;
 
+        RHI::RHI_Shaders* GetShader() override { return m_Shader.get(); }
+
     private:
         void CreateViewportFramebuffer(int w, int h);
         void DestroyViewportFramebuffer();
@@ -51,6 +56,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_Device   m_VKDevice;
         VK_Swapchain m_VKSwapchain;
 
+        std::unique_ptr<VK_Shaders> m_Shader;
         std::unordered_map<const Renderer::Graphics::Mesh*, std::shared_ptr<VK_Mesh>> m_MeshCache;
 
         std::shared_ptr<VK_Mesh> GetOrUploadMesh(const std::shared_ptr<Renderer::Graphics::Mesh>& cpuMesh);

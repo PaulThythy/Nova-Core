@@ -2,11 +2,113 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <glm/gtc/type_ptr.hpp>
 
 #include "Renderer/Backends/OpenGL/GL_Shaders.h"
 
+#include <glm/glm.hpp>
+
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
+    // --- GL_Shaders ---
+    GL_Shaders::~GL_Shaders() {
+        if (m_UBO_MVP != 0) {
+            glDeleteBuffers(1, &m_UBO_MVP);
+            m_UBO_MVP = 0;
+        }
+        m_Program = 0;
+        m_LocationCache.clear();
+    }
+
+    void GL_Shaders::SetProgram(GLuint program) {
+        m_Program = program;
+        m_LocationCache.clear();
+
+        if (m_UBO_MVP != 0) {
+            glDeleteBuffers(1, &m_UBO_MVP);
+            m_UBO_MVP = 0;
+        }
+        glGenBuffers(1, &m_UBO_MVP);
+        glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::mat4) * 3, nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
+    }
+
+    GLint GL_Shaders::GetLocation(const std::string& name) {
+        auto it = m_LocationCache.find(name);
+        if (it != m_LocationCache.end())
+            return it->second;
+        GLint loc = glGetUniformLocation(m_Program, name.c_str());
+        m_LocationCache[name] = loc;
+        return loc;
+    }
+
+    void GL_Shaders::Bind(void* apiContext) {
+        (void)apiContext;
+        if (m_Program != 0)
+            glUseProgram(m_Program);
+    }
+
+    void GL_Shaders::ApplyParameters(void* apiContext) {
+        (void)apiContext;
+        if (m_Program == 0) return;
+
+        glUseProgram(m_Program);
+
+        // MVP block (binding 0): upload to UBO if present
+        if (m_UBO_MVP != 0) {
+            glm::mat4 model(1.0f), view(1.0f), proj(1.0f);
+            auto itM = m_Parameters.find("model");
+            auto itV = m_Parameters.find("view");
+            auto itP = m_Parameters.find("proj");
+            if (itM != m_Parameters.end() && std::holds_alternative<glm::mat4>(itM->second))
+                model = std::get<glm::mat4>(itM->second);
+            if (itV != m_Parameters.end() && std::holds_alternative<glm::mat4>(itV->second))
+                view = std::get<glm::mat4>(itV->second);
+            if (itP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itP->second))
+                proj = std::get<glm::mat4>(itP->second);
+            struct MVPBlock { glm::mat4 model, view, proj; } mvp{ model, view, proj };
+            glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
+            glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(MVPBlock), &mvp);
+            glBindBuffer(GL_UNIFORM_BUFFER, 0);
+            glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
+        }
+
+        // Other uniforms by name
+        for (const auto& [name, value] : m_Parameters) {
+            if (name == "model" || name == "view" || name == "proj")
+                continue;
+            GLint loc = GetLocation(name);
+            if (loc < 0) continue;
+            std::visit([loc](auto&& v) {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, std::monostate>) {}
+                else if constexpr (std::is_same_v<T, int>)
+                    glUniform1i(loc, v);
+                else if constexpr (std::is_same_v<T, float>)
+                    glUniform1f(loc, v);
+                else if constexpr (std::is_same_v<T, glm::vec2>)
+                    glUniform2fv(loc, 1, glm::value_ptr(v));
+                else if constexpr (std::is_same_v<T, glm::vec3>)
+                    glUniform3fv(loc, 1, glm::value_ptr(v));
+                else if constexpr (std::is_same_v<T, glm::vec4>)
+                    glUniform4fv(loc, 1, glm::value_ptr(v));
+                else if constexpr (std::is_same_v<T, glm::mat2>)
+                    glUniformMatrix2fv(loc, 1, GL_FALSE, glm::value_ptr(v));
+                else if constexpr (std::is_same_v<T, glm::mat3>)
+                    glUniformMatrix3fv(loc, 1, GL_FALSE, glm::value_ptr(v));
+                else if constexpr (std::is_same_v<T, glm::mat4>)
+                    glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(v));
+            }, value);
+        }
+    }
+
+    void* GL_Shaders::GetNativeHandle() const {
+        return reinterpret_cast<void*>(static_cast<intptr_t>(m_Program));
+    }
+
+    // --- Free functions ---
     bool CheckGLProgram(GLuint prog, std::string& outLog) { 
         GLint ok = 0; 
         glGetProgramiv(prog, GL_LINK_STATUS, &ok); 

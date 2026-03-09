@@ -1,10 +1,11 @@
 #ifndef GL_RENDERER_H
 #define GL_RENDERER_H
 
+#include <memory>
+#include <glad/gl.h>
+
 #include "Renderer/RHI/RHI_Renderer.h"
 #include "Renderer/Backends/OpenGL/GL_Shaders.h"
-
-#include <glad/gl.h>
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
@@ -29,10 +30,11 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         // ImGui-compatible texture identifier for the viewport render target.
         void* GetViewportTextureID() const override;
 
-        GLuint GetProgram() const { return m_Program; } 
+        RHI::RHI_Shaders* GetShader() override { return m_Shader.get(); }
+        GLuint GetProgram() const { return m_Shader ? static_cast<GLuint>(reinterpret_cast<uintptr_t>(m_Shader->GetNativeHandle())) : 0; }
+
     private:
-        GLuint m_Program{ 0 };
-        GLuint m_UBO_MVP{ 0 };
+        std::unique_ptr<GL_Shaders> m_Shader;
 
         // Offscreen framebuffer used as viewport render target.
         GLuint m_Framebuffer{ 0 };

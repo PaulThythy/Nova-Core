@@ -4,11 +4,39 @@
 #include <glad/gl.h>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "Core/Log.h"
+#include "Renderer/RHI/RHI_Shaders.h"
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
+    /** OpenGL shader program wrapper; derives from RHI_Shaders for uniform API. */
+    class GL_Shaders final : public RHI::RHI_Shaders {
+    public:
+        GL_Shaders() = default;
+        ~GL_Shaders() override;
+
+        /** Set the program. Creates and owns the UBO for MVP block (binding 0). Call after linking. */
+        void SetProgram(GLuint program);
+
+        void Bind(void* apiContext = nullptr) override;
+        void ApplyParameters(void* apiContext = nullptr) override;
+        void* GetNativeHandle() const override;
+
+        GLuint GetProgram() const { return m_Program; }
+        GLuint GetUBO_MVP() const { return m_UBO_MVP; }
+        bool IsValid() const { return m_Program != 0; }
+
+    private:
+        GLint GetLocation(const std::string& name);
+
+        GLuint m_Program{ 0 };
+        GLuint m_UBO_MVP{ 0 };
+        std::unordered_map<std::string, GLint> m_LocationCache;
+    };
+
+    // --- Free functions (compile/link helpers) ---
     GLuint CompileShader(GLenum shaderType, const std::string& shaderCode);
     GLuint LinkProgram(const std::initializer_list<GLuint>& shaderIDs);
 

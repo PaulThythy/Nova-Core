@@ -89,6 +89,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_FrameActive = false;
 
+        m_Shader = std::make_unique<VK_Shaders>();
+        m_Shader->SetPipeline(m_VKSwapchain.GetModelPipeline(), m_VKSwapchain.GetModelPipelineLayout());
+
         NV_LOG_INFO("Vulkan renderer created successfully (minimal mode).");
         return true;
     }
@@ -101,6 +104,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         }
 
         DestroyViewportFramebuffer();
+
+        m_Shader.reset();
 
         for (auto& [key, mesh] : m_MeshCache) {
             if (mesh) {
@@ -309,28 +314,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const uint32_t imageIndex = m_VKSwapchain.GetAcquiredImageIndex();
         VkCommandBuffer vkCmd = m_VKSwapchain.GetCommandBuffers()[imageIndex];
 
-        // Bind graphics pipeline (same pipeline for window and viewport)
-        VkPipeline pipeline = m_VKSwapchain.GetModelPipeline();
-        if (pipeline != VK_NULL_HANDLE) {
-            vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        if (m_Shader && m_Shader->IsValid()) {
+            m_Shader->SetParameter("model", cmd.m_Model);
+            m_Shader->SetParameter("view", cmd.m_View);
+            m_Shader->SetParameter("proj", cmd.m_Proj);
+            m_Shader->Bind(vkCmd);
+            m_Shader->ApplyParameters(vkCmd);
         }
-
-        // Push constants: model, view, proj
-        struct MVPPushConstants {
-            glm::mat4 model;
-            glm::mat4 view;
-            glm::mat4 proj;
-        } mvp{ cmd.m_Model, cmd.m_View, cmd.m_Proj };
-
-        VkPipelineLayout layout = m_VKSwapchain.GetModelPipelineLayout();
-        vkCmdPushConstants(
-            vkCmd,
-            layout,
-            VK_SHADER_STAGE_VERTEX_BIT,
-            0,
-            sizeof(MVPPushConstants),
-            &mvp
-        );
 
         // Bind vertex (and optionally index) buffers
         vkMesh->SetCommandBuffer(vkCmd);
@@ -355,22 +345,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkCommandBuffer vkCmd = m_VKSwapchain.GetCommandBuffers()[m_VKSwapchain.GetAcquiredImageIndex()];
 
-        // Bind pipeline (same pipeline for window and viewport)
-        VkPipeline pipeline = m_VKSwapchain.GetModelPipeline();
-        if (pipeline != VK_NULL_HANDLE)
-            vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-
-        // Push constants: model, view, proj
-        struct MVPPushConstants {
-            glm::mat4 model;
-            glm::mat4 view;
-            glm::mat4 proj;
-        } mvp{ cmd.m_Model, cmd.m_View, cmd.m_Proj };
-
-        vkCmdPushConstants(vkCmd,
-            m_VKSwapchain.GetModelPipelineLayout(),
-            VK_SHADER_STAGE_VERTEX_BIT,
-            0, sizeof(MVPPushConstants), &mvp);
+        if (m_Shader && m_Shader->IsValid()) {
+            m_Shader->SetParameter("model", cmd.m_Model);
+            m_Shader->SetParameter("view", cmd.m_View);
+            m_Shader->SetParameter("proj", cmd.m_Proj);
+            m_Shader->Bind(vkCmd);
+            m_Shader->ApplyParameters(vkCmd);
+        }
 
         // Bind mesh buffers
         vkMesh->SetCommandBuffer(vkCmd);

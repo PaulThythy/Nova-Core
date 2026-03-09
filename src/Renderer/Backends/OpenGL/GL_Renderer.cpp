@@ -118,15 +118,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             return false;
         }
 
-        glGenBuffers(1, &m_UBO_MVP);
-        glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
-        glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::mat4) * 3, nullptr, GL_DYNAMIC_DRAW);
-        glBindBuffer(GL_UNIFORM_BUFFER, 0);
-
-        // Emulate Vulkan push constants with a UBO bound at binding 0.
-        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
-
-        m_Program = prog;
+        m_Shader = std::make_unique<GL_Shaders>();
+        m_Shader->SetProgram(prog);
 
         // Defer framebuffer creation to the first Resize() call from the client.
         m_ViewportWidth = 0;
@@ -137,14 +130,11 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     }
 
     void GL_Renderer::Destroy() {
-        if (m_Program != 0) {
-            glDeleteProgram(m_Program);
-            m_Program = 0;
-        }
+        GLuint prog = m_Shader ? static_cast<GLuint>(reinterpret_cast<uintptr_t>(m_Shader->GetNativeHandle())) : 0;
+        m_Shader.reset();
 
-        if (m_UBO_MVP != 0) {
-            glDeleteBuffers(1, &m_UBO_MVP);
-            m_UBO_MVP = 0;
+        if (prog != 0) {
+            glDeleteProgram(prog);
         }
 
         DestroyFramebuffer();
@@ -205,7 +195,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     }
 
     void GL_Renderer::Draw(const RHI::RHI_DrawCommand& cmd) {
-        if (!m_Program || !cmd.m_Mesh) return;
+        if (!m_Shader || !m_Shader->IsValid() || !cmd.m_Mesh) return;
 
         auto glMesh = std::dynamic_pointer_cast<GL_Mesh>(cmd.m_Mesh);
         if (!glMesh) {
@@ -213,20 +203,13 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             return;
         }
 
-        glUseProgram(m_Program);
-
-        struct MVPBlock {
-            glm::mat4 model;
-            glm::mat4 view;
-            glm::mat4 proj;
-        } mvp{ cmd.m_Model, cmd.m_View, cmd.m_Proj };
-        // Flip the projection matrix to match Vulkan clip-space conventions.
-        mvp.proj[1][1] *= -1.0f;
-
-        glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
-        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(MVPBlock), &mvp);
-        glBindBuffer(GL_UNIFORM_BUFFER, 0);
-        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
+        glm::mat4 proj = cmd.m_Proj;
+        proj[1][1] *= -1.0f; // Flip to match Vulkan clip-space
+        m_Shader->SetParameter("model", cmd.m_Model);
+        m_Shader->SetParameter("view", cmd.m_View);
+        m_Shader->SetParameter("proj", proj);
+        m_Shader->Bind(nullptr);
+        m_Shader->ApplyParameters(nullptr);
 
         glMesh->Bind();
 
@@ -304,7 +287,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     }
 
     void GL_Renderer::DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) {
-        if (!m_Program || !cmd.m_Mesh) return;
+        if (!m_Shader || !m_Shader->IsValid() || !cmd.m_Mesh) return;
 
         auto glMesh = std::dynamic_pointer_cast<GL_Mesh>(cmd.m_Mesh);
         if (!glMesh) {
@@ -312,23 +295,13 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             return;
         }
 
-        glUseProgram(m_Program);
-
-        // ---- Update MVP (binding 0) ----
-        struct MVPBlock {
-            glm::mat4 model;
-            glm::mat4 view;
-            glm::mat4 proj;
-        } mvp{ cmd.m_Model, cmd.m_View, cmd.m_Proj };
-        // inverted projection matrix, due to clip space differences with vulkan
-        mvp.proj[1][1] *= -1.0f;
-
-        glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
-        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(MVPBlock), &mvp);
-        glBindBuffer(GL_UNIFORM_BUFFER, 0);
-
-        // Ensure the UBO stays bound to binding 0.
-        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
+        glm::mat4 proj = cmd.m_Proj;
+        proj[1][1] *= -1.0f;
+        m_Shader->SetParameter("model", cmd.m_Model);
+        m_Shader->SetParameter("view", cmd.m_View);
+        m_Shader->SetParameter("proj", proj);
+        m_Shader->Bind(nullptr);
+        m_Shader->ApplyParameters(nullptr);
 
         glMesh->Bind();
 

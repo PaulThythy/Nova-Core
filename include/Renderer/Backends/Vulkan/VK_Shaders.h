@@ -3,19 +3,23 @@
 
 #include <vulkan/vulkan.h>
 #include <vector>
+#include <glm/glm.hpp>
+
+#include "Renderer/RHI/RHI_Shaders.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    class VK_Shaders {
+    /** Single shader module (vertex or fragment). Used internally to build pipelines. */
+    class VK_ShaderModule {
     public:
-        VK_Shaders() = default;
-        ~VK_Shaders() { Destroy(); }
+        VK_ShaderModule() = default;
+        ~VK_ShaderModule() { Destroy(); }
 
-        VK_Shaders(const VK_Shaders&) = delete;
-        VK_Shaders& operator=(const VK_Shaders&) = delete;
+        VK_ShaderModule(const VK_ShaderModule&) = delete;
+        VK_ShaderModule& operator=(const VK_ShaderModule&) = delete;
 
-        VK_Shaders(VK_Shaders&& other) noexcept { MoveFrom(other); }
-        VK_Shaders& operator=(VK_Shaders&& other) noexcept {
+        VK_ShaderModule(VK_ShaderModule&& other) noexcept { MoveFrom(other); }
+        VK_ShaderModule& operator=(VK_ShaderModule&& other) noexcept {
             if (this != &other) {
                 Destroy();
                 MoveFrom(other);
@@ -30,7 +34,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         bool IsValid() const { return m_Module != VK_NULL_HANDLE; }
 
     private:
-        void MoveFrom(VK_Shaders& other) noexcept {
+        void MoveFrom(VK_ShaderModule& other) noexcept {
             m_Device = other.m_Device;
             m_Module = other.m_Module;
             other.m_Device = VK_NULL_HANDLE;
@@ -41,6 +45,28 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkShaderModule m_Module = VK_NULL_HANDLE;
     };
 
-} // namespace Nova::Core::Renderer::Backends::Vulkan 
+    /** Vulkan pipeline + layout wrapper; derives from RHI_Shaders for SetParameter / ApplyParameters (push constants). */
+    class VK_Shaders final : public RHI::RHI_Shaders {
+    public:
+        VK_Shaders() = default;
+        ~VK_Shaders() override = default;
+
+        /** Set pipeline and layout (owned by swapchain/renderer). Call after pipeline creation. */
+        void SetPipeline(VkPipeline pipeline, VkPipelineLayout layout);
+
+        void Bind(void* apiContext = nullptr) override;
+        void ApplyParameters(void* apiContext = nullptr) override;
+        void* GetNativeHandle() const override;
+
+        VkPipeline GetPipeline() const { return m_Pipeline; }
+        VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
+        bool IsValid() const { return m_Pipeline != VK_NULL_HANDLE && m_PipelineLayout != VK_NULL_HANDLE; }
+
+    private:
+        VkPipeline m_Pipeline = VK_NULL_HANDLE;
+        VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
+    };
+
+} // namespace Nova::Core::Renderer::Backends::Vulkan
 
 #endif // VK_SHADERS_H

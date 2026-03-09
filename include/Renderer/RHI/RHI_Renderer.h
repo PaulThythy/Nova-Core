@@ -4,8 +4,8 @@
 #include <memory>
 
 #include "Core/GraphicsAPI.h"
-
 #include "Renderer/Graphics/Mesh.h"
+#include "Renderer/RHI/RHI_Shaders.h"
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -81,6 +81,9 @@ namespace Nova::Core::Renderer::RHI {
         // Called after scene render, before ImGui. Vulkan: ends viewport pass, transitions
         // viewport image to shader read, begins swapchain pass. OpenGL: no-op.
         virtual void PrepareForImGui() {}
+
+        /** Returns the current/default shader (e.g. model shader). Ownership stays with the renderer. */
+        virtual RHI_Shaders* GetShader() = 0;
     };
 
 } // namespace Nova::Core::Renderer::RHI

@@ -1,20 +1,46 @@
-﻿#include "Renderer/RHI/RHI_Shaders.h"
+#include "Renderer/RHI/RHI_Shaders.h"
 
 #include <algorithm>
 #include <fstream>
 #include <mutex>
 #include <sstream>
 #include <cstring>
+#include <glm/glm.hpp>
 
 namespace Nova::Core::Renderer::RHI {
 
     std::mutex g_GlslangMutex;
     int g_GlslangRefCount = 0;
 
-    //TODO uncomment this function
     /*const TBuiltInResource& GetDefaultResources() {
-        return DefaultTBuiltInResource;
+        return glslang::DefaultTBuiltInResource;
     }*/
+
+    // --- RHI_Shaders ---
+    void RHI_Shaders::SetParameter(const std::string& name, int value) {
+        m_Parameters[name] = value;
+    }
+    void RHI_Shaders::SetParameter(const std::string& name, float value) {
+        m_Parameters[name] = value;
+    }
+    void RHI_Shaders::SetParameter(const std::string& name, const glm::vec2& value) {
+        m_Parameters[name] = value;
+    }
+    void RHI_Shaders::SetParameter(const std::string& name, const glm::vec3& value) {
+        m_Parameters[name] = value;
+    }
+    void RHI_Shaders::SetParameter(const std::string& name, const glm::vec4& value) {
+        m_Parameters[name] = value;
+    }
+    void RHI_Shaders::SetParameter(const std::string& name, const glm::mat2& value) {
+        m_Parameters[name] = value;
+    }
+    void RHI_Shaders::SetParameter(const std::string& name, const glm::mat3& value) {
+        m_Parameters[name] = value;
+    }
+    void RHI_Shaders::SetParameter(const std::string& name, const glm::mat4& value) {
+        m_Parameters[name] = value;
+    }
 
     struct ScopedGlslangProcess {
         bool ok = false;
