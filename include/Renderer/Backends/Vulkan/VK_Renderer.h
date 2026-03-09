@@ -36,10 +36,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void Draw(const RHI::RHI_DrawCommand& cmd) override;
         void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;
 
-        // For now, the Vulkan backend does not expose a dedicated viewport texture.
-        // The scene is rendered directly into the swapchain. Returning nullptr here
-        // tells the client not to attempt ImGui::Image with a Vulkan texture yet.
-        void* GetViewportTextureID() const override { return nullptr; }
+        // ImGui viewport: returns VkDescriptorSet for the offscreen viewport texture.
+        void* GetViewportTextureID() const override;
+
+        void PrepareForImGui() override;
+
+    private:
+        void CreateViewportFramebuffer(int w, int h);
+        void DestroyViewportFramebuffer();
 
     private:
         // Core Vulkan objects (wrappers)
@@ -52,6 +56,21 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         std::shared_ptr<VK_Mesh> GetOrUploadMesh(const std::shared_ptr<Renderer::Graphics::Mesh>& cpuMesh);
 
         bool m_FramebufferResized = false;
+
+        // Viewport offscreen target for ImGui (when size > 0 we render scene here, then show in ImGui)
+        int m_ViewportWidth = 0;
+        int m_ViewportHeight = 0;
+        VkImage m_ViewportImage = VK_NULL_HANDLE;
+        VkImageView m_ViewportImageView = VK_NULL_HANDLE;
+        VkDeviceMemory m_ViewportImageMemory = VK_NULL_HANDLE;
+        VkImage m_ViewportDepthImage = VK_NULL_HANDLE;
+        VkImageView m_ViewportDepthImageView = VK_NULL_HANDLE;
+        VkDeviceMemory m_ViewportDepthImageMemory = VK_NULL_HANDLE;
+        VkFramebuffer m_ViewportFramebuffer = VK_NULL_HANDLE;
+        VkSampler m_ViewportSampler = VK_NULL_HANDLE;
+        VkDescriptorSet m_ViewportDescriptorSet = VK_NULL_HANDLE;
+        bool m_RenderedToViewportThisFrame = false;
+        bool m_ViewportImageFirstUse = true; // true until first viewport pass (image in UNDEFINED)
 	};
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

@@ -70,6 +70,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPipeline& GetModelPipeline() { return m_ModelPipeline; }
 		VkPipelineLayout& GetModelPipelineLayout() { return m_ModelPipelineLayout; }
 
+		// Viewport offscreen: same as back buffer but color finalLayout = SHADER_READ_ONLY for ImGui
+		VkRenderPass GetViewportRenderPass() const { return m_ViewportRenderPass; }
+		VkPipeline GetViewportPipeline() const { return m_ViewportPipeline; }
+		VkFormat GetSwapchainImageFormat() const { return m_SwapchainImageFormat; }
+		VkFormat GetDepthFormat() const { return m_DepthFormat; }
+
 		std::vector<VkCommandBuffer>& GetCommandBuffers() { return m_CommandBuffers; }
 
 		VkSemaphore GetRenderFinishedSemaphore(uint32_t imageIndex) const {
@@ -99,6 +105,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		// Minimal pipeline
 		void CreateModelPipeline();
 		void DestroyModelPipeline();
+		bool CreateViewportRenderPass();
+		void CreateViewportPipeline();
+		void DestroyViewportPipelineAndPass();
 		bool CreateDepthResources();
 		void DestroyDepthResources();
 
@@ -138,6 +147,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		// Pipeline (triangle)
 		VkPipeline       m_ModelPipeline = VK_NULL_HANDLE;
 		VkPipelineLayout m_ModelPipelineLayout = VK_NULL_HANDLE;
+
+		// Viewport offscreen render pass & pipeline (color finalLayout = SHADER_READ_ONLY)
+		VkRenderPass m_ViewportRenderPass = VK_NULL_HANDLE;
+		VkPipeline   m_ViewportPipeline = VK_NULL_HANDLE;
 
 		// Depth buffer
 		VkImage        m_DepthImage = VK_NULL_HANDLE;

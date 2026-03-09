@@ -5,6 +5,9 @@
 #include "Core/ImGuiLayer.h"
 #include "Core/Log.h"
 
+#include "imgui.h"
+#include "backends/imgui_impl_vulkan.h"
+
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
@@ -101,6 +104,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             vkDeviceWaitIdle(m_VKDevice.GetDevice());
         }
 
+        DestroyViewportFramebuffer();
+
         for (auto& [key, mesh] : m_MeshCache) {
             if (mesh) {
                 mesh->Release();
@@ -118,9 +123,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     bool VK_Renderer::Resize(int w, int h) {
-        (void)w; (void)h;
-        // Mark for swapchain recreation on next BeginFrame
-        m_FramebufferResized = true;
+        if (w > 0 && h > 0) {
+            if (w != m_ViewportWidth || h != m_ViewportHeight) {
+                DestroyViewportFramebuffer();
+                CreateViewportFramebuffer(w, h);
+                m_ViewportWidth = w;
+                m_ViewportHeight = h;
+            }
+        } else {
+            DestroyViewportFramebuffer();
+            m_ViewportWidth = 0;
+            m_ViewportHeight = 0;
+        }
         return true;
     }
 
@@ -199,29 +213,85 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         clearValues[0].color = { 1.0f, 1.0f, 1.0f, 1.0f };
         clearValues[1].depthStencil = { 1.0f, 0 };
 
-        VkRenderPassBeginInfo rpBegin{};
-        rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rpBegin.renderPass = m_VKSwapchain.GetBackBufferRenderPass();
-        rpBegin.framebuffer = m_VKSwapchain.GetFrames()[imageIndex].m_Framebuffer;
-        rpBegin.renderArea = { {0,0}, m_VKSwapchain.GetExtent() };
-        rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        rpBegin.pClearValues = clearValues.data();
+        m_RenderedToViewportThisFrame = false;
 
-        vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+        if (m_ViewportFramebuffer != VK_NULL_HANDLE) {
+            // First time using viewport image: it is in UNDEFINED; transition to SHADER_READ_ONLY for the render pass initialLayout
+            if (m_ViewportImageFirstUse) {
+                m_ViewportImageFirstUse = false;
+                VkImageMemoryBarrier barrier{};
+                barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                barrier.srcAccessMask = 0;
+                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barrier.image = m_ViewportImage;
+                barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                barrier.subresourceRange.baseMipLevel = 0;
+                barrier.subresourceRange.levelCount = 1;
+                barrier.subresourceRange.baseArrayLayer = 0;
+                barrier.subresourceRange.layerCount = 1;
+                vkCmdPipelineBarrier(cmd,
+                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    0, 0, nullptr, 0, nullptr, 1, &barrier);
+            }
 
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = (float)m_VKSwapchain.GetExtent().width;
-        viewport.height = (float)m_VKSwapchain.GetExtent().height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
+            // Render scene to offscreen viewport for ImGui panel
+            VkRenderPassBeginInfo rpBegin{};
+            rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            rpBegin.renderPass = m_VKSwapchain.GetViewportRenderPass();
+            rpBegin.framebuffer = m_ViewportFramebuffer;
+            rpBegin.renderArea = { {0, 0}, { static_cast<uint32_t>(m_ViewportWidth), static_cast<uint32_t>(m_ViewportHeight) } };
+            rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
+            rpBegin.pClearValues = clearValues.data();
 
-        VkRect2D scissor{};
-        scissor.offset = { 0, 0 };
-        scissor.extent = m_VKSwapchain.GetExtent();
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+            vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = (float)m_ViewportWidth;
+            viewport.height = (float)m_ViewportHeight;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+            VkRect2D scissor{};
+            scissor.offset = { 0, 0 };
+            scissor.extent = { static_cast<uint32_t>(m_ViewportWidth), static_cast<uint32_t>(m_ViewportHeight) };
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+            if (m_VKSwapchain.GetViewportPipeline() != VK_NULL_HANDLE)
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VKSwapchain.GetViewportPipeline());
+
+            m_RenderedToViewportThisFrame = true;
+        } else {
+            // Render directly to swapchain
+            VkRenderPassBeginInfo rpBegin{};
+            rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            rpBegin.renderPass = m_VKSwapchain.GetBackBufferRenderPass();
+            rpBegin.framebuffer = m_VKSwapchain.GetFrames()[imageIndex].m_Framebuffer;
+            rpBegin.renderArea = { {0,0}, m_VKSwapchain.GetExtent() };
+            rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
+            rpBegin.pClearValues = clearValues.data();
+
+            vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = (float)m_VKSwapchain.GetExtent().width;
+            viewport.height = (float)m_VKSwapchain.GetExtent().height;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+            VkRect2D scissor{};
+            scissor.offset = { 0, 0 };
+            scissor.extent = m_VKSwapchain.GetExtent();
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
+        }
 
         // ImGui enregistre dans le cmd buffer de CETTE image
         {
@@ -243,13 +313,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const uint32_t imageIndex = m_VKSwapchain.GetAcquiredImageIndex();
         VkCommandBuffer vkCmd = m_VKSwapchain.GetCommandBuffers()[imageIndex];
 
-        // Bind graphics pipeline if available
-        if (m_VKSwapchain.GetModelPipeline() != VK_NULL_HANDLE) {
-            vkCmdBindPipeline(
-                vkCmd,
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                m_VKSwapchain.GetModelPipeline()
-            );
+        // Bind graphics pipeline (viewport or swapchain)
+        VkPipeline pipeline = m_RenderedToViewportThisFrame ? m_VKSwapchain.GetViewportPipeline() : m_VKSwapchain.GetModelPipeline();
+        if (pipeline != VK_NULL_HANDLE) {
+            vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         }
 
         // Push constants: model, view, proj
@@ -259,9 +326,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             glm::mat4 proj;
         } mvp{ cmd.m_Model, cmd.m_View, cmd.m_Proj };
 
+        VkPipelineLayout layout = m_VKSwapchain.GetModelPipelineLayout();
         vkCmdPushConstants(
             vkCmd,
-            m_VKSwapchain.GetModelPipelineLayout(),
+            layout,
             VK_SHADER_STAGE_VERTEX_BIT,
             0,
             sizeof(MVPPushConstants),
@@ -291,9 +359,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkCommandBuffer vkCmd = m_VKSwapchain.GetCommandBuffers()[m_VKSwapchain.GetAcquiredImageIndex()];
 
-        // Bind pipeline
-        if (m_VKSwapchain.GetModelPipeline() != VK_NULL_HANDLE)
-            vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VKSwapchain.GetModelPipeline());
+        // Bind pipeline (viewport or swapchain)
+        VkPipeline pipeline = m_RenderedToViewportThisFrame ? m_VKSwapchain.GetViewportPipeline() : m_VKSwapchain.GetModelPipeline();
+        if (pipeline != VK_NULL_HANDLE)
+            vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
         // Push constants: model, view, proj
         struct MVPPushConstants {
@@ -343,11 +412,242 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return vkMesh;
     }
 
+    void VK_Renderer::CreateViewportFramebuffer(int w, int h) {
+        if (w <= 0 || h <= 0) return;
+
+        m_ViewportImageFirstUse = true; // new image is in UNDEFINED
+
+        VkDevice device = m_VKDevice.GetDevice();
+        VkPhysicalDevice physicalDevice = m_VKDevice.GetPhysicalDevice();
+        VkFormat colorFormat = m_VKSwapchain.GetSwapchainImageFormat();
+        VkFormat depthFormat = m_VKSwapchain.GetDepthFormat();
+
+        // Color image (attachment + sampled by ImGui)
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = colorFormat;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        CheckVkResult(vkCreateImage(device, &imageInfo, nullptr, &m_ViewportImage));
+
+        VkMemoryRequirements memReq;
+        vkGetImageMemoryRequirements(device, m_ViewportImage, &memReq);
+        VkPhysicalDeviceMemoryProperties memProps;
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProps);
+        uint32_t memTypeIndex = UINT32_MAX;
+        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+            if ((memReq.memoryTypeBits & (1u << i)) &&
+                (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+                memTypeIndex = i;
+                break;
+            }
+        }
+        if (memTypeIndex == UINT32_MAX) {
+            NV_LOG_ERROR("VK_Renderer: no memory type for viewport color image");
+            vkDestroyImage(device, m_ViewportImage, nullptr);
+            m_ViewportImage = VK_NULL_HANDLE;
+            return;
+        }
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memReq.size;
+        allocInfo.memoryTypeIndex = memTypeIndex;
+        CheckVkResult(vkAllocateMemory(device, &allocInfo, nullptr, &m_ViewportImageMemory));
+        vkBindImageMemory(device, m_ViewportImage, m_ViewportImageMemory, 0);
+
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = m_ViewportImage;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = colorFormat;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+        CheckVkResult(vkCreateImageView(device, &viewInfo, nullptr, &m_ViewportImageView));
+
+        // Depth image
+        VkImageCreateInfo depthImageInfo{};
+        depthImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        depthImageInfo.imageType = VK_IMAGE_TYPE_2D;
+        depthImageInfo.extent = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        depthImageInfo.mipLevels = 1;
+        depthImageInfo.arrayLayers = 1;
+        depthImageInfo.format = depthFormat;
+        depthImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        depthImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthImageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        depthImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        CheckVkResult(vkCreateImage(device, &depthImageInfo, nullptr, &m_ViewportDepthImage));
+
+        vkGetImageMemoryRequirements(device, m_ViewportDepthImage, &memReq);
+        memTypeIndex = UINT32_MAX;
+        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+            if ((memReq.memoryTypeBits & (1u << i)) &&
+                (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+                memTypeIndex = i;
+                break;
+            }
+        }
+        if (memTypeIndex == UINT32_MAX) {
+            DestroyViewportFramebuffer();
+            return;
+        }
+        allocInfo.allocationSize = memReq.size;
+        allocInfo.memoryTypeIndex = memTypeIndex;
+        CheckVkResult(vkAllocateMemory(device, &allocInfo, nullptr, &m_ViewportDepthImageMemory));
+        vkBindImageMemory(device, m_ViewportDepthImage, m_ViewportDepthImageMemory, 0);
+
+        VkImageViewCreateInfo depthViewInfo{};
+        depthViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        depthViewInfo.image = m_ViewportDepthImage;
+        depthViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        depthViewInfo.format = depthFormat;
+        depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        depthViewInfo.subresourceRange.baseMipLevel = 0;
+        depthViewInfo.subresourceRange.levelCount = 1;
+        depthViewInfo.subresourceRange.baseArrayLayer = 0;
+        depthViewInfo.subresourceRange.layerCount = 1;
+        CheckVkResult(vkCreateImageView(device, &depthViewInfo, nullptr, &m_ViewportDepthImageView));
+
+        // Framebuffer
+        std::array<VkImageView, 2> attachments = { m_ViewportImageView, m_ViewportDepthImageView };
+        VkFramebufferCreateInfo fbInfo{};
+        fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        fbInfo.renderPass = m_VKSwapchain.GetViewportRenderPass();
+        fbInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        fbInfo.pAttachments = attachments.data();
+        fbInfo.width = static_cast<uint32_t>(w);
+        fbInfo.height = static_cast<uint32_t>(h);
+        fbInfo.layers = 1;
+        CheckVkResult(vkCreateFramebuffer(device, &fbInfo, nullptr, &m_ViewportFramebuffer));
+
+        // Sampler for ImGui
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        CheckVkResult(vkCreateSampler(device, &samplerInfo, nullptr, &m_ViewportSampler));
+
+        // Descriptor set for ImGui::Image(GetViewportTextureID(), ...)
+        m_ViewportDescriptorSet = ImGui_ImplVulkan_AddTexture(
+            m_ViewportSampler,
+            m_ViewportImageView,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        );
+    }
+
+    void VK_Renderer::DestroyViewportFramebuffer() {
+        VkDevice device = m_VKDevice.GetDevice();
+        if (device == VK_NULL_HANDLE) return;
+
+        // Free descriptor set directly: at shutdown ImGui may already be destroyed, so do not
+        // call ImGui_ImplVulkan_RemoveTexture() which would use freed backend data.
+        if (m_ViewportDescriptorSet != VK_NULL_HANDLE) {
+            VkDescriptorPool pool = m_VKSwapchain.GetImGuiDescriptorPool();
+            if (pool != VK_NULL_HANDLE)
+                vkFreeDescriptorSets(device, pool, 1, &m_ViewportDescriptorSet);
+            m_ViewportDescriptorSet = VK_NULL_HANDLE;
+        }
+        if (m_ViewportSampler != VK_NULL_HANDLE) {
+            vkDestroySampler(device, m_ViewportSampler, nullptr);
+            m_ViewportSampler = VK_NULL_HANDLE;
+        }
+        if (m_ViewportFramebuffer != VK_NULL_HANDLE) {
+            vkDestroyFramebuffer(device, m_ViewportFramebuffer, nullptr);
+            m_ViewportFramebuffer = VK_NULL_HANDLE;
+        }
+        if (m_ViewportDepthImageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(device, m_ViewportDepthImageView, nullptr);
+            m_ViewportDepthImageView = VK_NULL_HANDLE;
+        }
+        if (m_ViewportDepthImage != VK_NULL_HANDLE) {
+            vkDestroyImage(device, m_ViewportDepthImage, nullptr);
+            m_ViewportDepthImage = VK_NULL_HANDLE;
+        }
+        if (m_ViewportDepthImageMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(device, m_ViewportDepthImageMemory, nullptr);
+            m_ViewportDepthImageMemory = VK_NULL_HANDLE;
+        }
+        if (m_ViewportImageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(device, m_ViewportImageView, nullptr);
+            m_ViewportImageView = VK_NULL_HANDLE;
+        }
+        if (m_ViewportImage != VK_NULL_HANDLE) {
+            vkDestroyImage(device, m_ViewportImage, nullptr);
+            m_ViewportImage = VK_NULL_HANDLE;
+        }
+        if (m_ViewportImageMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(device, m_ViewportImageMemory, nullptr);
+            m_ViewportImageMemory = VK_NULL_HANDLE;
+        }
+    }
+
+    void VK_Renderer::PrepareForImGui() {
+        if (!s_FrameActive || !m_RenderedToViewportThisFrame)
+            return;
+
+        const uint32_t imageIndex = m_VKSwapchain.GetAcquiredImageIndex();
+        VkCommandBuffer cmd = m_VKSwapchain.GetCommandBuffers()[imageIndex];
+
+        vkCmdEndRenderPass(cmd);
+        // The viewport render pass has finalLayout = SHADER_READ_ONLY_OPTIMAL, so the
+        // image is already transitioned by the driver when ending the pass. No extra barrier.
+
+        // Begin swapchain render pass for ImGui
+        std::array<VkClearValue, 2> clearValues{};
+        clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
+        clearValues[1].depthStencil = { 1.0f, 0 };
+
+        VkRenderPassBeginInfo rpBegin{};
+        rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        rpBegin.renderPass = m_VKSwapchain.GetBackBufferRenderPass();
+        rpBegin.framebuffer = m_VKSwapchain.GetFrames()[imageIndex].m_Framebuffer;
+        rpBegin.renderArea = { {0, 0}, m_VKSwapchain.GetExtent() };
+        rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        rpBegin.pClearValues = clearValues.data();
+
+        vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float)m_VKSwapchain.GetExtent().width;
+        viewport.height = (float)m_VKSwapchain.GetExtent().height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = { 0, 0 };
+        scissor.extent = m_VKSwapchain.GetExtent();
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+    }
+
+    void* VK_Renderer::GetViewportTextureID() const {
+        if (m_ViewportDescriptorSet == VK_NULL_HANDLE)
+            return nullptr;
+        return (void*)m_ViewportDescriptorSet;
+    }
+
     void VK_Renderer::EndFrame() {
         if (!s_FrameActive)
             return;
 
-        // Emp�cher ImGui d'�crire apr�s la fermeture du cmd buffer
+        // Empêcher ImGui d'écrire après la fermeture du cmd buffer
         {
             auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
             imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
