@@ -53,15 +53,15 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         //invert clip space to be the same as vulkan
         //glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
 
+        glEnable(GL_FRAMEBUFFER_SRGB);
+
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LEQUAL);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        // clip space changed, warning : change winding order
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
-        // inverted winding as vulkan, due to clipspace inversion
         glFrontFace(GL_CCW);
 
         std::filesystem::path p = std::filesystem::current_path();
@@ -242,7 +242,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         // Color texture
         glGenTextures(1, &m_ColorAttachment);
         glBindTexture(GL_TEXTURE_2D, m_ColorAttachment);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
