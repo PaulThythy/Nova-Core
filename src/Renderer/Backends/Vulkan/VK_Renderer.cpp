@@ -91,6 +91,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_Shader = std::make_unique<VK_Shaders>();
         m_Shader->SetPipeline(m_VKSwapchain.GetModelPipeline(), m_VKSwapchain.GetModelPipelineLayout());
+        m_Shader->SetSceneUBOs(
+            m_VKDevice.GetDevice(),
+            m_VKSwapchain.GetMVPUBOBuffer(),
+            m_VKSwapchain.GetMVPUBOMemory(),
+            m_VKSwapchain.GetMaterialUBOBuffer(),
+            m_VKSwapchain.GetMaterialUBOMemory(),
+            m_VKSwapchain.GetSceneDescriptorSet()
+        );
 
         NV_LOG_INFO("Vulkan renderer created successfully (minimal mode).");
         return true;

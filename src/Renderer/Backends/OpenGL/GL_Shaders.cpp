@@ -5,6 +5,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "Renderer/Backends/OpenGL/GL_Shaders.h"
+#include "Renderer/RHI/RHI_ShaderUniforms.h"
 
 #include <glm/glm.hpp>
 
@@ -12,10 +13,9 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
     // --- GL_Shaders ---
     GL_Shaders::~GL_Shaders() {
-        if (m_UBO_MVP != 0) {
-            glDeleteBuffers(1, &m_UBO_MVP);
-            m_UBO_MVP = 0;
-        }
+        if (m_Globals != 0) { glDeleteBuffers(1, &m_Globals); m_Globals = 0; }
+        if (m_UBO_Material != 0) { glDeleteBuffers(1, &m_UBO_Material); m_UBO_Material = 0; }
+        if (m_UBO_MVP != 0) { glDeleteBuffers(1, &m_UBO_MVP); m_UBO_MVP = 0; }
         m_Program = 0;
         m_LocationCache.clear();
     }
@@ -24,15 +24,68 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         m_Program = program;
         m_LocationCache.clear();
 
-        if (m_UBO_MVP != 0) {
-            glDeleteBuffers(1, &m_UBO_MVP);
-            m_UBO_MVP = 0;
-        }
+        if (m_UBO_MVP != 0) { glDeleteBuffers(1, &m_UBO_MVP); m_UBO_MVP = 0; }
         glGenBuffers(1, &m_UBO_MVP);
         glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
-        glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::mat4) * 3, nullptr, GL_DYNAMIC_DRAW);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(RHI::UBO_MVP), nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
+
+        if (m_UBO_Material != 0) { glDeleteBuffers(1, &m_UBO_Material); m_UBO_Material = 0; }
+        glGenBuffers(1, &m_UBO_Material);
+        glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_Material);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(RHI::UBO_Material), nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 1, m_UBO_Material);
+
+        if (m_Globals != 0) { glDeleteBuffers(1, &m_Globals); m_Globals = 0; }
+        glGenBuffers(1, &m_Globals);
+        glBindBuffer(GL_UNIFORM_BUFFER, m_Globals);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(RHI::Globals), nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 2, m_Globals);
+    }
+
+    void GL_Shaders::UploadMaterialUBO() {
+        if (m_UBO_Material == 0) return;
+        RHI::UBO_Material data{};
+        const auto layout = RHI::GetMaterialUBOLayout();
+        for (const auto& [name, offset] : layout) {
+            auto it = m_Parameters.find(name);
+            if (it == m_Parameters.end()) continue;
+            char* dst = reinterpret_cast<char*>(&data) + offset;
+            std::visit([dst](auto&& v) {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, glm::vec3>) *reinterpret_cast<glm::vec4*>(dst) = glm::vec4(v, 1.0f);
+                else if constexpr (std::is_same_v<T, glm::vec4>) *reinterpret_cast<glm::vec4*>(dst) = v;
+            }, it->second);
+        }
+        glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_Material);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(RHI::UBO_Material), &data);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 1, m_UBO_Material);
+    }
+
+    void GL_Shaders::UploadGlobalsUBO() {
+        if (m_Globals == 0) return;
+        RHI::Globals data{};
+        const auto layout = RHI::GetGlobalsLayout();
+        for (const auto& [name, offset] : layout) {
+            auto it = m_Parameters.find(name);
+            if (it == m_Parameters.end()) continue;
+            char* dst = reinterpret_cast<char*>(&data) + offset;
+            std::visit([dst](auto&& v) {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, int>) *reinterpret_cast<int*>(dst) = v;
+                else if constexpr (std::is_same_v<T, float>) *reinterpret_cast<float*>(dst) = v;
+                else if constexpr (std::is_same_v<T, glm::vec3>) *reinterpret_cast<glm::vec3*>(dst) = v;
+                else if constexpr (std::is_same_v<T, glm::vec4>) *reinterpret_cast<glm::vec4*>(dst) = v;
+            }, it->second);
+        }
+        glBindBuffer(GL_UNIFORM_BUFFER, m_Globals);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(RHI::Globals), &data);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 2, m_Globals);
     }
 
     GLint GL_Shaders::GetLocation(const std::string& name) {
@@ -56,28 +109,28 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         glUseProgram(m_Program);
 
-        // MVP block (binding 0): upload to UBO if present
+        // Binding 0: MVP UBO
         if (m_UBO_MVP != 0) {
-            glm::mat4 model(1.0f), view(1.0f), proj(1.0f);
-            auto itM = m_Parameters.find("model");
-            auto itV = m_Parameters.find("view");
-            auto itP = m_Parameters.find("proj");
-            if (itM != m_Parameters.end() && std::holds_alternative<glm::mat4>(itM->second))
-                model = std::get<glm::mat4>(itM->second);
-            if (itV != m_Parameters.end() && std::holds_alternative<glm::mat4>(itV->second))
-                view = std::get<glm::mat4>(itV->second);
-            if (itP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itP->second))
-                proj = std::get<glm::mat4>(itP->second);
-            struct MVPBlock { glm::mat4 model, view, proj; } mvp{ model, view, proj };
+            RHI::UBO_MVP mvp{};
+            auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj");
+            if (itM != m_Parameters.end() && std::holds_alternative<glm::mat4>(itM->second)) mvp.model = std::get<glm::mat4>(itM->second);
+            if (itV != m_Parameters.end() && std::holds_alternative<glm::mat4>(itV->second)) mvp.view = std::get<glm::mat4>(itV->second);
+            if (itP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itP->second)) mvp.proj = std::get<glm::mat4>(itP->second);
             glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
-            glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(MVPBlock), &mvp);
+            glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(RHI::UBO_MVP), &mvp);
             glBindBuffer(GL_UNIFORM_BUFFER, 0);
             glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
         }
 
-        // Other uniforms by name
+        UploadMaterialUBO();
+        UploadGlobalsUBO();
+
+        const auto materialLayout = RHI::GetMaterialUBOLayout();
+        const auto globalsLayout = RHI::GetGlobalsLayout();
         for (const auto& [name, value] : m_Parameters) {
             if (name == "model" || name == "view" || name == "proj")
+                continue;
+            if (materialLayout.count(name) || globalsLayout.count(name))
                 continue;
             GLint loc = GetLocation(name);
             if (loc < 0) continue;

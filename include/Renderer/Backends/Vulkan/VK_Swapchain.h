@@ -70,6 +70,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPipeline& GetModelPipeline() { return m_ModelPipeline; }
 		VkPipelineLayout& GetModelPipelineLayout() { return m_ModelPipelineLayout; }
 
+		// UBOs et descriptor set (binding 0 = MVP, binding 1 = Material)
+		VkBuffer GetMVPUBOBuffer() const { return m_MVPUBOBuffer; }
+		VkDeviceMemory GetMVPUBOMemory() const { return m_MVPUBOMemory; }
+		VkBuffer GetMaterialUBOBuffer() const { return m_MaterialUBOBuffer; }
+		VkDeviceMemory GetMaterialUBOMemory() const { return m_MaterialUBOMemory; }
+		VkDescriptorSet GetSceneDescriptorSet() const { return m_SceneDescriptorSet; }
+
 		// Viewport offscreen: render pass only (same pipeline as main window = model pipeline)
 		VkRenderPass GetViewportRenderPass() const { return m_ViewportRenderPass; }
 		VkFormat GetSwapchainImageFormat() const { return m_SwapchainImageFormat; }
@@ -145,6 +152,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		// Pipeline (triangle)
 		VkPipeline       m_ModelPipeline = VK_NULL_HANDLE;
 		VkPipelineLayout m_ModelPipelineLayout = VK_NULL_HANDLE;
+		VkDescriptorSetLayout m_SceneSetLayout = VK_NULL_HANDLE;
+		VkBuffer         m_MVPUBOBuffer = VK_NULL_HANDLE;
+		VkDeviceMemory   m_MVPUBOMemory = VK_NULL_HANDLE;
+		VkBuffer         m_MaterialUBOBuffer = VK_NULL_HANDLE;
+		VkDeviceMemory   m_MaterialUBOMemory = VK_NULL_HANDLE;
+		VkDescriptorSet  m_SceneDescriptorSet = VK_NULL_HANDLE;
 
 		// Viewport offscreen render pass only (color finalLayout = SHADER_READ_ONLY for ImGui)
 		VkRenderPass m_ViewportRenderPass = VK_NULL_HANDLE;

@@ -8,6 +8,7 @@
 
 #include "Core/Log.h"
 #include "Renderer/RHI/RHI_Shaders.h"
+#include "Renderer/RHI/RHI_ShaderUniforms.h"
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
@@ -17,7 +18,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         GL_Shaders() = default;
         ~GL_Shaders() override;
 
-        /** Set the program. Creates and owns the UBO for MVP block (binding 0). Call after linking. */
+        /** Set the program. Creates UBOs: binding 0 = MVP, 1 = Material, 2 = Globals. Call after linking. */
         void SetProgram(GLuint program);
 
         void Bind(void* apiContext = nullptr) override;
@@ -30,9 +31,13 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
     private:
         GLint GetLocation(const std::string& name);
+        void UploadMaterialUBO();
+        void UploadGlobalsUBO();
 
         GLuint m_Program{ 0 };
         GLuint m_UBO_MVP{ 0 };
+        GLuint m_UBO_Material{ 0 };
+        GLuint m_Globals{ 0 };
         std::unordered_map<std::string, GLint> m_LocationCache;
     };
 

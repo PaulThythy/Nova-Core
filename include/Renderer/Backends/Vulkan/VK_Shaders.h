@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 
 #include "Renderer/RHI/RHI_Shaders.h"
+#include "Renderer/RHI/RHI_ShaderUniforms.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -54,6 +55,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         /** Set pipeline and layout (owned by swapchain/renderer). Call after pipeline creation. */
         void SetPipeline(VkPipeline pipeline, VkPipelineLayout layout);
 
+        /** Set scene UBOs (MVP + Material) and descriptor set for ApplyParameters. */
+        void SetSceneUBOs(VkDevice device,
+            VkBuffer mvpUBOBuffer, VkDeviceMemory mvpUBOMemory,
+            VkBuffer materialUBOBuffer, VkDeviceMemory materialUBOMemory,
+            VkDescriptorSet sceneDescriptorSet);
+
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
         void* GetNativeHandle() const override;
@@ -65,6 +72,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     private:
         VkPipeline m_Pipeline = VK_NULL_HANDLE;
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
+
+        VkDevice m_Device = VK_NULL_HANDLE;
+        VkBuffer m_MVPUBOBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory m_MVPUBOMemory = VK_NULL_HANDLE;
+        VkBuffer m_MaterialUBOBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory m_MaterialUBOMemory = VK_NULL_HANDLE;
+        
+        VkDescriptorSet m_SceneDescriptorSet = VK_NULL_HANDLE;
     };
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan
