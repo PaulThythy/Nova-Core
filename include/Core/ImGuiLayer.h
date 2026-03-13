@@ -2,6 +2,7 @@
 #define IMGUI_LAYER_H
 
 #include <SDL3/SDL.h>
+#include <functional>
 
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
@@ -40,6 +41,7 @@ namespace Nova::Core {
 
         // must be called by the renderer each frame before ImGuiLayer::End()
         void SetVulkanCommandBuffer(VkCommandBuffer cmd) { m_CurrentCommandBuffer = cmd; }
+        void SetVulkanBeforeRenderCallback(std::function<void()> callback) { m_VulkanBeforeRenderCallback = callback; }
 
     private:
         bool m_BlockEvents = true;
@@ -51,6 +53,7 @@ namespace Nova::Core {
 
         ImGui_ImplVulkan_InitInfo m_VulkanInitInfo{};
         VkCommandBuffer m_CurrentCommandBuffer = VK_NULL_HANDLE;
+        std::function<void()> m_VulkanBeforeRenderCallback;
     };
 
 } // namespace Nova::Core

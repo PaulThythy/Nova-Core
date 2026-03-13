@@ -86,6 +86,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         // Start with "no command buffer" until BeginFrame successfully starts recording.
         imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
+        imguiLayer.SetVulkanBeforeRenderCallback({});
 
         m_FrameActive = false;
 
@@ -158,6 +159,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         {
             auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
             imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
+            imguiLayer.SetVulkanBeforeRenderCallback({});
         }
 
         SDL_Window* window = Nova::Core::Application::Get().GetWindow().GetSDLWindow();
@@ -306,6 +308,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         {
             auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
             imguiLayer.SetVulkanCommandBuffer(cmd);
+            if (m_RenderedToViewportThisFrame) {
+                imguiLayer.SetVulkanBeforeRenderCallback([this]() { BeginImGuiRenderPass(); });
+            }
         }
 
         m_FrameActive = true;
@@ -589,7 +594,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         }
     }
 
-    void VK_Renderer::PrepareForImGui() {
+    void VK_Renderer::BeginImGuiRenderPass() {
         if (!m_FrameActive || !m_RenderedToViewportThisFrame)
             return;
 
@@ -644,6 +649,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         {
             auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
             imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
+            imguiLayer.SetVulkanBeforeRenderCallback({});
         }
 
         const uint32_t frameIndex = m_VKSwapchain.GetCurrentFrame();

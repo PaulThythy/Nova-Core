@@ -42,11 +42,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // ImGui viewport: returns VkDescriptorSet for the offscreen viewport texture.
         void* GetViewportTextureID() const override;
 
-        void PrepareForImGui() override;
-
         RHI::RHI_Shaders* GetShader() override { return m_Shader.get(); }
 
     private:
+        void BeginImGuiRenderPass();
         void CreateViewportFramebuffer(int w, int h);
         void DestroyViewportFramebuffer();
 

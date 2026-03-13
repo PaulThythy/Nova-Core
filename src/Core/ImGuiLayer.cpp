@@ -188,6 +188,10 @@ namespace Nova::Core {
             }
 
             case GraphicsAPI::Vulkan: {
+                if (m_VulkanBeforeRenderCallback) {
+                    m_VulkanBeforeRenderCallback();
+                }
+
                 if (m_CurrentCommandBuffer != VK_NULL_HANDLE) {
                     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), m_CurrentCommandBuffer);
                 }

@@ -78,10 +78,6 @@ namespace Nova::Core::Renderer::RHI {
         // Vulkan: typically a VkDescriptorSet cast to ImTextureID.
         virtual void* GetViewportTextureID() const = 0;
 
-        // Called after scene render, before ImGui. Vulkan: ends viewport pass, transitions
-        // viewport image to shader read, begins swapchain pass. OpenGL: no-op.
-        virtual void PrepareForImGui() {}
-
         /** Returns the current/default shader (e.g. model shader). Ownership stays with the renderer. */
         virtual RHI_Shaders* GetShader() = 0;
     };
