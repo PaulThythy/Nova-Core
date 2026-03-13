@@ -24,6 +24,9 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         void BeginFrame() override;
         void EndFrame() override;
 
+        void BeginScene(const glm::mat4& view, const glm::mat4& proj) override;
+        void SetModelMatrix(const glm::mat4& model) override;
+
         void Draw(const RHI::RHI_DrawCommand& cmd) override;
         void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;
 

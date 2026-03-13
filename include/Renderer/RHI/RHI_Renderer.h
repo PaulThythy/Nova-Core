@@ -23,10 +23,6 @@ namespace Nova::Core::Renderer::RHI {
     struct RHI_DrawCommand {
         std::shared_ptr<Renderer::Graphics::Mesh> m_Mesh;
 
-        glm::mat4 m_Model{1.0f};
-        glm::mat4 m_View{1.0f};
-        glm::mat4 m_Proj{1.0f};
-
         RHI_PrimitiveTopology m_Topology = RHI_PrimitiveTopology::Triangles;
 
         uint32_t m_VertexCount = 0;
@@ -38,10 +34,6 @@ namespace Nova::Core::Renderer::RHI {
 
     struct RHI_DrawIndexedCommand {
         std::shared_ptr<Renderer::Graphics::Mesh> m_Mesh;
-
-        glm::mat4 m_Model{1.0f};
-        glm::mat4 m_View{1.0f};
-        glm::mat4 m_Proj{1.0f};
 
         RHI_PrimitiveTopology m_Topology = RHI_PrimitiveTopology::Triangles;
         RHI_IndexType m_IndexType = RHI_IndexType::UInt32;
@@ -68,6 +60,10 @@ namespace Nova::Core::Renderer::RHI {
 
         virtual void BeginFrame() = 0;
         virtual void EndFrame() = 0;
+
+        // Scene state is configured separately from raw draw commands.
+        virtual void BeginScene(const glm::mat4& view, const glm::mat4& proj) = 0;
+        virtual void SetModelMatrix(const glm::mat4& model) = 0;
 
         virtual void Draw(const RHI_DrawCommand& cmd) = 0;
         virtual void DrawIndexed(const RHI_DrawIndexedCommand& cmd) = 0;

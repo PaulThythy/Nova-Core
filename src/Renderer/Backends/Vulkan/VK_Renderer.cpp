@@ -316,6 +316,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_FrameActive = true;
     }
 
+    void VK_Renderer::BeginScene(const glm::mat4& view, const glm::mat4& proj) {
+        if (!m_Shader || !m_Shader->IsValid()) return;
+
+        m_Shader->SetParameter("view", view);
+        m_Shader->SetParameter("proj", proj);
+    }
+
+    void VK_Renderer::SetModelMatrix(const glm::mat4& model) {
+        if (!m_Shader || !m_Shader->IsValid()) return;
+        m_Shader->SetParameter("model", model);
+    }
+
     void VK_Renderer::Draw(const RHI::RHI_DrawCommand& cmd) {
         if (!m_FrameActive) return;
         if (!cmd.m_Mesh)    return;
@@ -328,9 +340,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkCommandBuffer vkCmd = m_VKSwapchain.GetCommandBuffers()[imageIndex];
 
         if (m_Shader && m_Shader->IsValid()) {
-            m_Shader->SetParameter("model", cmd.m_Model);
-            m_Shader->SetParameter("view", cmd.m_View);
-            m_Shader->SetParameter("proj", cmd.m_Proj);
             m_Shader->Bind(vkCmd);
             m_Shader->ApplyParameters(vkCmd);
         }
@@ -359,9 +368,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkCommandBuffer vkCmd = m_VKSwapchain.GetCommandBuffers()[m_VKSwapchain.GetAcquiredImageIndex()];
 
         if (m_Shader && m_Shader->IsValid()) {
-            m_Shader->SetParameter("model", cmd.m_Model);
-            m_Shader->SetParameter("view", cmd.m_View);
-            m_Shader->SetParameter("proj", cmd.m_Proj);
             m_Shader->Bind(vkCmd);
             m_Shader->ApplyParameters(vkCmd);
         }

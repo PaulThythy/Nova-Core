@@ -194,6 +194,21 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glUseProgram(0);
     }
 
+    void GL_Renderer::BeginScene(const glm::mat4& view, const glm::mat4& proj) {
+        if (!m_Shader || !m_Shader->IsValid()) return;
+
+        glm::mat4 glProj = proj;
+        glProj[1][1] *= -1.0f; // Keep the same clip-space convention as Vulkan.
+
+        m_Shader->SetParameter("view", view);
+        m_Shader->SetParameter("proj", glProj);
+    }
+
+    void GL_Renderer::SetModelMatrix(const glm::mat4& model) {
+        if (!m_Shader || !m_Shader->IsValid()) return;
+        m_Shader->SetParameter("model", model);
+    }
+
     void GL_Renderer::Draw(const RHI::RHI_DrawCommand& cmd) {
         if (!m_Shader || !m_Shader->IsValid() || !cmd.m_Mesh) return;
 
@@ -203,11 +218,6 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             return;
         }
 
-        glm::mat4 proj = cmd.m_Proj;
-        proj[1][1] *= -1.0f; // Flip to match Vulkan clip-space
-        m_Shader->SetParameter("model", cmd.m_Model);
-        m_Shader->SetParameter("view", cmd.m_View);
-        m_Shader->SetParameter("proj", proj);
         m_Shader->Bind(nullptr);
         m_Shader->ApplyParameters(nullptr);
 
@@ -295,11 +305,6 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             return;
         }
 
-        glm::mat4 proj = cmd.m_Proj;
-        proj[1][1] *= -1.0f;
-        m_Shader->SetParameter("model", cmd.m_Model);
-        m_Shader->SetParameter("view", cmd.m_View);
-        m_Shader->SetParameter("proj", proj);
         m_Shader->Bind(nullptr);
         m_Shader->ApplyParameters(nullptr);
 
