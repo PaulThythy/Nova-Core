@@ -2,11 +2,12 @@
 #define VK_MESH_H
 
 #include <vulkan/vulkan.h>
+#include "Api.h"
 #include "Renderer/Graphics/Mesh.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-	struct VK_Mesh : public Renderer::Graphics::Mesh {
+	struct NV_API VK_Mesh : public Renderer::Graphics::Mesh {
 		
 		VK_Mesh() = default;
 		explicit VK_Mesh(const Renderer::Graphics::Mesh& mesh);

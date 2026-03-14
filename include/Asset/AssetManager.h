@@ -5,6 +5,7 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "Api.h"
 #include "AssetHandle.h"
 #include "Asset.h"
 #include "Core/Assert.h"
@@ -12,7 +13,7 @@
 
 namespace Nova::Core::Asset {
 
-    class AssetManager final {
+    class NV_API AssetManager final {
     public:
         static AssetManager& Get() {
             static AssetManager s_Instance;

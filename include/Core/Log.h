@@ -5,9 +5,11 @@
 #include <iostream>
 #include <string>
 
+#include "Api.h"
+
 namespace Nova::Core {
 
-    struct Log {
+    struct NV_API Log {
         
         enum class Level {
             TRACE = 0,

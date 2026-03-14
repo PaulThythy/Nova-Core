@@ -6,9 +6,11 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 
+#include "Api.h"
+
 namespace Nova::Core::Scene::ECS::Components {
 
-	struct TransformComponent {
+	struct NV_API TransformComponent {
 		glm::vec3 m_Translation{ 0.0f, 0.0f, 0.0f };
 		glm::vec3 m_Rotation{ 0.0f, 0.0f, 0.0f };
 		glm::vec3 m_Scale{ 1.0f, 1.0f, 1.0f };

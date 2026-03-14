@@ -6,6 +6,7 @@
 #include <vector>
 #include <unordered_map>
 
+#include "Api.h"
 #include "Core/Log.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
@@ -13,7 +14,7 @@
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
     /** OpenGL shader program wrapper; derives from RHI_Shaders for uniform API. */
-    class GL_Shaders final : public RHI::RHI_Shaders {
+    class NV_API GL_Shaders final : public RHI::RHI_Shaders {
     public:
         GL_Shaders() = default;
         ~GL_Shaders() override;
@@ -42,11 +43,11 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     };
 
     // --- Free functions (compile/link helpers) ---
-    GLuint CompileShader(GLenum shaderType, const std::string& shaderCode);
-    GLuint LinkProgram(const std::initializer_list<GLuint>& shaderIDs);
+    NV_API GLuint CompileShader(GLenum shaderType, const std::string& shaderCode);
+    NV_API GLuint LinkProgram(const std::initializer_list<GLuint>& shaderIDs);
 
-    bool CheckGLProgram(GLuint prog, std::string& outLog);
-    GLuint LoadSpirvShader(GLenum stage,
+    NV_API bool CheckGLProgram(GLuint prog, std::string& outLog);
+    NV_API GLuint LoadSpirvShader(GLenum stage,
         const std::vector<uint32_t>& spirv,
         const char* entryPoint,
         std::string& outLog);

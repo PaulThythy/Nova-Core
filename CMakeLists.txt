@@ -3,7 +3,11 @@
 file(GLOB_RECURSE SOURCES src/**.cpp)
 file(GLOB_RECURSE HEADERS include/**.h include/**.hpp)
 
-add_library(Nova-Core STATIC)
+if(BUILD_SHARED_LIBS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
+add_library(Nova-Core)
 
 target_sources(Nova-Core PRIVATE ${SOURCES} ${HEADERS})
 
@@ -101,6 +105,17 @@ target_link_libraries(Nova-Core PUBLIC
 )
 
 target_include_directories(Nova-Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+if(BUILD_SHARED_LIBS)
+    set_target_properties(Nova-Core imgui imguizmo glad PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+
+target_compile_definitions(Nova-Core
+    PUBLIC
+        $<$<BOOL:${BUILD_SHARED_LIBS}>:NV_BUILD_SHARED>
+    PRIVATE
+        $<$<BOOL:${BUILD_SHARED_LIBS}>:NV_CORE_EXPORTS>
+)
 
 target_compile_definitions(Nova-Core PRIVATE
     NOVA_CORE_ROOT_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"

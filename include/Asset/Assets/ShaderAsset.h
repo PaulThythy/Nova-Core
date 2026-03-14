@@ -1,12 +1,13 @@
 #ifndef SHADERASSET_H
 #define SHADERASSET_H
 
+#include "Api.h"
 #include "Asset/Asset.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 
 namespace Nova::Core::Asset::Assets {
 
-    class ShaderAsset final : public Asset{
+    class NV_API ShaderAsset final : public Asset{
     public:
         ShaderAsset(std::filesystem::path shaderPath, 
             Nova::Core::Renderer::RHI::RHI_ShaderDesc desc = {},

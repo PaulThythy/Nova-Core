@@ -6,13 +6,14 @@
 #include <optional>
 #include <set>
 
+#include "Api.h"
 #include "Core/Log.h"
 #include "Renderer/Backends/Vulkan/VK_Common.h"
 #include "Renderer/Backends/Vulkan/VK_Extensions.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    class VK_Device {
+    class NV_API VK_Device {
     public:
         VK_Device() = default;
         ~VK_Device() = default;
@@ -37,7 +38,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const VkPhysicalDeviceFeatures&         GetFeatures() const { return m_Features; }
         const VkPhysicalDeviceMemoryProperties& GetMemoryProperties() const { return m_MemoryProperties; }
 
-        struct VK_QueueFamily {
+        struct NV_API VK_QueueFamily {
             uint32_t   index = UINT32_MAX;
             VkQueueFlags flags = 0; // GRAPHICS/COMPUTE/TRANSFER/SPARSE + video/optical if available
             uint32_t   queueCount = 0;

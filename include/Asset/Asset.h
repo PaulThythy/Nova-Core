@@ -3,6 +3,7 @@
 
 #include <filesystem>
 
+#include "Api.h"
 #include "Core/UUID.h"
 
 namespace Nova::Core::Asset {
@@ -22,7 +23,7 @@ namespace Nova::Core::Asset {
     enum class AssetState { Unloaded, Loading, Ready, Failed };
     */
 
-    class Asset {
+    class NV_API Asset {
     public:
         Asset(AssetType type, std::filesystem::path path) : m_Type(type), m_Path(std::move(path)) {}
         virtual ~Asset() = default;

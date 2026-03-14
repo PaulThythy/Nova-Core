@@ -13,6 +13,7 @@
 
 #include <glad/gl.h>
 
+#include "Api.h"
 #include "Core/Assert.h"
 #include "Core/Window.h"
 #include "Core/Layer.h"
@@ -22,15 +23,9 @@
 #include "Core/ImGuiLayer.h"
 #include "Core/LayerStack.h"
 
-namespace Nova::Core::Events {
-    class Event;
-    class WindowClosedEvent;
-    class WindowResizeEvent;
-}
-
 namespace Nova::Core {
 
-    class Application {
+    class NV_API Application {
     public:
         explicit Application(const Window::WindowDesc& windowDesc);
         ~Application();

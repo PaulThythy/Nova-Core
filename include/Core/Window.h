@@ -5,6 +5,7 @@
 #include <glad/gl.h>
 #include <SDL3/SDL.h>
 
+#include "Api.h"
 #include "Core/GraphicsAPI.h"
 
 namespace Nova::Core::Events {
@@ -15,9 +16,9 @@ namespace Nova::Core::Events {
 
 namespace Nova::Core {
     
-    class Window {
+    class NV_API Window {
     public:
-        struct WindowDesc {
+        struct NV_API WindowDesc {
             const char* m_Title = "Nova Engine";
             int m_Width         = 1280;
             int m_Height        = 720;

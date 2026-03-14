@@ -18,11 +18,12 @@
 #include "Renderer/Backends/Vulkan/VK_Shaders.h"
 #include "Renderer/Backends/Vulkan/VK_Mesh.h"
 
+#include "Api.h"
 #include <memory>
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-	class VK_Renderer final : public RHI::IRenderer {
+	class NV_API VK_Renderer final : public RHI::IRenderer {
     public:
         VK_Renderer() = default;
         ~VK_Renderer() = default;

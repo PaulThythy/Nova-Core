@@ -3,9 +3,11 @@
 
 #include <glm/glm.hpp>
 
+#include "Api.h"
+
 namespace Nova::Core::Scene::ECS::Components {
 
-	struct WorldTransformComponent {
+	struct NV_API WorldTransformComponent {
 		glm::mat4 m_World{ 1.0f };
 	};
 

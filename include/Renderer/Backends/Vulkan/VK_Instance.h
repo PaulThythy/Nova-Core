@@ -5,9 +5,11 @@
 #include <vector>
 #include <vulkan/vulkan.h>
 
+#include "Api.h"
+
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    class VK_Instance {
+    class NV_API VK_Instance {
     public:
         VK_Instance() = default;
         ~VK_Instance() = default;

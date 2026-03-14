@@ -6,13 +6,14 @@
 #include <string>
 #include <vector>
 
+#include "Api.h"
 #include "Core/UUID.h"
 
 namespace Nova::Core::Scene {
 
-	class Scene {
+	class NV_API Scene {
 	public: 
-		struct Node {
+		struct NV_API Node {
 			entt::entity m_Parent{ entt::null };
 			std::vector<entt::entity> m_Children;
 		};
@@ -48,7 +49,7 @@ namespace Nova::Core::Scene {
 		std::string GetName() { return m_Name; }
 
 	private:
-		struct EntityHash {
+		struct NV_API EntityHash {
 			std::size_t operator()(entt::entity e) const noexcept {
 				return static_cast<std::size_t>(entt::to_integral(e));
 			}

@@ -4,9 +4,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "Api.h"
+
 namespace Nova::Core::Renderer::Graphics {
 
-    struct Camera {
+    struct NV_API Camera {
         Camera() = default;
 
         Camera(const glm::vec3& lookFrom, const glm::vec3& lookAt, const glm::vec3& up,

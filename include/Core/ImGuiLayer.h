@@ -10,6 +10,7 @@
 #include "imgui_impl_vulkan.h"
 #include "imgui_impl_sdlrenderer3.h"
 
+#include "Api.h"
 #include "Core/Layer.h"
 #include "Events/Event.h"
 #include "Core/Window.h"
@@ -17,7 +18,7 @@
 
 namespace Nova::Core {
 
-    class ImGuiLayer : public Layer {
+    class NV_API ImGuiLayer : public Layer {
     public:
         ImGuiLayer(Window& window, GraphicsAPI api);
         ~ImGuiLayer() = default;

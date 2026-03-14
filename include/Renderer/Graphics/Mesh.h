@@ -4,11 +4,12 @@
 #include <vector>
 #include <memory>
 
+#include "Api.h"
 #include "Renderer/Graphics/Vertex.h"
 
 namespace Nova::Core::Renderer::Graphics {
 
-	struct Mesh {
+	struct NV_API Mesh {
 
 		Mesh() = default;
 		Mesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices): m_Vertices(vertices), m_Indices(indices) {}

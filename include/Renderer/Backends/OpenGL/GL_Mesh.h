@@ -2,11 +2,12 @@
 #define GL_MESH_H
 
 #include <glad/gl.h>
+#include "Api.h"
 #include "Renderer/Graphics/Mesh.h"
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
-	struct GL_Mesh : public Renderer::Graphics::Mesh{
+	struct NV_API GL_Mesh : public Renderer::Graphics::Mesh{
 
 		GL_Mesh() = default;
 		explicit GL_Mesh(const Renderer::Graphics::Mesh& mesh);

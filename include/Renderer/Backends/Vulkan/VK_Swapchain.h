@@ -7,11 +7,12 @@
 #include <thread>
 #include <array>
 
+#include "Api.h"
 #include "Core/Application.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-	class VK_Swapchain {
+	class NV_API VK_Swapchain {
 	public:
 		VK_Swapchain() = default;
 		~VK_Swapchain() = default;
@@ -29,18 +30,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		void Destroy();
 
-		struct VK_FrameSync {
+		struct NV_API VK_FrameSync {
 			VkSemaphore m_ImageAvailableSemaphore = VK_NULL_HANDLE;
 			VkFence     m_InFlightFence = VK_NULL_HANDLE;
 		};
 
-		struct VK_Frame {
+		struct NV_API VK_Frame {
 			VkImage       m_Image = VK_NULL_HANDLE;
 			VkImageView   m_ImageView = VK_NULL_HANDLE;
 			VkFramebuffer m_Framebuffer = VK_NULL_HANDLE;
 		};
 
-		struct VK_SwapchainSupportDetails {
+		struct NV_API VK_SwapchainSupportDetails {
 			VkSurfaceCapabilitiesKHR        m_Capabilities{};
 			std::vector<VkSurfaceFormatKHR> m_Formats;
 			std::vector<VkPresentModeKHR>   m_PresentModes;

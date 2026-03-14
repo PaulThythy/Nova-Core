@@ -4,12 +4,13 @@
 #include <memory>
 #include <glad/gl.h>
 
+#include "Api.h"
 #include "Renderer/RHI/RHI_Renderer.h"
 #include "Renderer/Backends/OpenGL/GL_Shaders.h"
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
-    class GL_Renderer final : public RHI::IRenderer {
+    class NV_API GL_Renderer final : public RHI::IRenderer {
     public:
         GL_Renderer() = default;
         ~GL_Renderer() override = default;

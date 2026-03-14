@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 
+#include "Api.h"
 #include "Asset/Asset.h"
 #include "Core/GraphicsAPI.h"
 #include "Renderer/Graphics/Mesh.h"
@@ -20,7 +21,7 @@ namespace Nova::Core::Asset::Assets {
         Capsule
     };
 
-    struct MeshAssetDesc {
+    struct NV_API MeshAssetDesc {
         // Cube
         float m_HalfExtent = 0.5f;
 
@@ -42,7 +43,7 @@ namespace Nova::Core::Asset::Assets {
         int m_HemisphereRings = 8;
     };
 
-    class MeshAsset final : public Asset {
+    class NV_API MeshAsset final : public Asset {
     public:
         MeshAsset(std::filesystem::path path, MeshAssetDesc desc = {});
 

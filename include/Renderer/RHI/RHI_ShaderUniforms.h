@@ -16,12 +16,14 @@
 #include <string>
 #include <unordered_map>
 
+#include "Api.h"
+
 namespace Nova::Core::Renderer::RHI {
 
     // =========================================================================
     // Binding 0 — MVP (OpenGL & Vulkan, UBO)
     // =========================================================================
-    struct UBO_MVP {
+    struct NV_API UBO_MVP {
         alignas(16) glm::mat4 model{ 1.0f };
         alignas(16) glm::mat4 view{ 1.0f };
         alignas(16) glm::mat4 proj{ 1.0f };
@@ -30,7 +32,7 @@ namespace Nova::Core::Renderer::RHI {
     // =========================================================================
     // Binding 1 — Material (u_Color, etc.) — OpenGL & Vulkan, UBO
     // =========================================================================
-    struct UBO_Material {
+    struct NV_API UBO_Material {
         alignas(16) glm::vec4 u_Color{ 1.0f, 1.0f, 1.0f, 1.0f };
     };
 
@@ -38,7 +40,7 @@ namespace Nova::Core::Renderer::RHI {
     // Globals (resolution, time, frame, mouse, date) — one block per frame
     // Vulkan: push constants. OpenGL: UBO binding 2.
     // =========================================================================
-    struct Globals {
+    struct NV_API Globals {
         alignas(16) glm::vec3 iResolution{ 0.0f, 0.0f, 0.0f };
         alignas(4)  float     iTime{ 0.0f };
         alignas(4)  float     iTimeDelta{ 0.0f };

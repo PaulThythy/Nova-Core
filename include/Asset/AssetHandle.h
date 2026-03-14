@@ -3,13 +3,14 @@
 
 #include <memory>
 
+#include "Api.h"
 #include "Core/Assert.h"
 #include "Core/UUID.h"
 
 namespace Nova::Core::Asset {
 
     template <typename T>
-    class AssetHandle {
+    class NV_API AssetHandle {
     public:
         AssetHandle() = default;
         explicit AssetHandle(std::shared_ptr<T> asset) : m_AssetRef(std::move(asset)) {}

@@ -5,13 +5,14 @@
 #include <vector>
 #include <glm/glm.hpp>
 
+#include "Api.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
     /** Single shader module (vertex or fragment). Used internally to build pipelines. */
-    class VK_ShaderModule {
+    class NV_API VK_ShaderModule {
     public:
         VK_ShaderModule() = default;
         ~VK_ShaderModule() { Destroy(); }
@@ -47,7 +48,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     };
 
     /** Vulkan pipeline + layout wrapper; derives from RHI_Shaders for SetParameter / ApplyParameters (push constants). */
-    class VK_Shaders final : public RHI::RHI_Shaders {
+    class NV_API VK_Shaders final : public RHI::RHI_Shaders {
     public:
         VK_Shaders() = default;
         ~VK_Shaders() override = default;

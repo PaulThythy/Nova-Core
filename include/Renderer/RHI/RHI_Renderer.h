@@ -3,6 +3,7 @@
 
 #include <memory>
 
+#include "Api.h"
 #include "Core/GraphicsAPI.h"
 #include "Renderer/Graphics/Mesh.h"
 #include "Renderer/RHI/RHI_Shaders.h"
@@ -20,7 +21,7 @@ namespace Nova::Core::Renderer::RHI {
         UInt32
     };
 
-    struct RHI_DrawCommand {
+    struct NV_API RHI_DrawCommand {
         std::shared_ptr<Renderer::Graphics::Mesh> m_Mesh;
 
         RHI_PrimitiveTopology m_Topology = RHI_PrimitiveTopology::Triangles;
@@ -32,7 +33,7 @@ namespace Nova::Core::Renderer::RHI {
         uint32_t m_FirstInstance = 0;
     };
 
-    struct RHI_DrawIndexedCommand {
+    struct NV_API RHI_DrawIndexedCommand {
         std::shared_ptr<Renderer::Graphics::Mesh> m_Mesh;
 
         RHI_PrimitiveTopology m_Topology = RHI_PrimitiveTopology::Triangles;
@@ -46,7 +47,7 @@ namespace Nova::Core::Renderer::RHI {
         uint32_t m_FirstInstance = 0;
     };
 
-    class IRenderer {
+    class NV_API IRenderer {
     public:
         virtual ~IRenderer() = default;
         static std::unique_ptr<IRenderer> Create(Core::GraphicsAPI api);

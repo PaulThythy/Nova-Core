@@ -13,6 +13,7 @@
 #include <glslang/Public/ResourceLimits.h>
 #include <SPIRV/GlslangToSpv.h>
 
+#include "Api.h"
 #include "Core/GraphicsAPI.h"
 
 namespace Nova::Core::Renderer::RHI {
@@ -40,14 +41,14 @@ namespace Nova::Core::Renderer::RHI {
         RayCallable                                 // .rcall
     };
 
-    struct RHI_ShaderDesc {
+    struct NV_API RHI_ShaderDesc {
         RHI_ShaderStage m_Stage = RHI_ShaderStage::Unknown;
         std::filesystem::path m_FilePath;
         std::string m_EntryPoint = "main"; // Optional: default to "main"
         int m_GlslVersion = 130;
     };
 
-    struct RHI_ShaderCompileOptions {
+    struct NV_API RHI_ShaderCompileOptions {
         GraphicsAPI m_TargetApi = GraphicsAPI::Vulkan;
         bool m_DebugInfo = false;
         bool m_Optimize = true;
@@ -60,7 +61,7 @@ namespace Nova::Core::Renderer::RHI {
         std::vector<std::pair<std::string, std::string>> m_Definitions;
     };
 
-    struct RHI_ShaderCompilationOutput {
+    struct NV_API RHI_ShaderCompilationOutput {
         bool m_Success = false;
         RHI_ShaderStage m_Stage = RHI_ShaderStage::Unknown;
         GraphicsAPI m_TargetApi = GraphicsAPI::Vulkan;
@@ -80,7 +81,7 @@ namespace Nova::Core::Renderer::RHI {
      * Holds a map of uniform names to values; backends (GL/VK) implement
      * Bind() and ApplyParameters() to upload them to the GPU.
      */
-    class RHI_Shaders {
+    class NV_API RHI_Shaders {
     public:
         virtual ~RHI_Shaders() = default;
 
@@ -105,24 +106,24 @@ namespace Nova::Core::Renderer::RHI {
         std::unordered_map<std::string, UniformValue> m_Parameters;
     };
 
-    bool ReadTextFile(const std::filesystem::path& path, std::string& outText, std::string& outError);
+    NV_API bool ReadTextFile(const std::filesystem::path& path, std::string& outText, std::string& outError);
 
-    RHI_ShaderStage ShaderStageFromFileExtension(const std::filesystem::path& filePath);
-    const char* ShaderStageToString(RHI_ShaderStage stage);
+    NV_API RHI_ShaderStage ShaderStageFromFileExtension(const std::filesystem::path& filePath);
+    NV_API const char* ShaderStageToString(RHI_ShaderStage stage);
 
     // Ensures glslang is initialized at least once for the process.
-    bool EnsureGlslangInitialized();
+    NV_API bool EnsureGlslangInitialized();
 
     // Decrements an internal ref-count and finalizes glslang when it reaches zero.
-    void ShutdownGlslang();
+    NV_API void ShutdownGlslang();
 
     // Compile a single shader file.
     //  - Vulkan: outputs SPIR-V in out.spirv
     //  - OpenGL: outputs GLSL in out.glsl (validated)
-    bool CompileShader(const RHI_ShaderDesc& desc, const RHI_ShaderCompileOptions& options, RHI_ShaderCompilationOutput& out);
+    NV_API bool CompileShader(const RHI_ShaderDesc& desc, const RHI_ShaderCompileOptions& options, RHI_ShaderCompilationOutput& out);
 
 
-    class RHI_ShaderFileIncluder final : public glslang::TShader::Includer {
+    class NV_API RHI_ShaderFileIncluder final : public glslang::TShader::Includer {
     public:
         RHI_ShaderFileIncluder(std::filesystem::path sourceDir, std::vector<std::filesystem::path> includeDirs): 
             m_SourceDir(std::move(sourceDir)), m_IncludeDirs(std::move(includeDirs)) {}

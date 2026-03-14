@@ -7,6 +7,8 @@
 #include <functional>
 #include <ostream>
 
+#include "Api.h"
+
 namespace Nova::Core::Events {
 
     enum class EventType {
@@ -36,7 +38,7 @@ namespace Nova::Core::Events {
     virtual int GetCategoryFlags() const override { return category; }
 
 
-    class Event {
+    class NV_API Event {
     public:
         bool m_Handle = false;
 
@@ -53,7 +55,7 @@ namespace Nova::Core::Events {
         }
     };
 
-    class EventDispatcher {
+    class NV_API EventDispatcher {
     public:
         EventDispatcher(Event& event): m_Event(event) {}
 

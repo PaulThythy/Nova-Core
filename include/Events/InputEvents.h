@@ -6,6 +6,7 @@
 
 #include <format>
 
+#include "Api.h"
 #include "Event.h"
 
 namespace Nova::Core::Events {
@@ -14,7 +15,7 @@ namespace Nova::Core::Events {
 	// Key Events
 	//
 
-	class KeyEvent : public Event {
+	class NV_API KeyEvent : public Event {
 	public:
 		inline int GetKeyCode() const { return m_KeyCode; }
 
@@ -25,7 +26,7 @@ namespace Nova::Core::Events {
 		int m_KeyCode;
 	};
 
-	class KeyPressedEvent : public KeyEvent {
+	class NV_API KeyPressedEvent : public KeyEvent {
 	public:
 		KeyPressedEvent(const int keycode, bool isRepeat = false) : KeyEvent(keycode), m_IsRepeat(isRepeat) {}
 
@@ -40,7 +41,7 @@ namespace Nova::Core::Events {
 		bool m_IsRepeat;
 	};
 
-	class KeyReleasedEvent : public KeyEvent {
+	class NV_API KeyReleasedEvent : public KeyEvent {
 	public:
 		KeyReleasedEvent(const int keycode) : KeyEvent(keycode) {}
 
@@ -51,7 +52,7 @@ namespace Nova::Core::Events {
 		EVENT_CLASS_TYPE(KeyReleased)
 	};
 
-	class KeyTypedEvent : public KeyEvent {
+	class NV_API KeyTypedEvent : public KeyEvent {
 	public:
 		KeyTypedEvent(const int keycode) : KeyEvent(keycode) {}
 
@@ -66,7 +67,7 @@ namespace Nova::Core::Events {
 	// Mouse Events
 	//
 
-	class MouseMovedEvent : public Event {
+	class NV_API MouseMovedEvent : public Event {
 	public:
 		MouseMovedEvent(double x, double y) : m_MouseX(x), m_MouseY(y) {}
 
@@ -83,7 +84,7 @@ namespace Nova::Core::Events {
 		double m_MouseX, m_MouseY;
 	};
 
-	class MouseScrolledEvent : public Event {
+	class NV_API MouseScrolledEvent : public Event {
 	public:
 		MouseScrolledEvent(const double xOffset, const double yOffset) : m_XOffset(xOffset), m_YOffset(yOffset) {}
 
@@ -100,7 +101,7 @@ namespace Nova::Core::Events {
 		double m_XOffset, m_YOffset;
 	};
 
-	class MouseButtonEvent : public Event {
+	class NV_API MouseButtonEvent : public Event {
 	public:
 		inline int GetMouseButton() const { return m_Button; }
 
@@ -111,7 +112,7 @@ namespace Nova::Core::Events {
 		int m_Button;
 	};
 
-	class MouseButtonPressedEvent : public MouseButtonEvent
+	class NV_API MouseButtonPressedEvent : public MouseButtonEvent
 	{
 	public:
 		MouseButtonPressedEvent(int button) : MouseButtonEvent(button) {}
@@ -123,7 +124,7 @@ namespace Nova::Core::Events {
 		EVENT_CLASS_TYPE(MouseButtonPressed)
 	};
 
-	class MouseButtonReleasedEvent : public MouseButtonEvent {
+	class NV_API MouseButtonReleasedEvent : public MouseButtonEvent {
 	public:
 		MouseButtonReleasedEvent(int button) : MouseButtonEvent(button) {}
 
