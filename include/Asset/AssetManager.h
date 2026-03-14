@@ -7,6 +7,7 @@
 
 #include "AssetHandle.h"
 #include "Asset.h"
+#include "Core/Assert.h"
 #include "Core/UUID.h"
 
 namespace Nova::Core::Asset {
@@ -16,10 +17,6 @@ namespace Nova::Core::Asset {
         static AssetManager& Get() {
             static AssetManager s_Instance;
             return s_Instance;
-
-            //TODO implement assertions
-            //NV_ASSERT_MSG(s_Instance != nullptr, "AssetManager instance is not initialized.");
-            //return *s_Instance;
         }
 
         // generic runtime acquisition
@@ -44,8 +41,8 @@ namespace Nova::Core::Asset {
                     if (casted) {
                         return AssetHandle<T>(std::move(casted));
                     }
-                    // Same path but different asset type: this indicates an API usage error.
-                    // Consider asserting here in debug builds.
+
+                    NV_ASSERT_MSG(false, "AssetManager::Acquire requested the same path with a different asset type.");
                     return AssetHandle<T>();
                 }
             }
@@ -62,6 +59,7 @@ namespace Nova::Core::Asset {
 
         template <typename T>
         bool Reload(const AssetHandle<T>& handle) {
+            NV_ASSERT_MSG(handle, "AssetManager::Reload received an empty asset handle.");
             if (!handle) return false;
             return handle->Reload(); // assumes Asset exposes a virtual Reload()
         }
@@ -71,8 +69,6 @@ namespace Nova::Core::Asset {
         //AssetHandle<T> Acquire(UUID uuid);
 
     private:
-        static AssetManager s_Instance;
-
         static std::filesystem::path NormalizePath(const std::filesystem::path& p) {
             std::error_code ec;
             auto abs = std::filesystem::absolute(p, ec);

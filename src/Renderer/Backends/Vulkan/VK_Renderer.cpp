@@ -1,6 +1,7 @@
 #include "Renderer/Backends/Vulkan/VK_Renderer.h"
 
 #include "Core/Application.h"
+#include "Core/Assert.h"
 #include "Core/Window.h"
 #include "Core/ImGuiLayer.h"
 #include "Core/Log.h"
@@ -393,6 +394,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     std::shared_ptr<VK_Mesh> VK_Renderer::GetOrUploadMesh(
         const std::shared_ptr<Renderer::Graphics::Mesh>& cpuMesh)
     {
+        NV_ASSERT_MSG(cpuMesh, "VK_Renderer::GetOrUploadMesh received a null mesh.");
+        if (!cpuMesh)
+            return nullptr;
+
         auto it = m_MeshCache.find(cpuMesh.get());
         if (it != m_MeshCache.end())
             return it->second;

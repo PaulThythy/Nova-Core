@@ -5,6 +5,7 @@
 #include <fstream>
 #include <glm/glm.hpp>
 
+#include "Core/Assert.h"
 #include "Core/Log.h"
 #include "Renderer/Backends/Vulkan/VK_Common.h"
 #include "Renderer/RHI/RHI_Shaders.h"
@@ -40,6 +41,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 	}
 
 	VkSurfaceFormatKHR VK_Swapchain::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+		NV_ASSERT_MSG(!availableFormats.empty(), "No Vulkan surface formats are available for the swapchain.");
+		if (availableFormats.empty()) {
+			return { VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
+		}
+
 		// If the surface has no preferred format, choose one ourselves.
 		if (availableFormats.size() == 1 && availableFormats[0].format == VK_FORMAT_UNDEFINED) {
 			VkSurfaceFormatKHR fmt{};

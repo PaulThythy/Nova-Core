@@ -114,3 +114,8 @@ target_compile_definitions(Nova-Core
         $<$<CONFIG:RelWithDebInfo>:NOVA_RELWITHDEBINFO>
         $<$<CONFIG:MinSizeRel>:NOVA_MINSIZEREL>
 )
+
+target_compile_definitions(Nova-Core
+    PUBLIC
+        $<$<CONFIG:Debug>:NV_ENABLE_ASSERTS>
+)
