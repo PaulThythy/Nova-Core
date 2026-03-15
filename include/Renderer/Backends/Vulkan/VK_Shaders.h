@@ -58,12 +58,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         /** Set scene UBOs (MVP + Material) and descriptor set for ApplyParameters. */
         void SetSceneUBOs(VkDevice device,
+            VkBuffer globalsUBOBuffer, VkDeviceMemory globalsUBOMemory,
             VkBuffer mvpUBOBuffer, VkDeviceMemory mvpUBOMemory,
             VkBuffer materialUBOBuffer, VkDeviceMemory materialUBOMemory,
+            VkBuffer instanceBuffer, VkDeviceMemory instanceBufferMemory, VkDeviceSize instanceBufferSize,
             VkDescriptorSet sceneDescriptorSet);
 
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
+        void SetInstanceData(const std::vector<RHI::SSBO_InstanceData>& instances) override;
         void* GetNativeHandle() const override;
 
         VkPipeline GetPipeline() const { return m_Pipeline; }
@@ -75,10 +78,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
 
         VkDevice m_Device = VK_NULL_HANDLE;
+        VkBuffer m_GlobalsUBOBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory m_GlobalsUBOMemory = VK_NULL_HANDLE;
         VkBuffer m_MVPUBOBuffer = VK_NULL_HANDLE;
         VkDeviceMemory m_MVPUBOMemory = VK_NULL_HANDLE;
         VkBuffer m_MaterialUBOBuffer = VK_NULL_HANDLE;
         VkDeviceMemory m_MaterialUBOMemory = VK_NULL_HANDLE;
+        VkBuffer m_InstanceBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory m_InstanceBufferMemory = VK_NULL_HANDLE;
+        VkDeviceSize m_InstanceBufferSize = 0;
         
         VkDescriptorSet m_SceneDescriptorSet = VK_NULL_HANDLE;
     };

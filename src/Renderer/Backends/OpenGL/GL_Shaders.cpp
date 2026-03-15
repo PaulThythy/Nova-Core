@@ -13,10 +13,12 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
     // --- GL_Shaders ---
     GL_Shaders::~GL_Shaders() {
+        if (m_SSBO_Instances != 0) { glDeleteBuffers(1, &m_SSBO_Instances); m_SSBO_Instances = 0; }
         if (m_Globals != 0) { glDeleteBuffers(1, &m_Globals); m_Globals = 0; }
         if (m_UBO_Material != 0) { glDeleteBuffers(1, &m_UBO_Material); m_UBO_Material = 0; }
         if (m_UBO_MVP != 0) { glDeleteBuffers(1, &m_UBO_MVP); m_UBO_MVP = 0; }
         m_Program = 0;
+        m_InstanceBufferSize = 0;
         m_LocationCache.clear();
     }
 
@@ -29,21 +31,29 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
         glBufferData(GL_UNIFORM_BUFFER, sizeof(RHI::UBO_MVP), nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
-        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 1, m_UBO_MVP);
 
         if (m_UBO_Material != 0) { glDeleteBuffers(1, &m_UBO_Material); m_UBO_Material = 0; }
         glGenBuffers(1, &m_UBO_Material);
         glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_Material);
         glBufferData(GL_UNIFORM_BUFFER, sizeof(RHI::UBO_Material), nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
-        glBindBufferBase(GL_UNIFORM_BUFFER, 1, m_UBO_Material);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 3, m_UBO_Material);
 
         if (m_Globals != 0) { glDeleteBuffers(1, &m_Globals); m_Globals = 0; }
         glGenBuffers(1, &m_Globals);
         glBindBuffer(GL_UNIFORM_BUFFER, m_Globals);
         glBufferData(GL_UNIFORM_BUFFER, sizeof(RHI::Globals), nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
-        glBindBufferBase(GL_UNIFORM_BUFFER, 2, m_Globals);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_Globals);
+
+        if (m_SSBO_Instances != 0) { glDeleteBuffers(1, &m_SSBO_Instances); m_SSBO_Instances = 0; }
+        glGenBuffers(1, &m_SSBO_Instances);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_Instances);
+        m_InstanceBufferSize = sizeof(RHI::SSBO_InstanceData);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, static_cast<GLsizeiptr>(m_InstanceBufferSize), nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_SSBO_Instances);
     }
 
     void GL_Shaders::UploadMaterialUBO() {
@@ -63,7 +73,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_Material);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(RHI::UBO_Material), &data);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
-        glBindBufferBase(GL_UNIFORM_BUFFER, 1, m_UBO_Material);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 3, m_UBO_Material);
     }
 
     void GL_Shaders::UploadGlobalsUBO() {
@@ -85,7 +95,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glBindBuffer(GL_UNIFORM_BUFFER, m_Globals);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(RHI::Globals), &data);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
-        glBindBufferBase(GL_UNIFORM_BUFFER, 2, m_Globals);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_Globals);
     }
 
     GLint GL_Shaders::GetLocation(const std::string& name) {
@@ -109,7 +119,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         glUseProgram(m_Program);
 
-        // Binding 0: MVP UBO
+        // Binding 1: MVP UBO
         if (m_UBO_MVP != 0) {
             RHI::UBO_MVP mvp{};
             auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj");
@@ -119,7 +129,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
             glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(RHI::UBO_MVP), &mvp);
             glBindBuffer(GL_UNIFORM_BUFFER, 0);
-            glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_UBO_MVP);
+            glBindBufferBase(GL_UNIFORM_BUFFER, 1, m_UBO_MVP);
         }
 
         UploadMaterialUBO();
@@ -155,6 +165,21 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
                     glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(v));
             }, value);
         }
+    }
+
+    void GL_Shaders::SetInstanceData(const std::vector<RHI::SSBO_InstanceData>& instances) {
+        if (m_SSBO_Instances == 0 || instances.empty())
+            return;
+
+        const size_t requiredSize = instances.size() * sizeof(RHI::SSBO_InstanceData);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_Instances);
+        if (requiredSize > m_InstanceBufferSize) {
+            m_InstanceBufferSize = requiredSize;
+            glBufferData(GL_SHADER_STORAGE_BUFFER, static_cast<GLsizeiptr>(m_InstanceBufferSize), nullptr, GL_DYNAMIC_DRAW);
+        }
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr>(requiredSize), instances.data());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_SSBO_Instances);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
     }
 
     void* GL_Shaders::GetNativeHandle() const {

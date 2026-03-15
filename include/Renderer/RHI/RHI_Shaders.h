@@ -15,6 +15,7 @@
 
 #include "Api.h"
 #include "Core/GraphicsAPI.h"
+#include "Renderer/RHI/RHI_ShaderUniforms.h"
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -99,6 +100,8 @@ namespace Nova::Core::Renderer::RHI {
         virtual void Bind(void* apiContext = nullptr) = 0;
         /** Upload m_Parameters to the GPU. apiContext: GL = nullptr, VK = VkCommandBuffer*. */
         virtual void ApplyParameters(void* apiContext = nullptr) = 0;
+        /** Upload per-instance data for instanced draws. */
+        virtual void SetInstanceData(const std::vector<RHI::SSBO_InstanceData>& instances) = 0;
         /** Backend-specific handle (e.g. GL program id, VkPipeline). */
         virtual void* GetNativeHandle() const = 0;
 

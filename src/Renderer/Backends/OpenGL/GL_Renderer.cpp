@@ -66,9 +66,9 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK);
-        glFrontFace(GL_CCW);
+        //glEnable(GL_CULL_FACE);
+        //glCullFace(GL_BACK);
+        //glFrontFace(GL_CCW);
 
         std::filesystem::path p = std::filesystem::current_path();
         std::filesystem::path shaderDir = p / "Nova-Core" / "Resources" / "Engine" / "Shaders";
@@ -228,7 +228,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         if (!m_Shader || !m_Shader->IsValid()) return;
 
         glm::mat4 glProj = proj;
-        glProj[1][1] *= -1.0f; // Keep the same clip-space convention as Vulkan.
+        //glProj[1][1] *= -1.0f; // Keep the same clip-space convention as Vulkan.
 
         m_Shader->SetParameter("view", view);
         m_Shader->SetParameter("proj", glProj);

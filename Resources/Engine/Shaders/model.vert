@@ -11,8 +11,17 @@ layout(location = 5) in vec3 a_Bitangent;
 #include "NovaUniforms.glsl"
 
 layout(location = 0) out vec3 v_Normal;
+layout(location = 1) out vec4 v_Color;
 
 void main() {
-    v_Normal = normalize(mat3(transpose(inverse(NOVA_MODEL))) * a_Normal);
-    gl_Position = NOVA_PROJ * NOVA_VIEW * NOVA_MODEL * vec4(a_Position, 1.0);
+    mat4 model = NOVA_MODEL;
+    vec4 color = u_Color;
+    if (NOVA_UseInstancing != 0) {
+        model = u_Instances.instances[gl_InstanceIndex].model;
+        color = u_Instances.instances[gl_InstanceIndex].color;
+    }
+
+    v_Normal = normalize(mat3(transpose(inverse(model))) * a_Normal);
+    v_Color = color;
+    gl_Position = NOVA_PROJ * NOVA_VIEW * model * vec4(a_Position, 1.0);
 }

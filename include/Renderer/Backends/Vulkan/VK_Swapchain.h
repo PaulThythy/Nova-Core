@@ -18,6 +18,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		~VK_Swapchain() = default;
 
 		static constexpr uint32_t FRAMES_IN_FLIGHT = 3;
+		static constexpr uint32_t MAX_MODEL_INSTANCES = 1024;
 
 		// Create() should receive every dependency required by the swapchain.
 		bool Create(VkPhysicalDevice physicalDevice,
@@ -71,11 +72,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPipeline& GetModelPipeline() { return m_ModelPipeline; }
 		VkPipelineLayout& GetModelPipelineLayout() { return m_ModelPipelineLayout; }
 
-		// UBOs et descriptor set (binding 0 = MVP, binding 1 = Material)
+		// UBOs/SSBO et descriptor set (binding 0 = Globals, 1 = MVP, 2 = Instances, 3 = Material)
+		VkBuffer GetGlobalsUBOBuffer() const { return m_GlobalsUBOBuffer; }
+		VkDeviceMemory GetGlobalsUBOMemory() const { return m_GlobalsUBOMemory; }
 		VkBuffer GetMVPUBOBuffer() const { return m_MVPUBOBuffer; }
 		VkDeviceMemory GetMVPUBOMemory() const { return m_MVPUBOMemory; }
 		VkBuffer GetMaterialUBOBuffer() const { return m_MaterialUBOBuffer; }
 		VkDeviceMemory GetMaterialUBOMemory() const { return m_MaterialUBOMemory; }
+		VkBuffer GetInstanceBuffer() const { return m_InstanceBuffer; }
+		VkDeviceMemory GetInstanceBufferMemory() const { return m_InstanceBufferMemory; }
+		VkDeviceSize GetInstanceBufferSize() const { return m_InstanceBufferSize; }
 		VkDescriptorSet GetSceneDescriptorSet() const { return m_SceneDescriptorSet; }
 
 		// Viewport offscreen: render pass only (same pipeline as main window = model pipeline)
@@ -154,10 +160,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPipeline       m_ModelPipeline = VK_NULL_HANDLE;
 		VkPipelineLayout m_ModelPipelineLayout = VK_NULL_HANDLE;
 		VkDescriptorSetLayout m_SceneSetLayout = VK_NULL_HANDLE;
+		VkBuffer         m_GlobalsUBOBuffer = VK_NULL_HANDLE;
+		VkDeviceMemory   m_GlobalsUBOMemory = VK_NULL_HANDLE;
 		VkBuffer         m_MVPUBOBuffer = VK_NULL_HANDLE;
 		VkDeviceMemory   m_MVPUBOMemory = VK_NULL_HANDLE;
 		VkBuffer         m_MaterialUBOBuffer = VK_NULL_HANDLE;
 		VkDeviceMemory   m_MaterialUBOMemory = VK_NULL_HANDLE;
+		VkBuffer         m_InstanceBuffer = VK_NULL_HANDLE;
+		VkDeviceMemory   m_InstanceBufferMemory = VK_NULL_HANDLE;
+		VkDeviceSize     m_InstanceBufferSize = 0;
 		VkDescriptorSet  m_SceneDescriptorSet = VK_NULL_HANDLE;
 
 		// Viewport offscreen render pass only (color finalLayout = SHADER_READ_ONLY for ImGui)

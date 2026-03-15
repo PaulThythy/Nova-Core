@@ -19,11 +19,12 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         GL_Shaders() = default;
         ~GL_Shaders() override;
 
-        /** Set the program. Creates UBOs: binding 0 = MVP, 1 = Material, 2 = Globals. Call after linking. */
+        /** Set the program. Creates GPU buffers for bindings 0..3. Call after linking. */
         void SetProgram(GLuint program);
 
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
+        void SetInstanceData(const std::vector<RHI::SSBO_InstanceData>& instances) override;
         void* GetNativeHandle() const override;
 
         GLuint GetProgram() const { return m_Program; }
@@ -39,6 +40,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         GLuint m_UBO_MVP{ 0 };
         GLuint m_UBO_Material{ 0 };
         GLuint m_Globals{ 0 };
+        GLuint m_SSBO_Instances{ 0 };
+        size_t m_InstanceBufferSize{ 0 };
         std::unordered_map<std::string, GLint> m_LocationCache;
     };
 
