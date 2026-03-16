@@ -21,14 +21,19 @@ namespace Nova::Core::Renderer::Graphics {
             return glm::lookAt(m_LookFrom, m_LookAt, m_Up);
         }
 
+        // Unified convention (Vulkan / OpenGL+glClipControl / DX / Metal):
+        // Right-handed, depth in [0,1], Y-flip so that +Y in world = top of the screen.
         glm::mat4 GetProjectionMatrix() const {
+            glm::mat4 proj{1.0f};
             if (m_IsPerspective) {
-                return glm::perspective(glm::radians(m_FOV), m_AspectRatio, m_NearPlane, m_FarPlane);
+                proj = glm::perspectiveRH_ZO(glm::radians(m_FOV), m_AspectRatio, m_NearPlane, m_FarPlane);
             } else {
                 float halfHeight = m_FOV * 0.5f;
                 float halfWidth  = halfHeight * m_AspectRatio;
-                return glm::ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, m_NearPlane, m_FarPlane);
+                proj = glm::orthoRH_ZO(-halfWidth, halfWidth, -halfHeight, halfHeight, m_NearPlane, m_FarPlane);
             }
+            proj[1][1] *= -1.0f;
+            return proj;
         }
 
         glm::vec3 m_LookFrom{ 0.0f, 0.0f, 3.0f };

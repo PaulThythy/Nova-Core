@@ -56,8 +56,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         //if (!glIsEnabled(GL_CONTEXT_CORE_PROFILE_BIT))
             //return false;
-        //invert clip space to be the same as vulkan
-        //glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
+        glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE);
 
         glEnable(GL_FRAMEBUFFER_SRGB);
 
@@ -66,9 +65,10 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        //glEnable(GL_CULL_FACE);
-        //glCullFace(GL_BACK);
-        //glFrontFace(GL_CCW);
+        // culling is inverted in OpenGL, due to projection matrix convention
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        glFrontFace(GL_CCW);
 
         std::filesystem::path p = std::filesystem::current_path();
         std::filesystem::path shaderDir = p / "Nova-Core" / "Resources" / "Engine" / "Shaders";
@@ -227,11 +227,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         NV_ASSERT_MSG(m_Shader && m_Shader->IsValid(), "GL_Renderer::BeginScene requires a valid shader.");
         if (!m_Shader || !m_Shader->IsValid()) return;
 
-        glm::mat4 glProj = proj;
-        //glProj[1][1] *= -1.0f; // Keep the same clip-space convention as Vulkan.
-
         m_Shader->SetParameter("view", view);
-        m_Shader->SetParameter("proj", glProj);
+        m_Shader->SetParameter("proj", proj);
     }
 
     void GL_Renderer::SetModelMatrix(const glm::mat4& model) {
