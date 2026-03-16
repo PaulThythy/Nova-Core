@@ -706,7 +706,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         presentInfo.pWaitSemaphores = signalSemaphores;
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapchains;
-        presentInfo.pImageIndices = &imageIndex; // image acquise
+        presentInfo.pImageIndices = &imageIndex; // index of the acquired swapchain image
 
         VkResult presentRes = vkQueuePresentKHR(m_VKDevice.GetPresentQueue(), &presentInfo);
         if (presentRes == VK_ERROR_OUT_OF_DATE_KHR || presentRes == VK_SUBOPTIMAL_KHR) {

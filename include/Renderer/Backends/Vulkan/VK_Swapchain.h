@@ -72,7 +72,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPipeline& GetModelPipeline() { return m_ModelPipeline; }
 		VkPipelineLayout& GetModelPipelineLayout() { return m_ModelPipelineLayout; }
 
-		// UBOs/SSBO et descriptor set (binding 0 = Globals, 1 = MVP, 2 = Instances, 3 = Material)
+		// UBOs/SSBO and scene descriptor set (binding 0 = Globals, 1 = MVP, 2 = Instances, 3 = Material)
 		VkBuffer GetGlobalsUBOBuffer() const { return m_GlobalsUBOBuffer; }
 		VkDeviceMemory GetGlobalsUBOMemory() const { return m_GlobalsUBOMemory; }
 		VkBuffer GetMVPUBOBuffer() const { return m_MVPUBOBuffer; }

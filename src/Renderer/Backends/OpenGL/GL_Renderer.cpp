@@ -65,7 +65,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        // culling is inverted in OpenGL, due to projection matrix convention
+        // The GL_UPPER_LEFT clip origin and the Y-flip in the projection matrix cancel each other out,
+        // so front faces remain CCW in window space — same winding as default OpenGL.
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
         glFrontFace(GL_CCW);
