@@ -3,7 +3,7 @@
 
 #include "Api.h"
 #include "Asset/Asset.h"
-#include "Renderer/RHI/RHI_Shaders.h"
+#include "Renderer/RHI/RHI_ShaderCompiler.h"
 
 namespace Nova::Core::Asset::Assets {
 
