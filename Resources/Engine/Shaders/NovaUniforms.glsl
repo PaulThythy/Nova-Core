@@ -25,11 +25,15 @@ layout(std140, binding = 1) uniform UBO_MVP {
     mat4 model;
     mat4 view;
     mat4 proj;
+    mat4 viewProj;
+    mat4 invViewProj;
 } u_MVP;
 
 #define NOVA_MODEL u_MVP.model
 #define NOVA_VIEW  u_MVP.view
 #define NOVA_PROJ  u_MVP.proj
+#define NOVA_VIEW_PROJ u_MVP.viewProj
+#define NOVA_INV_VIEW_PROJ u_MVP.invViewProj
 
 // ---- Binding 2: per-instance data (SSBO everywhere) ----
 struct SSBO_InstanceData {

@@ -122,10 +122,12 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         // Binding 1: MVP UBO
         if (m_UBO_MVP != 0) {
             RHI::UBO_MVP mvp{};
-            auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj");
+            auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj"), itVP = m_Parameters.find("viewProj"), itInvVP = m_Parameters.find("invViewProj");
             if (itM != m_Parameters.end() && std::holds_alternative<glm::mat4>(itM->second)) mvp.model = std::get<glm::mat4>(itM->second);
             if (itV != m_Parameters.end() && std::holds_alternative<glm::mat4>(itV->second)) mvp.view = std::get<glm::mat4>(itV->second);
             if (itP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itP->second)) mvp.proj = std::get<glm::mat4>(itP->second);
+            if (itVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itVP->second)) mvp.viewProj = std::get<glm::mat4>(itVP->second);
+            if (itInvVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itInvVP->second)) mvp.invViewProj = std::get<glm::mat4>(itInvVP->second);
             glBindBuffer(GL_UNIFORM_BUFFER, m_UBO_MVP);
             glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(RHI::UBO_MVP), &mvp);
             glBindBuffer(GL_UNIFORM_BUFFER, 0);
@@ -138,7 +140,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         const auto materialLayout = RHI::GetMaterialUBOLayout();
         const auto globalsLayout = RHI::GetGlobalsLayout();
         for (const auto& [name, value] : m_Parameters) {
-            if (name == "model" || name == "view" || name == "proj")
+            if (name == "model" || name == "view" || name == "proj" || name == "viewProj" || name == "invViewProj")
                 continue;
             if (materialLayout.count(name) || globalsLayout.count(name))
                 continue;

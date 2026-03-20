@@ -230,6 +230,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         m_Shader->SetParameter("view", view);
         m_Shader->SetParameter("proj", proj);
+        m_Shader->SetParameter("viewProj", view * proj);
+        m_Shader->SetParameter("invViewProj", glm::inverse(view * proj));
     }
 
     void GL_Renderer::SetModelMatrix(const glm::mat4& model) {

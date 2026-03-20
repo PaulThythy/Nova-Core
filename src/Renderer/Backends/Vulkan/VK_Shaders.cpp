@@ -99,10 +99,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // ---- MVP UBO (binding 1) ----
         if (m_MVPUBOMemory != VK_NULL_HANDLE) {
             RHI::UBO_MVP mvp{};
-            auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj");
+            auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj"), itVP = m_Parameters.find("viewProj"), itInvVP = m_Parameters.find("invViewProj");
             if (itM != m_Parameters.end() && std::holds_alternative<glm::mat4>(itM->second)) mvp.model = std::get<glm::mat4>(itM->second);
             if (itV != m_Parameters.end() && std::holds_alternative<glm::mat4>(itV->second)) mvp.view = std::get<glm::mat4>(itV->second);
             if (itP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itP->second)) mvp.proj = std::get<glm::mat4>(itP->second);
+            if (itVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itVP->second)) mvp.viewProj = std::get<glm::mat4>(itVP->second);
+            if (itInvVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itInvVP->second)) mvp.invViewProj = std::get<glm::mat4>(itInvVP->second);
             void* mapped = nullptr;
             if (vkMapMemory(m_Device, m_MVPUBOMemory, 0, sizeof(RHI::UBO_MVP), 0, &mapped) == VK_SUCCESS) {
                 std::memcpy(mapped, &mvp, sizeof(RHI::UBO_MVP));
