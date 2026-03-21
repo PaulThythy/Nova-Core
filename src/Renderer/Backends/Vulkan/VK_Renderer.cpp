@@ -118,7 +118,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             vkDeviceWaitIdle(m_VKDevice.GetDevice());
         }
 
+        // Viewport framebuffer first: frees its descriptor set from the ImGui pool.
         DestroyViewportFramebuffer();
+
+        // Shutdown ImGui's Vulkan backend before the descriptor pool and device are destroyed.
+        auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
+        imguiLayer.DestroyImGuiBackend(GraphicsAPI::Vulkan);
 
         m_Shader.reset();
 

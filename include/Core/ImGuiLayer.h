@@ -35,6 +35,7 @@ namespace Nova::Core {
         void ProcessSDLEvent(const SDL_Event& e);
 
         void SetImGuiBackend(GraphicsAPI api);
+        void DestroyImGuiBackend(GraphicsAPI api);
 
         // --- Vulkan-specific methods ---
         // Must be called by VK_Renderer before the layer is attached (or immediately after creation)

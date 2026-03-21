@@ -172,6 +172,9 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glDisable(GL_BLEND);
         glDisable(GL_CULL_FACE);
 
+        auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
+        imguiLayer.DestroyImGuiBackend(GraphicsAPI::OpenGL);
+
         NV_LOG_INFO("OpenGL Renderer destroyed.");
     }
 
