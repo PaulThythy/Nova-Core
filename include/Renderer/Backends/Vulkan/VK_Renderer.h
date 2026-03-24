@@ -50,6 +50,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     private:
         void BeginImGuiRenderPass();
+        bool TransitionViewportImageToShaderRead();
         void CreateViewportFramebuffer(int w, int h);
         void DestroyViewportFramebuffer();
 

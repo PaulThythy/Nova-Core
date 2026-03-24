@@ -23,6 +23,80 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
+    bool VK_Renderer::TransitionViewportImageToShaderRead() {
+        if (m_ViewportImage == VK_NULL_HANDLE)
+            return false;
+
+        VkCommandPool commandPool = m_VKSwapchain.GetCommandPool();
+        VkDevice device = m_VKDevice.GetDevice();
+        VkQueue graphicsQueue = m_VKDevice.GetGraphicsQueue();
+        if (commandPool == VK_NULL_HANDLE || device == VK_NULL_HANDLE || graphicsQueue == VK_NULL_HANDLE)
+            return false;
+
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = commandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer cmd = VK_NULL_HANDLE;
+        VkResult res = vkAllocateCommandBuffers(device, &allocInfo, &cmd);
+        CheckVkResult(res);
+        if (res != VK_SUCCESS)
+            return false;
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        res = vkBeginCommandBuffer(cmd, &beginInfo);
+        CheckVkResult(res);
+        if (res != VK_SUCCESS) {
+            vkFreeCommandBuffers(device, commandPool, 1, &cmd);
+            return false;
+        }
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = m_ViewportImage;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        vkCmdPipelineBarrier(cmd,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        res = vkEndCommandBuffer(cmd);
+        CheckVkResult(res);
+        if (res != VK_SUCCESS) {
+            vkFreeCommandBuffers(device, commandPool, 1, &cmd);
+            return false;
+        }
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmd;
+
+        res = vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        CheckVkResult(res);
+        if (res == VK_SUCCESS) {
+            res = vkQueueWaitIdle(graphicsQueue);
+            CheckVkResult(res);
+        }
+
+        vkFreeCommandBuffers(device, commandPool, 1, &cmd);
+        return (res == VK_SUCCESS);
+    }
+
     bool VK_Renderer::Create() {
         NV_LOG_INFO("Creating Vulkan renderer (minimal mode)...");
 
@@ -565,6 +639,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_ViewportImageView,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         );
+
+        // Keep descriptor layout contract valid immediately after creation.
+        if (m_ViewportDescriptorSet != VK_NULL_HANDLE) {
+            if (TransitionViewportImageToShaderRead()) {
+                m_ViewportImageFirstUse = false;
+            }
+            else {
+                NV_LOG_WARN("VK_Renderer: failed to pre-transition viewport image to SHADER_READ_ONLY_OPTIMAL.");
+            }
+        }
     }
 
     void VK_Renderer::DestroyViewportFramebuffer() {
