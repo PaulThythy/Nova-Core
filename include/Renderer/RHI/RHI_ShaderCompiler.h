@@ -14,27 +14,26 @@ namespace Nova::Core::Renderer::RHI {
 
     enum class RHI_ShaderStage {
         Unknown = 0,
-        Vertex,                                     // .vert
-        Fragment,                                   // .frag
-        Geometry,                                   // .geom
-        TessControl,                                // .tesc
-        TessEvaluation,                             // .tese
-        Compute,                                    // .comp
+        Vertex,                                     // *.vert.slang
+        Fragment,                                   // *.frag.slang
+        Geometry,                                   // *.geom.slang
+        TessControl,                                // *.tesc.slang
+        TessEvaluation,                             // *.tese.slang
+        Compute,                                    // *.comp.slang
 
         // for raytracing pipeline shaders
-        RayGen,                                     // .rgen
-        RayMiss,                                    // .rmiss
-        RayClosestHit,                              // .rchit
-        RayAnyHit,                                  // .ahit
-        RayIntersection,                            // .rint
-        RayCallable                                 // .rcall
+        RayGen,                                     // *.rgen.slang
+        RayMiss,                                    // *.rmiss.slang
+        RayClosestHit,                              // *.rchit.slang
+        RayAnyHit,                                  // *.ahit.slang
+        RayIntersection,                            // *.rint.slang
+        RayCallable                                 // *.rcall.slang
     };
 
     struct NV_API RHI_ShaderDesc {
         RHI_ShaderStage m_Stage = RHI_ShaderStage::Unknown;
         std::filesystem::path m_FilePath;
         std::string m_EntryPoint = "main";
-        int m_GlslVersion = 130;
     };
 
     struct NV_API RHI_ShaderCompileOptions {
@@ -52,7 +51,8 @@ namespace Nova::Core::Renderer::RHI {
         GraphicsAPI m_TargetApi = GraphicsAPI::Vulkan;
 
         std::vector<uint32_t> m_Spirv;
-        std::string m_Glsl;
+        /// Contenu source .slang lu ou régénéré (débogage / hot-reload).
+        std::string m_Source;
         std::string m_Log;
     };
 
@@ -61,8 +61,8 @@ namespace Nova::Core::Renderer::RHI {
     NV_API RHI_ShaderStage ShaderStageFromFileExtension(const std::filesystem::path& filePath);
     NV_API const char* ShaderStageToString(RHI_ShaderStage stage);
 
-    NV_API bool EnsureGlslangInitialized();
-    NV_API void ShutdownGlslang();
+    NV_API bool EnsureSlangInitialized();
+    NV_API void ShutdownSlang();
 
     NV_API bool CompileShader(const RHI_ShaderDesc& desc, const RHI_ShaderCompileOptions& options, RHI_ShaderCompilationOutput& out);
 

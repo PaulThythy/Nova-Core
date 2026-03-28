@@ -73,8 +73,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         std::filesystem::path p = std::filesystem::current_path();
         std::filesystem::path shaderDir = p / "Nova-Core" / "Resources" / "Engine" / "Shaders";
-        std::filesystem::path vertPath = shaderDir / "model.vert";
-        std::filesystem::path fragPath = shaderDir / "model.frag";
+        std::filesystem::path vertPath = shaderDir / "model.vert.slang";
+        std::filesystem::path fragPath = shaderDir / "model.frag.slang";
 
         using Nova::Core::Asset::AssetManager;
         using Nova::Core::Asset::Assets::ShaderAsset;
@@ -82,11 +82,9 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         Nova::Core::Renderer::RHI::RHI_ShaderDesc vDesc{};
         vDesc.m_Stage = RHI_ShaderStage::Vertex;
-        vDesc.m_GlslVersion = 450;
 
         Nova::Core::Renderer::RHI::RHI_ShaderDesc fDesc{};
         fDesc.m_Stage = RHI_ShaderStage::Fragment;
-        fDesc.m_GlslVersion = 450;
 
         auto vert = AssetManager::Get().Acquire<ShaderAsset>(vertPath, vDesc);
         auto frag = AssetManager::Get().Acquire<ShaderAsset>(fragPath, fDesc);

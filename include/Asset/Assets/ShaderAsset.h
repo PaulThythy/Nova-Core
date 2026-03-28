@@ -20,11 +20,12 @@ namespace Nova::Core::Asset::Assets {
 
         // Accessors populated after compilation.
         const std::vector<uint32_t>& GetSpirv() const;
-        const std::string& GetGlsl() const;
+        /// Source .slang conservé après compilation (débogage).
+        const std::string& GetSource() const;
         const std::string& GetLastLog() const { return m_LastLog; }
 
         const std::vector<uint32_t>& GetSpirv(Nova::Core::GraphicsAPI api) const;
-        const std::string& GetGlsl(Nova::Core::GraphicsAPI api) const;
+        const std::string& GetSource(Nova::Core::GraphicsAPI api) const;
 
         Nova::Core::Renderer::RHI::RHI_ShaderStage GetStage() const { return m_Stage; }
 
@@ -42,8 +43,8 @@ namespace Nova::Core::Asset::Assets {
         std::vector<uint32_t> m_SpirvVulkan;
         std::vector<uint32_t> m_SpirvOpenGL;
 
-        std::string m_GlslVulkan;
-        std::string m_GlslOpenGL;
+        std::string m_SourceVulkan;
+        std::string m_SourceOpenGL;
 
         Nova::Core::GraphicsAPI m_LastCompiledApi = Nova::Core::GraphicsAPI::Vulkan;
         std::string m_LastLog;

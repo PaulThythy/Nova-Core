@@ -2,164 +2,88 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <fstream>
 #include <mutex>
 #include <sstream>
+#include <string_view>
 
-#include <glslang/Public/ResourceLimits.h>
-#include <glslang/Public/ShaderLang.h>
-#include <SPIRV/GlslangToSpv.h>
+#include <slang-com-helper.h>
+#include <slang-com-ptr.h>
+#include <slang.h>
 
 namespace Nova::Core::Renderer::RHI {
 
-    std::mutex g_GlslangMutex;
-    int g_GlslangRefCount = 0;
+    namespace {
 
-    struct ScopedGlslangProcess {
-        bool ok = false;
+        std::mutex g_SlangMutex;
+        Slang::ComPtr<slang::IGlobalSession> g_GlobalSession;
 
-        ScopedGlslangProcess() {
-            std::lock_guard<std::mutex> lock(g_GlslangMutex);
-            if (g_GlslangRefCount == 0) {
-                ok = glslang::InitializeProcess();
+        static std::string PathStringSlang(const std::filesystem::path& p) {
+            std::string s = p.generic_string();
+            return s;
+        }
+
+        static std::string BlobToString(ISlangBlob* blob) {
+            if (!blob) {
+                return {};
             }
-            else {
-                ok = true;
+            const char* ptr = static_cast<const char*>(blob->getBufferPointer());
+            const size_t size = blob->getBufferSize();
+            if (!ptr || size == 0) {
+                return {};
             }
+            return std::string(ptr, ptr + size);
+        }
 
-            if (ok) {
-                ++g_GlslangRefCount;
+        static bool EnsureGlobalSessionLocked(std::string& outErr) {
+            if (g_GlobalSession) {
+                return true;
+            }
+            SlangGlobalSessionDesc desc{};
+            desc.structureSize = sizeof(desc);
+            desc.enableGLSL = true; // required for `import glsl` (inverse, etc.)
+            const SlangResult res = slang::createGlobalSession(&desc, g_GlobalSession.writeRef());
+            if (SLANG_FAILED(res)) {
+                outErr = "slang::createGlobalSession failed";
+                return false;
+            }
+            return true;
+        }
+
+        static SlangStage ToSlangStage(RHI_ShaderStage stage) {
+            switch (stage) {
+                case RHI_ShaderStage::Vertex:          return SLANG_STAGE_VERTEX;
+                case RHI_ShaderStage::Fragment:        return SLANG_STAGE_FRAGMENT;
+                case RHI_ShaderStage::Geometry:        return SLANG_STAGE_GEOMETRY;
+                case RHI_ShaderStage::TessControl:     return SLANG_STAGE_HULL;
+                case RHI_ShaderStage::TessEvaluation:  return SLANG_STAGE_DOMAIN;
+                case RHI_ShaderStage::Compute:         return SLANG_STAGE_COMPUTE;
+                case RHI_ShaderStage::RayGen:          return SLANG_STAGE_RAY_GENERATION;
+                case RHI_ShaderStage::RayMiss:         return SLANG_STAGE_MISS;
+                case RHI_ShaderStage::RayClosestHit:   return SLANG_STAGE_CLOSEST_HIT;
+                case RHI_ShaderStage::RayAnyHit:       return SLANG_STAGE_ANY_HIT;
+                case RHI_ShaderStage::RayIntersection: return SLANG_STAGE_INTERSECTION;
+                case RHI_ShaderStage::RayCallable:     return SLANG_STAGE_CALLABLE;
+                default:                               return SLANG_STAGE_NONE;
             }
         }
 
-        ~ScopedGlslangProcess() {
-            std::lock_guard<std::mutex> lock(g_GlslangMutex);
-            if (!ok) {
-                return;
+        static bool EndsWithIgnoreCase(std::string_view s, std::string_view suffix) {
+            if (suffix.size() > s.size()) {
+                return false;
             }
-
-            --g_GlslangRefCount;
-            if (g_GlslangRefCount <= 0) {
-                g_GlslangRefCount = 0;
-                glslang::FinalizeProcess();
-            }
-        }
-    };
-
-    std::string MakePreamble(const RHI_ShaderCompileOptions& options) {
-        std::string preamble;
-        for (const auto& def : options.m_Definitions) {
-            preamble += "#define ";
-            preamble += def.first;
-            if (!def.second.empty()) {
-                preamble += " ";
-                preamble += def.second;
-            }
-            preamble += "\n";
-        }
-        return preamble;
-    }
-
-    EShLanguage ShaderStageToEShLanguage(RHI_ShaderStage stage) {
-        switch (stage) {
-            case RHI_ShaderStage::Vertex:          return EShLangVertex;
-            case RHI_ShaderStage::Fragment:        return EShLangFragment;
-            case RHI_ShaderStage::Geometry:        return EShLangGeometry;
-            case RHI_ShaderStage::TessControl:     return EShLangTessControl;
-            case RHI_ShaderStage::TessEvaluation:  return EShLangTessEvaluation;
-            case RHI_ShaderStage::Compute:         return EShLangCompute;
-            case RHI_ShaderStage::RayGen:          return EShLangRayGen;
-            case RHI_ShaderStage::RayMiss:         return EShLangMiss;
-            case RHI_ShaderStage::RayClosestHit:   return EShLangClosestHit;
-            case RHI_ShaderStage::RayAnyHit:       return EShLangAnyHit;
-            case RHI_ShaderStage::RayIntersection: return EShLangIntersect;
-            case RHI_ShaderStage::RayCallable:     return EShLangCallable;
-            default:                               return EShLangVertex;
-        }
-    }
-
-    class RHI_ShaderFileIncluder final : public glslang::TShader::Includer {
-    public:
-        RHI_ShaderFileIncluder(std::filesystem::path sourceDir, std::vector<std::filesystem::path> includeDirs)
-            : m_SourceDir(std::move(sourceDir)), m_IncludeDirs(std::move(includeDirs)) {}
-
-        IncludeResult* includeSystem(const char* headerName, const char* includerName, size_t inclusionDepth) override {
-            (void)includerName;
-            (void)inclusionDepth;
-
-            std::filesystem::path path(headerName ? headerName : "");
-            if (path.is_absolute()) {
-                if (auto* result = TryIncludeInDir(path.filename().string().c_str(), path.parent_path())) {
-                    return result;
+            for (size_t i = 0; i < suffix.size(); ++i) {
+                const char a = static_cast<char>(std::tolower(static_cast<unsigned char>(s[s.size() - suffix.size() + i])));
+                const char b = static_cast<char>(std::tolower(static_cast<unsigned char>(suffix[i])));
+                if (a != b) {
+                    return false;
                 }
             }
-
-            return TryInclude(headerName);
+            return true;
         }
 
-        IncludeResult* includeLocal(const char* headerName, const char* includerName, size_t inclusionDepth) override {
-            (void)inclusionDepth;
-
-            if (includerName && includerName[0] != '\0') {
-                const std::filesystem::path includerPath(includerName);
-                const std::filesystem::path includerDir =
-                    includerPath.has_parent_path() ? includerPath.parent_path() : m_SourceDir;
-
-                if (IncludeResult* result = TryIncludeInDir(headerName, includerDir)) {
-                    return result;
-                }
-            }
-
-            if (IncludeResult* result = TryIncludeInDir(headerName, m_SourceDir)) {
-                return result;
-            }
-
-            return TryInclude(headerName);
-        }
-
-        void releaseInclude(IncludeResult* result) override {
-            if (!result) {
-                return;
-            }
-
-            delete reinterpret_cast<std::string*>(result->userData);
-            delete result;
-        }
-
-    private:
-        IncludeResult* TryInclude(const char* headerName) {
-            for (const auto& dir : m_IncludeDirs) {
-                if (IncludeResult* result = TryIncludeInDir(headerName, dir)) {
-                    return result;
-                }
-            }
-            return nullptr;
-        }
-
-        IncludeResult* TryIncludeInDir(const char* headerName, const std::filesystem::path& dir) {
-            if (!headerName || headerName[0] == '\0') {
-                return nullptr;
-            }
-
-            const std::filesystem::path candidate = dir / headerName;
-            std::error_code ec;
-            if (!std::filesystem::exists(candidate, ec) || ec) {
-                return nullptr;
-            }
-
-            std::string* content = new std::string();
-            std::string error;
-            if (!ReadTextFile(candidate, *content, error)) {
-                delete content;
-                return nullptr;
-            }
-
-            return new IncludeResult(candidate.string(), content->c_str(), content->size(), content);
-        }
-
-        std::filesystem::path m_SourceDir;
-        std::vector<std::filesystem::path> m_IncludeDirs;
-    };
+    } // namespace
 
     bool ReadTextFile(const std::filesystem::path& path, std::string& outText, std::string& outError) {
         std::ifstream file(path, std::ios::in | std::ios::binary);
@@ -181,23 +105,19 @@ namespace Nova::Core::Renderer::RHI {
     }
 
     RHI_ShaderStage ShaderStageFromFileExtension(const std::filesystem::path& filePath) {
-        std::string ext = filePath.extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-        });
-
-        if (ext == ".vert") return RHI_ShaderStage::Vertex;
-        if (ext == ".frag") return RHI_ShaderStage::Fragment;
-        if (ext == ".geom") return RHI_ShaderStage::Geometry;
-        if (ext == ".tesc") return RHI_ShaderStage::TessControl;
-        if (ext == ".tese") return RHI_ShaderStage::TessEvaluation;
-        if (ext == ".comp") return RHI_ShaderStage::Compute;
-        if (ext == ".rgen") return RHI_ShaderStage::RayGen;
-        if (ext == ".rmiss") return RHI_ShaderStage::RayMiss;
-        if (ext == ".rchit") return RHI_ShaderStage::RayClosestHit;
-        if (ext == ".ahit") return RHI_ShaderStage::RayAnyHit;
-        if (ext == ".rint") return RHI_ShaderStage::RayIntersection;
-        if (ext == ".rcall") return RHI_ShaderStage::RayCallable;
+        const std::string name = filePath.filename().string();
+        if (EndsWithIgnoreCase(name, ".vert.slang")) return RHI_ShaderStage::Vertex;
+        if (EndsWithIgnoreCase(name, ".frag.slang")) return RHI_ShaderStage::Fragment;
+        if (EndsWithIgnoreCase(name, ".geom.slang")) return RHI_ShaderStage::Geometry;
+        if (EndsWithIgnoreCase(name, ".tesc.slang")) return RHI_ShaderStage::TessControl;
+        if (EndsWithIgnoreCase(name, ".tese.slang")) return RHI_ShaderStage::TessEvaluation;
+        if (EndsWithIgnoreCase(name, ".comp.slang")) return RHI_ShaderStage::Compute;
+        if (EndsWithIgnoreCase(name, ".rgen.slang")) return RHI_ShaderStage::RayGen;
+        if (EndsWithIgnoreCase(name, ".rmiss.slang")) return RHI_ShaderStage::RayMiss;
+        if (EndsWithIgnoreCase(name, ".rchit.slang")) return RHI_ShaderStage::RayClosestHit;
+        if (EndsWithIgnoreCase(name, ".ahit.slang")) return RHI_ShaderStage::RayAnyHit;
+        if (EndsWithIgnoreCase(name, ".rint.slang")) return RHI_ShaderStage::RayIntersection;
+        if (EndsWithIgnoreCase(name, ".rcall.slang")) return RHI_ShaderStage::RayCallable;
         return RHI_ShaderStage::Unknown;
     }
 
@@ -219,24 +139,16 @@ namespace Nova::Core::Renderer::RHI {
         }
     }
 
-    bool EnsureGlslangInitialized() {
-        std::lock_guard<std::mutex> lock(g_GlslangMutex);
-        if (g_GlslangRefCount == 0) {
-            if (!glslang::InitializeProcess()) {
-                return false;
-            }
-        }
-        ++g_GlslangRefCount;
-        return true;
+    bool EnsureSlangInitialized() {
+        std::lock_guard<std::mutex> lock(g_SlangMutex);
+        std::string err;
+        return EnsureGlobalSessionLocked(err);
     }
 
-    void ShutdownGlslang() {
-        std::lock_guard<std::mutex> lock(g_GlslangMutex);
-        --g_GlslangRefCount;
-        if (g_GlslangRefCount <= 0) {
-            g_GlslangRefCount = 0;
-            glslang::FinalizeProcess();
-        }
+    void ShutdownSlang() {
+        std::lock_guard<std::mutex> lock(g_SlangMutex);
+        g_GlobalSession.setNull();
+        slang::shutdown();
     }
 
     bool CompileShader(const RHI_ShaderDesc& desc, const RHI_ShaderCompileOptions& options, RHI_ShaderCompilationOutput& out) {
@@ -244,13 +156,19 @@ namespace Nova::Core::Renderer::RHI {
         out.m_TargetApi = options.m_TargetApi;
 
         RHI_ShaderStage stage = desc.m_Stage;
-        if (stage == RHI_ShaderStage::Unknown && desc.m_FilePath.has_extension()) {
+        if (stage == RHI_ShaderStage::Unknown) {
             stage = ShaderStageFromFileExtension(desc.m_FilePath);
         }
 
         out.m_Stage = stage;
         if (stage == RHI_ShaderStage::Unknown) {
-            out.m_Log = "Cannot infer shader stage from extension: " + desc.m_FilePath.string();
+            out.m_Log = "Cannot infer shader stage from file name (expected e.g. *.vert.slang): " + desc.m_FilePath.string();
+            return false;
+        }
+
+        const SlangStage slangStage = ToSlangStage(stage);
+        if (slangStage == SLANG_STAGE_NONE) {
+            out.m_Log = "Invalid shader stage";
             return false;
         }
 
@@ -263,117 +181,156 @@ namespace Nova::Core::Renderer::RHI {
             }
         }
 
-        ScopedGlslangProcess scoped;
-        if (!scoped.ok) {
-            out.m_Log = "glslang::InitializeProcess() failed";
+        std::lock_guard<std::mutex> lock(g_SlangMutex);
+
+        std::string err;
+        if (!EnsureGlobalSessionLocked(err)) {
+            out.m_Log = err;
             return false;
         }
 
-        const EShLanguage lang = ShaderStageToEShLanguage(stage);
-        glslang::TShader shader(lang);
+        slang::IGlobalSession* const globalSession = g_GlobalSession.get();
 
-        const std::string fileNameStr = desc.m_FilePath.string();
-        const char* strings[] = { source.c_str() };
-        const int lengths[] = { static_cast<int>(source.size()) };
-        const char* names[] = { fileNameStr.c_str() };
+        Slang::ComPtr<slang::ISession> session;
 
-        shader.setStringsWithLengthsAndNames(strings, lengths, names, 1);
-        shader.setEntryPoint(desc.m_EntryPoint.c_str());
-
-        const std::string preamble = MakePreamble(options);
-        if (!preamble.empty()) {
-            shader.setPreamble(preamble.c_str());
+        slang::TargetDesc targetDesc{};
+        targetDesc.structureSize = sizeof(targetDesc);
+        targetDesc.format = SLANG_SPIRV;
+        targetDesc.profile = globalSession->findProfile("glsl_450");
+        if (targetDesc.profile == SLANG_PROFILE_UNKNOWN) {
+            targetDesc.profile = globalSession->findProfile("spirv_1_5");
         }
 
-        EShMessages messages = EShMsgDefault;
-        if (options.m_TargetApi == GraphicsAPI::Vulkan) {
-            shader.setEnvInput(glslang::EShSourceGlsl, lang, glslang::EShClientVulkan, 100);
-            shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_3);
-            shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
-            messages = static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules);
-        }
-        else {
-            shader.setEnvInput(glslang::EShSourceGlsl, lang, glslang::EShClientOpenGL, 450);
-            shader.setEnvClient(glslang::EShClientOpenGL, glslang::EShTargetOpenGL_450);
-            shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
-            messages = static_cast<EShMessages>(EShMsgSpvRules);
+        std::vector<std::string> searchPathStorage;
+        {
+            const std::filesystem::path parent =
+                desc.m_FilePath.has_parent_path() ? desc.m_FilePath.parent_path() : std::filesystem::current_path();
+            searchPathStorage.push_back(PathStringSlang(parent));
+            for (const auto& inc : options.m_IncludeDirs) {
+                searchPathStorage.push_back(PathStringSlang(inc));
+            }
         }
 
-        RHI_ShaderFileIncluder includer(
-            desc.m_FilePath.has_parent_path() ? desc.m_FilePath.parent_path() : std::filesystem::current_path(),
-            options.m_IncludeDirs
-        );
-
-        const TBuiltInResource& resources = *GetDefaultResources();
-        const bool parsed = shader.parse(
-            &resources,
-            desc.m_GlslVersion,
-            ENoProfile,
-            false,
-            false,
-            messages,
-            includer
-        );
-
-        std::string log;
-        if (shader.getInfoLog() && shader.getInfoLog()[0] != '\0') {
-            log += shader.getInfoLog();
-            log += "\n";
-        }
-        if (shader.getInfoDebugLog() && shader.getInfoDebugLog()[0] != '\0') {
-            log += shader.getInfoDebugLog();
-            log += "\n";
+        std::vector<const char*> searchPathPtrs;
+        searchPathPtrs.reserve(searchPathStorage.size());
+        for (const auto& s : searchPathStorage) {
+            searchPathPtrs.push_back(s.c_str());
         }
 
-        if (!parsed) {
-            out.m_Log = log.empty() ? "Shader parse failed" : log;
+        std::vector<slang::PreprocessorMacroDesc> macroStorage;
+        macroStorage.reserve(options.m_Definitions.size());
+        for (const auto& def : options.m_Definitions) {
+            slang::PreprocessorMacroDesc m{};
+            m.name = def.first.c_str();
+            m.value = def.second.empty() ? "1" : def.second.c_str();
+            macroStorage.push_back(m);
+        }
+
+        slang::SessionDesc sessionDesc{};
+        sessionDesc.structureSize = sizeof(sessionDesc);
+        sessionDesc.targets = &targetDesc;
+        sessionDesc.targetCount = 1;
+        sessionDesc.searchPaths = searchPathPtrs.empty() ? nullptr : searchPathPtrs.data();
+        sessionDesc.searchPathCount = static_cast<SlangInt>(searchPathPtrs.size());
+        sessionDesc.preprocessorMacros = macroStorage.empty() ? nullptr : macroStorage.data();
+        sessionDesc.preprocessorMacroCount = static_cast<SlangInt>(macroStorage.size());
+        sessionDesc.defaultMatrixLayoutMode = SLANG_MATRIX_LAYOUT_COLUMN_MAJOR;
+
+        const SlangResult sessionRes = globalSession->createSession(sessionDesc, session.writeRef());
+        if (SLANG_FAILED(sessionRes)) {
+            out.m_Log = "slang ISession::createSession failed";
             return false;
         }
 
-        glslang::TProgram program;
-        program.addShader(&shader);
+        const std::string moduleName = desc.m_FilePath.stem().string();
 
-        const bool linked = program.link(messages);
-        if (program.getInfoLog() && program.getInfoLog()[0] != '\0') {
-            log += program.getInfoLog();
-            log += "\n";
-        }
-        if (program.getInfoDebugLog() && program.getInfoDebugLog()[0] != '\0') {
-            log += program.getInfoDebugLog();
-            log += "\n";
-        }
+        Slang::ComPtr<ISlangBlob> diagLoad;
+        slang::IModule* const rawModule = session->loadModule(moduleName.c_str(), diagLoad.writeRef());
+        std::string log = BlobToString(diagLoad.get());
 
-        if (!linked) {
-            out.m_Log = log.empty() ? "Program link failed" : log;
+        if (!rawModule) {
+            out.m_Log = log.empty() ? ("loadModule failed for: " + moduleName) : log;
+            return false;
+        }
+        Slang::ComPtr<slang::IModule> module(rawModule);
+
+        Slang::ComPtr<ISlangBlob> diagEp;
+        Slang::ComPtr<slang::IEntryPoint> entryPoint;
+        const SlangResult epRes = module->findAndCheckEntryPoint(
+            desc.m_EntryPoint.c_str(),
+            slangStage,
+            entryPoint.writeRef(),
+            diagEp.writeRef());
+        log += BlobToString(diagEp.get());
+        if (SLANG_FAILED(epRes) || !entryPoint) {
+            out.m_Log = log.empty() ? "findAndCheckEntryPoint failed" : log;
             return false;
         }
 
+        slang::IComponentType* components[] = { module.get(), entryPoint.get() };
+        Slang::ComPtr<slang::IComponentType> program;
+        Slang::ComPtr<ISlangBlob> diagCompose;
+        const SlangResult compRes =
+            session->createCompositeComponentType(components, 2, program.writeRef(), diagCompose.writeRef());
+        log += BlobToString(diagCompose.get());
+        if (SLANG_FAILED(compRes) || !program) {
+            out.m_Log = log.empty() ? "createCompositeComponentType failed" : log;
+            return false;
+        }
+
+        std::vector<slang::CompilerOptionEntry> linkOpts;
+        {
+            slang::CompilerOptionEntry optDbg{};
+            optDbg.name = slang::CompilerOptionName::DebugInformation;
+            optDbg.value.kind = slang::CompilerOptionValueKind::Int;
+            optDbg.value.intValue0 =
+                options.m_DebugInfo ? SLANG_DEBUG_INFO_LEVEL_STANDARD : SLANG_DEBUG_INFO_LEVEL_NONE;
+            linkOpts.push_back(optDbg);
+        }
+        {
+            slang::CompilerOptionEntry optOpt{};
+            optOpt.name = slang::CompilerOptionName::Optimization;
+            optOpt.value.kind = slang::CompilerOptionValueKind::Int;
+            optOpt.value.intValue0 =
+                options.m_Optimize ? SLANG_OPTIMIZATION_LEVEL_HIGH : SLANG_OPTIMIZATION_LEVEL_NONE;
+            linkOpts.push_back(optOpt);
+        }
+
+        Slang::ComPtr<slang::IComponentType> linked;
+        Slang::ComPtr<ISlangBlob> diagLink;
+        const SlangResult linkRes = program->linkWithOptions(
+            linked.writeRef(),
+            static_cast<uint32_t>(linkOpts.size()),
+            linkOpts.data(),
+            diagLink.writeRef());
+        log += BlobToString(diagLink.get());
+        if (SLANG_FAILED(linkRes) || !linked) {
+            out.m_Log = log.empty() ? "linkWithOptions failed" : log;
+            return false;
+        }
+
+        Slang::ComPtr<ISlangBlob> codeBlob;
+        Slang::ComPtr<ISlangBlob> diagCode;
+        const SlangResult codeRes = linked->getEntryPointCode(0, 0, codeBlob.writeRef(), diagCode.writeRef());
+        log += BlobToString(diagCode.get());
+
+        if (SLANG_FAILED(codeRes) || !codeBlob) {
+            out.m_Log = log.empty() ? "getEntryPointCode failed" : log;
+            return false;
+        }
+
+        const uint8_t* spirvBytes = static_cast<const uint8_t*>(codeBlob->getBufferPointer());
+        const size_t spirvSize = codeBlob->getBufferSize();
+        if (!spirvBytes || spirvSize < 4 || (spirvSize % 4) != 0) {
+            out.m_Log = log + "\nInvalid SPIR-V blob size\n";
+            return false;
+        }
+
+        out.m_Spirv.resize(spirvSize / sizeof(uint32_t));
+        std::memcpy(out.m_Spirv.data(), spirvBytes, spirvSize);
+
+        out.m_Source = std::move(source);
         out.m_Log = log;
-
-        const glslang::TIntermediate* intermediate = program.getIntermediate(lang);
-        if (!intermediate) {
-            out.m_Log += "No intermediate representation available\n";
-            return false;
-        }
-
-        glslang::SpvOptions spvOptions{};
-        spvOptions.generateDebugInfo = options.m_DebugInfo;
-        spvOptions.disableOptimizer = !options.m_Optimize;
-
-        try {
-            glslang::GlslangToSpv(*intermediate, out.m_Spirv, &spvOptions);
-        }
-        catch (...) {
-            out.m_Log += "GlslangToSpv threw an exception\n";
-            return false;
-        }
-
-        if (out.m_Spirv.empty()) {
-            out.m_Log += "SPIR-V output is empty\n";
-            return false;
-        }
-
-        out.m_Glsl = std::move(source);
         out.m_Success = true;
         return true;
     }

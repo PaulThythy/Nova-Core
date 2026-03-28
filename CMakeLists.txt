@@ -82,12 +82,40 @@ target_include_directories(glad PUBLIC vendors/glad/include)
 set(ENTT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/entt)
 add_subdirectory(${ENTT_DIR} EXCLUDE_FROM_ALL)
 
-# glslang
-set(GLSLANG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/glslang)
-set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
-set(ENABLE_GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
-add_subdirectory(${GLSLANG_DIR} EXCLUDE_FROM_ALL)
-target_include_directories(Nova-Core PUBLIC ${GLSLANG_DIR})
+# Slang (éviter doublons avec d’autres deps ; statique pour lien simple)
+set(SLANG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/slang)
+set(SLANG_LIB_TYPE STATIC CACHE STRING "How to build the slang-compiler lib" FORCE)
+set(SLANG_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+set(SLANG_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SLANG_ENABLE_SLANGD OFF CACHE BOOL "" FORCE)
+set(SLANG_ENABLE_SLANG_RHI OFF CACHE BOOL "" FORCE)
+set(SLANG_ENABLE_SLANG_GLSLANG OFF CACHE BOOL "" FORCE)
+set(SLANG_ENABLE_GFX OFF CACHE BOOL "" FORCE)
+set(SLANG_ENABLE_SLANGC OFF CACHE BOOL "" FORCE)
+set(SLANG_ENABLE_SLANGI OFF CACHE BOOL "" FORCE)
+set(SLANG_ENABLE_SLANGRT OFF CACHE BOOL "" FORCE)
+set(SLANG_ENABLE_REPLAYER OFF CACHE BOOL "" FORCE)
+if(MINGW)
+    # DXC/COM sous MinGW : symboles __mingw_uuidof(IDxc*) non fournis par la chaîne de lien ;
+    # Nova compile les shaders en SPIR-V, pas besoin de DXIL dans cette build Slang.
+    set(SLANG_ENABLE_DXIL OFF CACHE BOOL "" FORCE)
+endif()
+add_subdirectory(${SLANG_DIR} EXCLUDE_FROM_ALL)
+
+# MinGW : slang-dispatcher et slang-bootstrap (slangc/main) utilisent wmain ; sans -municode
+# le CRT attend WinMain → « undefined reference to `WinMain' ».
+if(MINGW)
+    if(TARGET slang-dispatcher)
+        target_link_options(slang-dispatcher PRIVATE "-municode")
+    endif()
+    if(TARGET slang-bootstrap)
+        target_link_options(slang-bootstrap PRIVATE "-municode")
+    endif()
+endif()
+
+if(BUILD_SHARED_LIBS AND TARGET slang)
+    set_property(TARGET slang PROPERTY POSITION_INDEPENDENT_CODE ON)
+endif()
 
 # linking
 target_link_libraries(Nova-Core PUBLIC
@@ -99,9 +127,7 @@ target_link_libraries(Nova-Core PUBLIC
     imguizmo
     glad
     EnTT::EnTT
-    glslang::glslang
-    glslang::SPIRV
-    glslang::glslang-default-resource-limits
+    slang
 )
 
 target_include_directories(Nova-Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
