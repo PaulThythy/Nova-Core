@@ -66,7 +66,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
-        void SetInstanceData(const std::vector<RHI::SSBO_InstanceData>& instances) override;
+        void SetInstanceData(const std::vector<RHI::Instance>& instances) override;
         void* GetNativeHandle() const override;
 
         VkPipeline GetPipeline() const { return m_Pipeline; }

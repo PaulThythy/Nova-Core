@@ -692,25 +692,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		stages[1].module = fragModule.GetModule();
 		stages[1].pName = "main";
 
-		// ---- Vertex input matching Vertex struct ----
-		// location 0 = position (vec3)
-		// location 1 = normal   (vec3)
-		// location 2 = texcoord (vec2)
-		// location 3 = color    (vec3)
-		// location 4 = tangent  (vec3)
-		// location 5 = bitangent(vec3)
+		// Vertex buffer stride matches the full Vertex layout; only declare attributes
+		// consumed by model.vert.slang (locations 0–1) to satisfy validation.
 		VkVertexInputBindingDescription binding{};
 		binding.binding = 0;
 		binding.stride = sizeof(Renderer::Graphics::Vertex);
 		binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-		std::array<VkVertexInputAttributeDescription, 6> attrs{};
+		std::array<VkVertexInputAttributeDescription, 2> attrs{};
 		attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Position) };
 		attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Normal) };
-		attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(Renderer::Graphics::Vertex, m_TexCoord) };
-		attrs[3] = { 3, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Color) };
-		attrs[4] = { 4, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Tangent) };
-		attrs[5] = { 5, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Bitangent) };
 
 		VkPipelineVertexInputStateCreateInfo vertexInput{};
 		vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -762,21 +753,21 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		dynamic.dynamicStateCount = 2;
 		dynamic.pDynamicStates = dynamicStates;
 
-		// ---- Descriptor set layout: binding 0 = Globals UBO, 1 = MVP UBO, 2 = Instances SSBO, 3 = Material UBO ----
+		// Descriptor set layout: matches NovaEngine ParameterBlock field order (Slang bindings 0..Count-1).
 		VkDescriptorSetLayoutBinding bindings[4]{};
-		bindings[0].binding = 0;
+		bindings[0].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Globals);
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bindings[0].descriptorCount = 1;
 		bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-		bindings[1].binding = 1;
+		bindings[1].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp);
 		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bindings[1].descriptorCount = 1;
 		bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-		bindings[2].binding = 2;
+		bindings[2].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Instances);
 		bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		bindings[2].descriptorCount = 1;
 		bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-		bindings[3].binding = 3;
+		bindings[3].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material);
 		bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bindings[3].descriptorCount = 1;
 		bindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -823,7 +814,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		vkBindBufferMemory(m_Device, m_GlobalsUBOBuffer, m_GlobalsUBOMemory, 0);
 
 		// ---- MVP UBO buffer ----
-		const VkDeviceSize mvpSize = sizeof(Renderer::RHI::UBO_MVP);
+		const VkDeviceSize mvpSize = sizeof(Renderer::RHI::MVP);
 		bufInfo.size = mvpSize;
 		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 		bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -849,7 +840,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		vkBindBufferMemory(m_Device, m_MVPUBOBuffer, m_MVPUBOMemory, 0);
 
 		// ---- Material UBO buffer ----
-		const VkDeviceSize materialSize = sizeof(Renderer::RHI::UBO_Material);
+		const VkDeviceSize materialSize = sizeof(Renderer::RHI::Material);
 		bufInfo.size = materialSize;
 		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_MaterialUBOBuffer);
 		CheckVkResult(res);
@@ -872,7 +863,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		vkBindBufferMemory(m_Device, m_MaterialUBOBuffer, m_MaterialUBOMemory, 0);
 
 		// ---- Instance SSBO buffer ----
-		const VkDeviceSize instanceSize = sizeof(Renderer::RHI::SSBO_InstanceData) * MAX_MODEL_INSTANCES;
+		const VkDeviceSize instanceSize = sizeof(Renderer::RHI::Instance) * MAX_MODEL_INSTANCES;
 		bufInfo.size = instanceSize;
 		bufInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_InstanceBuffer);
@@ -925,28 +916,28 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkWriteDescriptorSet writes[4]{};
 		writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[0].dstSet = m_SceneDescriptorSet;
-		writes[0].dstBinding = 0;
+		writes[0].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Globals);
 		writes[0].dstArrayElement = 0;
 		writes[0].descriptorCount = 1;
 		writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		writes[0].pBufferInfo = &globalsBufInfo;
 		writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[1].dstSet = m_SceneDescriptorSet;
-		writes[1].dstBinding = 1;
+		writes[1].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp);
 		writes[1].dstArrayElement = 0;
 		writes[1].descriptorCount = 1;
 		writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		writes[1].pBufferInfo = &mvpBufInfo;
 		writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[2].dstSet = m_SceneDescriptorSet;
-		writes[2].dstBinding = 2;
+		writes[2].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Instances);
 		writes[2].dstArrayElement = 0;
 		writes[2].descriptorCount = 1;
 		writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		writes[2].pBufferInfo = &instanceBufInfo;
 		writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[3].dstSet = m_SceneDescriptorSet;
-		writes[3].dstBinding = 3;
+		writes[3].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material);
 		writes[3].dstArrayElement = 0;
 		writes[3].descriptorCount = 1;
 		writes[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;

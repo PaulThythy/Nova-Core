@@ -19,16 +19,16 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         GL_Shaders() = default;
         ~GL_Shaders() override;
 
-        /** Set the program. Creates GPU buffers for bindings 0..3. Call after linking. */
+        /** Set the program. Creates engine UBO/SSBO for slots in EngineResourceSlot. Call after linking. */
         void SetProgram(GLuint program);
 
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
-        void SetInstanceData(const std::vector<RHI::SSBO_InstanceData>& instances) override;
+        void SetInstanceData(const std::vector<RHI::Instance>& instances) override;
         void* GetNativeHandle() const override;
 
         GLuint GetProgram() const { return m_Program; }
-        GLuint GetUBO_MVP() const { return m_UBO_MVP; }
+        GLuint GetMvpUniformBuffer() const { return m_BufMvp; }
         bool IsValid() const { return m_Program != 0; }
 
     private:
@@ -37,10 +37,10 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         void UploadGlobalsUBO();
 
         GLuint m_Program{ 0 };
-        GLuint m_UBO_MVP{ 0 };
-        GLuint m_UBO_Material{ 0 };
-        GLuint m_Globals{ 0 };
-        GLuint m_SSBO_Instances{ 0 };
+        GLuint m_BufMvp{ 0 };
+        GLuint m_BufMaterial{ 0 };
+        GLuint m_BufGlobals{ 0 };
+        GLuint m_BufInstances{ 0 };
         size_t m_InstanceBufferSize{ 0 };
         std::unordered_map<std::string, GLint> m_LocationCache;
     };

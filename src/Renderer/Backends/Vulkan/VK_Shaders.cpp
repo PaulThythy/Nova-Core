@@ -73,7 +73,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (!apiContext || m_PipelineLayout == VK_NULL_HANDLE) return;
         VkCommandBuffer cmd = static_cast<VkCommandBuffer>(apiContext);
 
-        // ---- Globals UBO (binding 0) ----
+        // Globals (EngineResourceSlot::Globals)
         if (m_GlobalsUBOMemory != VK_NULL_HANDLE) {
             RHI::Globals globals{};
             const auto globalsLayout = RHI::GetGlobalsLayout();
@@ -96,9 +96,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             }
         }
 
-        // ---- MVP UBO (binding 1) ----
+        // MVP (EngineResourceSlot::Mvp)
         if (m_MVPUBOMemory != VK_NULL_HANDLE) {
-            RHI::UBO_MVP mvp{};
+            RHI::MVP mvp{};
             auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj"), itVP = m_Parameters.find("viewProj"), itInvVP = m_Parameters.find("invViewProj");
             if (itM != m_Parameters.end() && std::holds_alternative<glm::mat4>(itM->second)) mvp.model = std::get<glm::mat4>(itM->second);
             if (itV != m_Parameters.end() && std::holds_alternative<glm::mat4>(itV->second)) mvp.view = std::get<glm::mat4>(itV->second);
@@ -106,16 +106,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             if (itVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itVP->second)) mvp.viewProj = std::get<glm::mat4>(itVP->second);
             if (itInvVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itInvVP->second)) mvp.invViewProj = std::get<glm::mat4>(itInvVP->second);
             void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_MVPUBOMemory, 0, sizeof(RHI::UBO_MVP), 0, &mapped) == VK_SUCCESS) {
-                std::memcpy(mapped, &mvp, sizeof(RHI::UBO_MVP));
+            if (vkMapMemory(m_Device, m_MVPUBOMemory, 0, sizeof(RHI::MVP), 0, &mapped) == VK_SUCCESS) {
+                std::memcpy(mapped, &mvp, sizeof(RHI::MVP));
                 vkUnmapMemory(m_Device, m_MVPUBOMemory);
             }
         }
 
-        // ---- Material UBO (binding 3) ----
+        // Material (EngineResourceSlot::Material)
         if (m_MaterialUBOMemory != VK_NULL_HANDLE) {
-            RHI::UBO_Material material{};
-            const auto layout = RHI::GetMaterialUBOLayout();
+            RHI::Material material{};
+            const auto layout = RHI::GetMaterialParameterLayout();
             for (const auto& [name, offset] : layout) {
                 auto it = m_Parameters.find(name);
                 if (it == m_Parameters.end()) continue;
@@ -127,24 +127,23 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 }, it->second);
             }
             void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_MaterialUBOMemory, 0, sizeof(RHI::UBO_Material), 0, &mapped) == VK_SUCCESS) {
-                std::memcpy(mapped, &material, sizeof(RHI::UBO_Material));
+            if (vkMapMemory(m_Device, m_MaterialUBOMemory, 0, sizeof(RHI::Material), 0, &mapped) == VK_SUCCESS) {
+                std::memcpy(mapped, &material, sizeof(RHI::Material));
                 vkUnmapMemory(m_Device, m_MaterialUBOMemory);
             }
         }
 
-        // ---- Bind descriptor set (set 0 = Globals + MVP + Instances + Material) ----
         if (m_SceneDescriptorSet != VK_NULL_HANDLE) {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
-                0, 1, &m_SceneDescriptorSet, 0, nullptr);
+                static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &m_SceneDescriptorSet, 0, nullptr);
         }
     }
 
-    void VK_Shaders::SetInstanceData(const std::vector<RHI::SSBO_InstanceData>& instances) {
+    void VK_Shaders::SetInstanceData(const std::vector<RHI::Instance>& instances) {
         if (m_Device == VK_NULL_HANDLE || m_InstanceBufferMemory == VK_NULL_HANDLE || instances.empty())
             return;
 
-        const VkDeviceSize requiredSize = static_cast<VkDeviceSize>(instances.size() * sizeof(RHI::SSBO_InstanceData));
+        const VkDeviceSize requiredSize = static_cast<VkDeviceSize>(instances.size() * sizeof(RHI::Instance));
         if (requiredSize > m_InstanceBufferSize)
             return;
 
