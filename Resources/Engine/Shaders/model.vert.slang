@@ -3,6 +3,10 @@
 struct VSIn {
     [[vk::location(0)]] float3 a_Position;
     [[vk::location(1)]] float3 a_Normal;
+    [[vk::location(2)]] float2 a_TexCoord;
+    [[vk::location(3)]] float3 a_Color;
+    [[vk::location(4)]] float3 a_Tangent;
+    [[vk::location(5)]] float3 a_Bitangent;
 };
 
 struct VSOut {
