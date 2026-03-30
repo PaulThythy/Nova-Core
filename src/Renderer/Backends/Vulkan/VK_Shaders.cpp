@@ -43,23 +43,23 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_PipelineLayout = layout;
     }
 
-    void VK_Shaders::SetSceneUBOs(VkDevice device,
-        VkBuffer globalsUBOBuffer, VkDeviceMemory globalsUBOMemory,
-        VkBuffer mvpUBOBuffer, VkDeviceMemory mvpUBOMemory,
-        VkBuffer materialUBOBuffer, VkDeviceMemory materialUBOMemory,
-        VkBuffer instanceBuffer, VkDeviceMemory instanceBufferMemory, VkDeviceSize instanceBufferSize,
+    void VK_Shaders::SetSceneBuffers(VkDevice device,
+        VkBuffer bufGlobals, VkDeviceMemory bufGlobalsMemory,
+        VkBuffer bufMvp, VkDeviceMemory bufMvpMemory,
+        VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory,
+        VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
         VkDescriptorSet sceneDescriptorSet)
     {
         m_Device = device;
-        m_GlobalsUBOBuffer = globalsUBOBuffer;
-        m_GlobalsUBOMemory = globalsUBOMemory;
-        m_MVPUBOBuffer = mvpUBOBuffer;
-        m_MVPUBOMemory = mvpUBOMemory;
-        m_MaterialUBOBuffer = materialUBOBuffer;
-        m_MaterialUBOMemory = materialUBOMemory;
-        m_InstanceBuffer = instanceBuffer;
-        m_InstanceBufferMemory = instanceBufferMemory;
-        m_InstanceBufferSize = instanceBufferSize;
+        m_BufGlobals = bufGlobals;
+        m_BufGlobalsMemory = bufGlobalsMemory;
+        m_BufMvp = bufMvp;
+        m_BufMvpMemory = bufMvpMemory;
+        m_BufMaterials = bufMaterials;
+        m_BufMaterialsMemory = bufMaterialsMemory;
+        m_BufInstances = bufInstances;
+        m_BufInstancesMemory = bufInstancesMemory;
+        m_BufInstancesSize = bufInstancesSize;
         m_SceneDescriptorSet = sceneDescriptorSet;
     }
 
@@ -74,7 +74,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkCommandBuffer cmd = static_cast<VkCommandBuffer>(apiContext);
 
         // Globals (EngineResourceSlot::Globals)
-        if (m_GlobalsUBOMemory != VK_NULL_HANDLE) {
+        if (m_BufGlobalsMemory != VK_NULL_HANDLE) {
             RHI::Globals globals{};
             const auto globalsLayout = RHI::GetGlobalsLayout();
             for (const auto& [name, offset] : globalsLayout) {
@@ -90,14 +90,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 }, it->second);
             }
             void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_GlobalsUBOMemory, 0, sizeof(RHI::Globals), 0, &mapped) == VK_SUCCESS) {
+            if (vkMapMemory(m_Device, m_BufGlobalsMemory, 0, sizeof(RHI::Globals), 0, &mapped) == VK_SUCCESS) {
                 std::memcpy(mapped, &globals, sizeof(RHI::Globals));
-                vkUnmapMemory(m_Device, m_GlobalsUBOMemory);
+                vkUnmapMemory(m_Device, m_BufGlobalsMemory);
             }
         }
 
         // MVP (EngineResourceSlot::Mvp)
-        if (m_MVPUBOMemory != VK_NULL_HANDLE) {
+        if (m_BufMvpMemory != VK_NULL_HANDLE) {
             RHI::MVP mvp{};
             auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj"), itVP = m_Parameters.find("viewProj"), itInvVP = m_Parameters.find("invViewProj");
             if (itM != m_Parameters.end() && std::holds_alternative<glm::mat4>(itM->second)) mvp.model = std::get<glm::mat4>(itM->second);
@@ -106,14 +106,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             if (itVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itVP->second)) mvp.viewProj = std::get<glm::mat4>(itVP->second);
             if (itInvVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itInvVP->second)) mvp.invViewProj = std::get<glm::mat4>(itInvVP->second);
             void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_MVPUBOMemory, 0, sizeof(RHI::MVP), 0, &mapped) == VK_SUCCESS) {
+            if (vkMapMemory(m_Device, m_BufMvpMemory, 0, sizeof(RHI::MVP), 0, &mapped) == VK_SUCCESS) {
                 std::memcpy(mapped, &mvp, sizeof(RHI::MVP));
-                vkUnmapMemory(m_Device, m_MVPUBOMemory);
+                vkUnmapMemory(m_Device, m_BufMvpMemory);
             }
         }
 
         // Material (EngineResourceSlot::Material)
-        if (m_MaterialUBOMemory != VK_NULL_HANDLE) {
+        if (m_BufMaterialsMemory != VK_NULL_HANDLE) {
             RHI::Material material{};
             const auto layout = RHI::GetMaterialParameterLayout();
             for (const auto& [name, offset] : layout) {
@@ -127,9 +127,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 }, it->second);
             }
             void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_MaterialUBOMemory, 0, sizeof(RHI::Material), 0, &mapped) == VK_SUCCESS) {
+            if (vkMapMemory(m_Device, m_BufMaterialsMemory, 0, sizeof(RHI::Material), 0, &mapped) == VK_SUCCESS) {
                 std::memcpy(mapped, &material, sizeof(RHI::Material));
-                vkUnmapMemory(m_Device, m_MaterialUBOMemory);
+                vkUnmapMemory(m_Device, m_BufMaterialsMemory);
             }
         }
 
@@ -140,19 +140,19 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Shaders::SetInstanceData(const std::vector<RHI::Instance>& instances) {
-        if (m_Device == VK_NULL_HANDLE || m_InstanceBufferMemory == VK_NULL_HANDLE || instances.empty())
+        if (m_Device == VK_NULL_HANDLE || m_BufInstancesMemory == VK_NULL_HANDLE || instances.empty())
             return;
 
         const VkDeviceSize requiredSize = static_cast<VkDeviceSize>(instances.size() * sizeof(RHI::Instance));
-        if (requiredSize > m_InstanceBufferSize)
+        if (requiredSize > m_BufInstancesSize)
             return;
 
         void* mapped = nullptr;
-        if (vkMapMemory(m_Device, m_InstanceBufferMemory, 0, requiredSize, 0, &mapped) != VK_SUCCESS)
+        if (vkMapMemory(m_Device, m_BufInstancesMemory, 0, requiredSize, 0, &mapped) != VK_SUCCESS)
             return;
 
         std::memcpy(mapped, instances.data(), static_cast<size_t>(requiredSize));
-        vkUnmapMemory(m_Device, m_InstanceBufferMemory);
+        vkUnmapMemory(m_Device, m_BufInstancesMemory);
     }
 
     void* VK_Shaders::GetNativeHandle() const {

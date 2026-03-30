@@ -19,7 +19,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         GL_Shaders() = default;
         ~GL_Shaders() override;
 
-        /** Set the program. Creates engine UBO/SSBO for slots in EngineResourceSlot. Call after linking. */
+        /** Set the program. Creates engine buffers for slots in EngineResourceSlot. Call after linking. */
         void SetProgram(GLuint program);
 
         void Bind(void* apiContext = nullptr) override;

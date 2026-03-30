@@ -785,18 +785,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to create scene set layout"); return; }
 
-		// ---- Globals UBO buffer ----
+		// ---- Globals buffer ----
 		const VkDeviceSize globalsSize = sizeof(Renderer::RHI::Globals);
 		VkBufferCreateInfo bufInfo{};
 		bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufInfo.size = globalsSize;
 		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 		bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_GlobalsUBOBuffer);
+		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufGlobals);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
 		VkMemoryRequirements memReq;
-		vkGetBufferMemoryRequirements(m_Device, m_GlobalsUBOBuffer, &memReq);
+		vkGetBufferMemoryRequirements(m_Device, m_BufGlobals, &memReq);
 		VkPhysicalDeviceMemoryProperties memProps;
 		vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProps);
 		uint32_t memTypeIndex = UINT32_MAX;
@@ -807,25 +807,25 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 				break;
 			}
 		}
-		if (memTypeIndex == UINT32_MAX) { NV_LOG_WARN("CreateModelPipeline: no host-visible memory for Globals UBO"); DestroyModelPipeline(); return; }
+		if (memTypeIndex == UINT32_MAX) { NV_LOG_WARN("CreateModelPipeline: no host-visible memory for Globals buffer"); DestroyModelPipeline(); return; }
 		VkMemoryAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memReq.size;
 		allocInfo.memoryTypeIndex = memTypeIndex;
-		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_GlobalsUBOMemory);
+		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_BufGlobalsMemory);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkBindBufferMemory(m_Device, m_GlobalsUBOBuffer, m_GlobalsUBOMemory, 0);
+		vkBindBufferMemory(m_Device, m_BufGlobals, m_BufGlobalsMemory, 0);
 
-		// ---- MVP UBO buffer ----
+		// ---- MVP buffer ----
 		const VkDeviceSize mvpSize = sizeof(Renderer::RHI::MVP);
 		bufInfo.size = mvpSize;
 		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 		bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_MVPUBOBuffer);
+		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufMvp);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkGetBufferMemoryRequirements(m_Device, m_MVPUBOBuffer, &memReq);
+		vkGetBufferMemoryRequirements(m_Device, m_BufMvp, &memReq);
 		memTypeIndex = UINT32_MAX;
 		for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
 			if ((memReq.memoryTypeBits & (1u << i)) &&
@@ -834,22 +834,22 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 				break;
 			}
 		}
-		if (memTypeIndex == UINT32_MAX) { NV_LOG_WARN("CreateModelPipeline: no host-visible memory for MVP UBO"); DestroyModelPipeline(); return; }
+		if (memTypeIndex == UINT32_MAX) { NV_LOG_WARN("CreateModelPipeline: no host-visible memory for MVP buffer"); DestroyModelPipeline(); return; }
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memReq.size;
 		allocInfo.memoryTypeIndex = memTypeIndex;
-		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_MVPUBOMemory);
+		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_BufMvpMemory);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkBindBufferMemory(m_Device, m_MVPUBOBuffer, m_MVPUBOMemory, 0);
+		vkBindBufferMemory(m_Device, m_BufMvp, m_BufMvpMemory, 0);
 
-		// ---- Material UBO buffer ----
+		// ---- Materials buffer ----
 		const VkDeviceSize materialSize = sizeof(Renderer::RHI::Material);
 		bufInfo.size = materialSize;
-		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_MaterialUBOBuffer);
+		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufMaterials);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkGetBufferMemoryRequirements(m_Device, m_MaterialUBOBuffer, &memReq);
+		vkGetBufferMemoryRequirements(m_Device, m_BufMaterials, &memReq);
 		memTypeIndex = UINT32_MAX;
 		for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
 			if ((memReq.memoryTypeBits & (1u << i)) &&
@@ -861,19 +861,19 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (memTypeIndex == UINT32_MAX) { DestroyModelPipeline(); return; }
 		allocInfo.allocationSize = memReq.size;
 		allocInfo.memoryTypeIndex = memTypeIndex;
-		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_MaterialUBOMemory);
+		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_BufMaterialsMemory);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkBindBufferMemory(m_Device, m_MaterialUBOBuffer, m_MaterialUBOMemory, 0);
+		vkBindBufferMemory(m_Device, m_BufMaterials, m_BufMaterialsMemory, 0);
 
-		// ---- Instance SSBO buffer ----
+		// ---- Instances buffer ----
 		const VkDeviceSize instanceSize = sizeof(Renderer::RHI::Instance) * MAX_MODEL_INSTANCES;
 		bufInfo.size = instanceSize;
 		bufInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_InstanceBuffer);
+		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufInstances);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkGetBufferMemoryRequirements(m_Device, m_InstanceBuffer, &memReq);
+		vkGetBufferMemoryRequirements(m_Device, m_BufInstances, &memReq);
 		memTypeIndex = UINT32_MAX;
 		for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
 			if ((memReq.memoryTypeBits & (1u << i)) &&
@@ -885,11 +885,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (memTypeIndex == UINT32_MAX) { DestroyModelPipeline(); return; }
 		allocInfo.allocationSize = memReq.size;
 		allocInfo.memoryTypeIndex = memTypeIndex;
-		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_InstanceBufferMemory);
+		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_BufInstancesMemory);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkBindBufferMemory(m_Device, m_InstanceBuffer, m_InstanceBufferMemory, 0);
-		m_InstanceBufferSize = instanceSize;
+		vkBindBufferMemory(m_Device, m_BufInstances, m_BufInstancesMemory, 0);
+		m_BufInstancesSize = instanceSize;
 
 		// ---- Allocate descriptor set (from ImGui pool) ----
 		VkDescriptorSetAllocateInfo allocSetInfo{};
@@ -902,19 +902,19 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to allocate scene descriptor set"); DestroyModelPipeline(); return; }
 
 		VkDescriptorBufferInfo globalsBufInfo{};
-		globalsBufInfo.buffer = m_GlobalsUBOBuffer;
+		globalsBufInfo.buffer = m_BufGlobals;
 		globalsBufInfo.offset = 0;
 		globalsBufInfo.range = globalsSize;
 		VkDescriptorBufferInfo mvpBufInfo{};
-		mvpBufInfo.buffer = m_MVPUBOBuffer;
+		mvpBufInfo.buffer = m_BufMvp;
 		mvpBufInfo.offset = 0;
 		mvpBufInfo.range = mvpSize;
 		VkDescriptorBufferInfo materialBufInfo{};
-		materialBufInfo.buffer = m_MaterialUBOBuffer;
+		materialBufInfo.buffer = m_BufMaterials;
 		materialBufInfo.offset = 0;
 		materialBufInfo.range = materialSize;
 		VkDescriptorBufferInfo instanceBufInfo{};
-		instanceBufInfo.buffer = m_InstanceBuffer;
+		instanceBufInfo.buffer = m_BufInstances;
 		instanceBufInfo.offset = 0;
 		instanceBufInfo.range = instanceSize;
 		VkWriteDescriptorSet writes[4]{};
@@ -995,15 +995,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			vkFreeDescriptorSets(m_Device, m_ImGuiDescriptorPool, 1, &m_SceneDescriptorSet);
 			m_SceneDescriptorSet = VK_NULL_HANDLE;
 		}
-		if (m_InstanceBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_InstanceBuffer, nullptr); m_InstanceBuffer = VK_NULL_HANDLE; }
-		if (m_InstanceBufferMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_InstanceBufferMemory, nullptr); m_InstanceBufferMemory = VK_NULL_HANDLE; }
-		m_InstanceBufferSize = 0;
-		if (m_MaterialUBOBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_MaterialUBOBuffer, nullptr); m_MaterialUBOBuffer = VK_NULL_HANDLE; }
-		if (m_MaterialUBOMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_MaterialUBOMemory, nullptr); m_MaterialUBOMemory = VK_NULL_HANDLE; }
-		if (m_MVPUBOBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_MVPUBOBuffer, nullptr); m_MVPUBOBuffer = VK_NULL_HANDLE; }
-		if (m_MVPUBOMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_MVPUBOMemory, nullptr); m_MVPUBOMemory = VK_NULL_HANDLE; }
-		if (m_GlobalsUBOBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_GlobalsUBOBuffer, nullptr); m_GlobalsUBOBuffer = VK_NULL_HANDLE; }
-		if (m_GlobalsUBOMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_GlobalsUBOMemory, nullptr); m_GlobalsUBOMemory = VK_NULL_HANDLE; }
+		if (m_BufInstances != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufInstances, nullptr); m_BufInstances = VK_NULL_HANDLE; }
+		if (m_BufInstancesMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufInstancesMemory, nullptr); m_BufInstancesMemory = VK_NULL_HANDLE; }
+		m_BufInstancesSize = 0;
+		if (m_BufMaterials != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufMaterials, nullptr); m_BufMaterials = VK_NULL_HANDLE; }
+		if (m_BufMaterialsMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufMaterialsMemory, nullptr); m_BufMaterialsMemory = VK_NULL_HANDLE; }
+		if (m_BufMvp != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufMvp, nullptr); m_BufMvp = VK_NULL_HANDLE; }
+		if (m_BufMvpMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufMvpMemory, nullptr); m_BufMvpMemory = VK_NULL_HANDLE; }
+		if (m_BufGlobals != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufGlobals, nullptr); m_BufGlobals = VK_NULL_HANDLE; }
+		if (m_BufGlobalsMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufGlobalsMemory, nullptr); m_BufGlobalsMemory = VK_NULL_HANDLE; }
 		if (m_SceneSetLayout != VK_NULL_HANDLE) {
 			vkDestroyDescriptorSetLayout(m_Device, m_SceneSetLayout, nullptr);
 			m_SceneSetLayout = VK_NULL_HANDLE;

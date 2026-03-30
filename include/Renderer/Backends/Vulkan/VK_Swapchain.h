@@ -72,16 +72,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPipeline& GetModelPipeline() { return m_ModelPipeline; }
 		VkPipelineLayout& GetModelPipelineLayout() { return m_ModelPipelineLayout; }
 
-		// Engine UBO/SSBO + descriptor set kEngineDescriptorSet (see RHI_ShaderUniforms.h / NovaUniforms.slang)
-		VkBuffer GetGlobalsUBOBuffer() const { return m_GlobalsUBOBuffer; }
-		VkDeviceMemory GetGlobalsUBOMemory() const { return m_GlobalsUBOMemory; }
-		VkBuffer GetMVPUBOBuffer() const { return m_MVPUBOBuffer; }
-		VkDeviceMemory GetMVPUBOMemory() const { return m_MVPUBOMemory; }
-		VkBuffer GetMaterialUBOBuffer() const { return m_MaterialUBOBuffer; }
-		VkDeviceMemory GetMaterialUBOMemory() const { return m_MaterialUBOMemory; }
-		VkBuffer GetInstanceBuffer() const { return m_InstanceBuffer; }
-		VkDeviceMemory GetInstanceBufferMemory() const { return m_InstanceBufferMemory; }
-		VkDeviceSize GetInstanceBufferSize() const { return m_InstanceBufferSize; }
+		// Engine buffers + descriptor set kEngineDescriptorSet (see RHI_ShaderUniforms.h / NovaUniforms.slang)
+		VkBuffer GetBufGlobals() const { return m_BufGlobals; }
+		VkDeviceMemory GetBufGlobalsMemory() const { return m_BufGlobalsMemory; }
+		VkBuffer GetBufMvp() const { return m_BufMvp; }
+		VkDeviceMemory GetBufMvpMemory() const { return m_BufMvpMemory; }
+		VkBuffer GetBufMaterials() const { return m_BufMaterials; }
+		VkDeviceMemory GetBufMaterialsMemory() const { return m_BufMaterialsMemory; }
+		VkBuffer GetBufInstances() const { return m_BufInstances; }
+		VkDeviceMemory GetBufInstancesMemory() const { return m_BufInstancesMemory; }
+		VkDeviceSize GetBufInstancesSize() const { return m_BufInstancesSize; }
 		VkDescriptorSet GetSceneDescriptorSet() const { return m_SceneDescriptorSet; }
 
 		// Viewport offscreen: render pass only (same pipeline as main window = model pipeline)
@@ -156,19 +156,19 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		// Render pass
 		VkRenderPass m_BackBufferRenderPass = VK_NULL_HANDLE;
 
-		// Pipeline (triangle)
+		// Pipeline
 		VkPipeline       m_ModelPipeline = VK_NULL_HANDLE;
 		VkPipelineLayout m_ModelPipelineLayout = VK_NULL_HANDLE;
 		VkDescriptorSetLayout m_SceneSetLayout = VK_NULL_HANDLE;
-		VkBuffer         m_GlobalsUBOBuffer = VK_NULL_HANDLE;
-		VkDeviceMemory   m_GlobalsUBOMemory = VK_NULL_HANDLE;
-		VkBuffer         m_MVPUBOBuffer = VK_NULL_HANDLE;
-		VkDeviceMemory   m_MVPUBOMemory = VK_NULL_HANDLE;
-		VkBuffer         m_MaterialUBOBuffer = VK_NULL_HANDLE;
-		VkDeviceMemory   m_MaterialUBOMemory = VK_NULL_HANDLE;
-		VkBuffer         m_InstanceBuffer = VK_NULL_HANDLE;
-		VkDeviceMemory   m_InstanceBufferMemory = VK_NULL_HANDLE;
-		VkDeviceSize     m_InstanceBufferSize = 0;
+		VkBuffer         m_BufGlobals = VK_NULL_HANDLE;
+		VkDeviceMemory   m_BufGlobalsMemory = VK_NULL_HANDLE;
+		VkBuffer         m_BufMvp = VK_NULL_HANDLE;
+		VkDeviceMemory   m_BufMvpMemory = VK_NULL_HANDLE;
+		VkBuffer         m_BufMaterials = VK_NULL_HANDLE;
+		VkDeviceMemory   m_BufMaterialsMemory = VK_NULL_HANDLE;
+		VkBuffer         m_BufInstances = VK_NULL_HANDLE;
+		VkDeviceMemory   m_BufInstancesMemory = VK_NULL_HANDLE;
+		VkDeviceSize     m_BufInstancesSize = 0;
 		VkDescriptorSet  m_SceneDescriptorSet = VK_NULL_HANDLE;
 
 		// Viewport offscreen render pass only (color finalLayout = SHADER_READ_ONLY for ImGui)

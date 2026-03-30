@@ -56,12 +56,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         /** Set pipeline and layout (owned by swapchain/renderer). Call after pipeline creation. */
         void SetPipeline(VkPipeline pipeline, VkPipelineLayout layout);
 
-        /** Set scene UBOs (MVP + Material) and descriptor set for ApplyParameters. */
-        void SetSceneUBOs(VkDevice device,
-            VkBuffer globalsUBOBuffer, VkDeviceMemory globalsUBOMemory,
-            VkBuffer mvpUBOBuffer, VkDeviceMemory mvpUBOMemory,
-            VkBuffer materialUBOBuffer, VkDeviceMemory materialUBOMemory,
-            VkBuffer instanceBuffer, VkDeviceMemory instanceBufferMemory, VkDeviceSize instanceBufferSize,
+        /** Set scene buffers (Globals/Mvp/Materials/Instances) and descriptor set for ApplyParameters. */
+        void SetSceneBuffers(VkDevice device,
+            VkBuffer bufGlobals, VkDeviceMemory bufGlobalsMemory,
+            VkBuffer bufMvp, VkDeviceMemory bufMvpMemory,
+            VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory,
+            VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
             VkDescriptorSet sceneDescriptorSet);
 
         void Bind(void* apiContext = nullptr) override;
@@ -78,15 +78,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
 
         VkDevice m_Device = VK_NULL_HANDLE;
-        VkBuffer m_GlobalsUBOBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory m_GlobalsUBOMemory = VK_NULL_HANDLE;
-        VkBuffer m_MVPUBOBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory m_MVPUBOMemory = VK_NULL_HANDLE;
-        VkBuffer m_MaterialUBOBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory m_MaterialUBOMemory = VK_NULL_HANDLE;
-        VkBuffer m_InstanceBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory m_InstanceBufferMemory = VK_NULL_HANDLE;
-        VkDeviceSize m_InstanceBufferSize = 0;
+        VkBuffer m_BufGlobals = VK_NULL_HANDLE;
+        VkDeviceMemory m_BufGlobalsMemory = VK_NULL_HANDLE;
+        VkBuffer m_BufMvp = VK_NULL_HANDLE;
+        VkDeviceMemory m_BufMvpMemory = VK_NULL_HANDLE;
+        VkBuffer m_BufMaterials = VK_NULL_HANDLE;
+        VkDeviceMemory m_BufMaterialsMemory = VK_NULL_HANDLE;
+        VkBuffer m_BufInstances = VK_NULL_HANDLE;
+        VkDeviceMemory m_BufInstancesMemory = VK_NULL_HANDLE;
+        VkDeviceSize m_BufInstancesSize = 0;
         
         VkDescriptorSet m_SceneDescriptorSet = VK_NULL_HANDLE;
     };

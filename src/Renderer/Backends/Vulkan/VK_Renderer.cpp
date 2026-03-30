@@ -167,17 +167,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_Shader = std::make_unique<VK_Shaders>();
         m_Shader->SetPipeline(m_VKSwapchain.GetModelPipeline(), m_VKSwapchain.GetModelPipelineLayout());
-        m_Shader->SetSceneUBOs(
+        m_Shader->SetSceneBuffers(
             m_VKDevice.GetDevice(),
-            m_VKSwapchain.GetGlobalsUBOBuffer(),
-            m_VKSwapchain.GetGlobalsUBOMemory(),
-            m_VKSwapchain.GetMVPUBOBuffer(),
-            m_VKSwapchain.GetMVPUBOMemory(),
-            m_VKSwapchain.GetMaterialUBOBuffer(),
-            m_VKSwapchain.GetMaterialUBOMemory(),
-            m_VKSwapchain.GetInstanceBuffer(),
-            m_VKSwapchain.GetInstanceBufferMemory(),
-            m_VKSwapchain.GetInstanceBufferSize(),
+            m_VKSwapchain.GetBufGlobals(),
+            m_VKSwapchain.GetBufGlobalsMemory(),
+            m_VKSwapchain.GetBufMvp(),
+            m_VKSwapchain.GetBufMvpMemory(),
+            m_VKSwapchain.GetBufMaterials(),
+            m_VKSwapchain.GetBufMaterialsMemory(),
+            m_VKSwapchain.GetBufInstances(),
+            m_VKSwapchain.GetBufInstancesMemory(),
+            m_VKSwapchain.GetBufInstancesSize(),
             m_VKSwapchain.GetSceneDescriptorSet()
         );
 
