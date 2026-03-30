@@ -43,6 +43,7 @@ struct Globals {
     int iFrame;
     int u_UseInstancing;
     int2 _Offset0;
+    float3 u_CameraPos;
     float _padAlignMouse;
     float4 iMouse;
     float4 iDate;
@@ -61,9 +62,7 @@ struct Instance {
     float4 color;
 };
 
-struct Material {
-    float4 color;
-};
+#include "Material.slang"
 
 struct NovaEngine {
     ConstantBuffer<Globals> globals;

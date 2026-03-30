@@ -12,13 +12,14 @@ struct VSIn {
 struct VSOut {
     float4 sv_position : SV_Position;
     [[vk::location(0)]] float3 v_Normal;
-    [[vk::location(1)]] float4 v_Color;
+    [[vk::location(1)]] float3 v_Pos;
+    [[vk::location(2)]] float4 v_Color;
 };
 
 [shader("vertex")]
 VSOut main(VSIn input, uint instanceID : SV_InstanceID) {
     float4x4 model = nova.mvp.model;
-    float4 color = nova.material.color;
+    float4 color = nova.material.baseColorFactor;
     if (nova.globals.u_UseInstancing != 0) {
         model = nova.instances[instanceID].model;
         color = nova.instances[instanceID].color;
@@ -32,6 +33,7 @@ VSOut main(VSIn input, uint instanceID : SV_InstanceID) {
     o.v_Normal = n;
     o.v_Color = color;
     float4 world = mul(model, float4(input.a_Position, 1.0));
+    o.v_Pos = world.xyz;
     float4 viewPos = mul(nova.mvp.view, world);
     o.sv_position = mul(nova.mvp.proj, viewPos);
     return o;
