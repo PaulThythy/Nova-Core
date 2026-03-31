@@ -3,11 +3,12 @@
 
 #include <memory>
 
+#include "Api.h"
 #include "Renderer/Graphics/Camera.h"
 
 namespace Nova::Core::Scene::ECS::Components {
 
-    struct CameraComponent {
+    struct NV_API CameraComponent {
         std::shared_ptr<Renderer::Graphics::Camera> m_Camera;
         bool m_IsPrimary = false;
 

@@ -23,7 +23,7 @@ namespace Nova::Core::Scene {
 		m_Nodes.clear();
 		m_MainCamera = entt::null;
 
-		// Recrée la racine
+		// Recreate the root entity.
 		m_Root = m_Registry.create();
 		m_Registry.emplace<ECS::Components::NameComponent>(m_Root, "Root");
 		m_Registry.emplace<ECS::Components::WorldTransformComponent>(m_Root);
@@ -163,7 +163,7 @@ namespace Nova::Core::Scene {
 		if (WouldCreateCycle(child, newParent))
 			return false;
 
-		// déjà parenté correctement
+		// Already parented correctly.
 		if (m_Nodes[child].m_Parent == newParent)
 			return true;
 

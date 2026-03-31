@@ -6,11 +6,12 @@
 #include <cstdint>
 #include <format>
 
+#include "Api.h"
 #include "Event.h"
 
 namespace Nova::Core::Events {
 
-    class WindowClosedEvent : public Event
+    class NV_API WindowClosedEvent : public Event
     {
     public:
         WindowClosedEvent() = default;
@@ -19,7 +20,7 @@ namespace Nova::Core::Events {
         EVENT_CLASS_CATEGORY(EventCategoryApplication)
     };
 
-    class WindowResizeEvent : public Event {
+    class NV_API WindowResizeEvent : public Event {
     public:
         WindowResizeEvent(uint32_t width, uint32_t height) : m_Width(width), m_Height(height) {}
 
@@ -36,7 +37,7 @@ namespace Nova::Core::Events {
         uint32_t m_Width, m_Height;
     };
 
-    class AppTickEvent : public Event {
+    class NV_API AppTickEvent : public Event {
     public:
         AppTickEvent() = default;
 
@@ -44,7 +45,7 @@ namespace Nova::Core::Events {
         EVENT_CLASS_CATEGORY(EventCategoryApplication)
     };
 
-    class AppUpdateEvent : public Event {
+    class NV_API AppUpdateEvent : public Event {
     public:
         AppUpdateEvent() = default;
 
@@ -52,7 +53,7 @@ namespace Nova::Core::Events {
         EVENT_CLASS_CATEGORY(EventCategoryApplication)
     };
 
-    class AppRenderEvent : public Event {
+    class NV_API AppRenderEvent : public Event {
     public:
         AppRenderEvent() = default;
 
@@ -60,7 +61,7 @@ namespace Nova::Core::Events {
         EVENT_CLASS_CATEGORY(EventCategoryApplication)
     };
 
-    class ImGuiPanelResizeEvent : public Event {
+    class NV_API ImGuiPanelResizeEvent : public Event {
     public:
         ImGuiPanelResizeEvent(const std::string& panelName, float width, float height): m_PanelName(panelName), m_Width(width), m_Height(height) {}
 

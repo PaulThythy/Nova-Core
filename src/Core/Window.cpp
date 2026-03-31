@@ -1,5 +1,6 @@
-#include <iostream>
+#include <string>
 
+#include "Core/Log.h"
 #include "Core/Window.h"
 
 namespace Nova::Core {
@@ -11,7 +12,7 @@ namespace Nova::Core {
         
         // Initialize SDL video/events (idempotent).
         if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
-            std::cerr << "SDL_Init failed: " << SDL_GetError() << std::endl;
+            NV_LOG_FATAL(std::string("SDL_Init failed: ") + SDL_GetError());
             return false;
         }
             
@@ -49,6 +50,7 @@ namespace Nova::Core {
             SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
             SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
             SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+            SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
 
             // If you want a forward-compatible context on macOS:
             // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
@@ -56,11 +58,12 @@ namespace Nova::Core {
         // Build window flags.
         Uint32 flags = 0;
         if (m_Desc.m_GraphicsAPI == GraphicsAPI::OpenGL)  flags |= SDL_WINDOW_OPENGL;
+        if (m_Desc.m_GraphicsAPI == GraphicsAPI::Vulkan)  flags |= SDL_WINDOW_VULKAN;
         if (m_Desc.m_Resizable) flags |= SDL_WINDOW_RESIZABLE;
 
         m_Window = SDL_CreateWindow(m_Desc.m_Title, m_Desc.m_Width, m_Desc.m_Height, flags);
         if (!m_Window) {
-            std::cerr << "SDL_CreateWindow failed: " << SDL_GetError() << std::endl;
+            NV_LOG_FATAL(std::string("SDL_CreateWindow failed: ") + SDL_GetError());
             Destroy();
             return false;
         }
@@ -69,14 +72,14 @@ namespace Nova::Core {
         if (m_Desc.m_GraphicsAPI == GraphicsAPI::OpenGL) {
             m_GLContext = SDL_GL_CreateContext(m_Window);
             if (!m_GLContext) {
-                std::cerr << "SDL_GL_CreateContext failed: " << SDL_GetError() << std::endl;
+                NV_LOG_FATAL(std::string("SDL_GL_CreateContext failed: ") + SDL_GetError());
                 Destroy();
                 return false;
             }
             MakeCurrent();
 
             if (!gladLoadGL((GLADloadfunc)SDL_GL_GetProcAddress)) {
-                std::cerr << "Failed to initialize GLAD" << std::endl;
+                NV_LOG_FATAL("Failed to initialize GLAD");
                 Destroy();
                 return false;
             }
@@ -86,7 +89,7 @@ namespace Nova::Core {
         } else if (m_Desc.m_GraphicsAPI == GraphicsAPI::SDLRenderer) {
             m_Renderer = SDL_CreateRenderer(m_Window, nullptr);
             if (!m_Renderer) {
-                std::cerr << "SDL_CreateRenderer failed: " << SDL_GetError() << std::endl;
+                NV_LOG_FATAL(std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
                 Destroy();
                 return false;
             }

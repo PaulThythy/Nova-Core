@@ -3,13 +3,14 @@
 
 #include <string>
 
+#include "Api.h"
 #include "Events/Event.h"
 
 using namespace Nova::Core::Events;
 
 namespace Nova::Core {
 
-    class Layer {
+    class NV_API Layer {
     public:
         Layer(const std::string& name = "Layer") : m_DebugName(name) {}
         virtual ~Layer() = default;
@@ -22,7 +23,9 @@ namespace Nova::Core {
 
         virtual void OnEvent(Event& event) {}
         virtual void OnUpdate(float deltaTime) {}
+        virtual void OnBegin() {}
         virtual void OnRender() {}
+        virtual void OnEnd() {}
 
     protected:
         std::string m_DebugName;

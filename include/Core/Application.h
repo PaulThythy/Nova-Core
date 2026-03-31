@@ -13,6 +13,8 @@
 
 #include <glad/gl.h>
 
+#include "Api.h"
+#include "Core/Assert.h"
 #include "Core/Window.h"
 #include "Core/Layer.h"
 #include "Events/Event.h"
@@ -21,26 +23,29 @@
 #include "Core/ImGuiLayer.h"
 #include "Core/LayerStack.h"
 
-namespace Nova::Core::Events {
-    class Event;
-    class WindowClosedEvent;
-    class WindowResizeEvent;
-}
-
 namespace Nova::Core {
 
-    class Application {
+    class NV_API Application {
     public:
         explicit Application(const Window::WindowDesc& windowDesc);
         ~Application();
 
         void Run();
 
-        Window& GetWindow() { return *m_Window; }
+        Window& GetWindow() {
+            NV_ASSERT_MSG(m_Window, "Application window is not initialized.");
+            return *m_Window;
+        }
         LayerStack& GetLayerStack() { return m_LayerStack; }
-        ImGuiLayer& GetImGuiLayer() { return *m_ImGuiLayer; }
+        ImGuiLayer& GetImGuiLayer() {
+            NV_ASSERT_MSG(m_ImGuiLayer, "ImGui layer is not initialized.");
+            return *m_ImGuiLayer;
+        }
 
-        static Application& Get() { return *s_Instance; }
+        static Application& Get() {
+            NV_ASSERT_MSG(s_Instance, "Application instance is not initialized.");
+            return *s_Instance;
+        }
 
         void OnEvent(Events::Event& e);
 

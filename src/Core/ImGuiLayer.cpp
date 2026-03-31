@@ -32,6 +32,7 @@ namespace Nova::Core {
 
         SDL_Window* sdlWindow = m_Window.GetSDLWindow();
         ImGui_ImplSDL3_InitForOther(sdlWindow);
+        m_IsRendererInitializedWithoutBackend = true;
     }
 
     void ImGuiLayer::SetImGuiBackend(GraphicsAPI api) {
@@ -39,15 +40,21 @@ namespace Nova::Core {
             NV_LOG_WARN("ImGui backend already initialized");
             return;
         }
+        if(m_IsRendererInitializedWithoutBackend) {
+            ImGui_ImplSDL3_Shutdown();
+            m_IsRendererInitializedWithoutBackend = false;
+        }
 
         m_GraphicsAPI = api;
         switch(m_GraphicsAPI) {
             case GraphicsAPI::OpenGL:
+                ImGui_ImplSDL3_InitForOpenGL(m_Window.GetSDLWindow(), m_Window.GetGLContext());
                 ImGui_ImplOpenGL3_Init(m_Window.GetGLSLVersion());
                 m_IsRendererInitialized = true;
                 NV_LOG_INFO("ImGui OpenGL3 backend initialized");
                 break;
             case GraphicsAPI::SDLRenderer:
+                ImGui_ImplSDL3_InitForSDLRenderer(m_Window.GetSDLWindow(), m_Window.GetSDLRenderer());
                 ImGui_ImplSDLRenderer3_Init(m_Window.GetSDLRenderer());
                 m_IsRendererInitialized = true;
                 NV_LOG_INFO("ImGui SDLRenderer3 backend initialized");
@@ -62,6 +69,28 @@ namespace Nova::Core {
         }
     }
 
+    void ImGuiLayer::DestroyImGuiBackend(GraphicsAPI api) {
+        if(m_IsRendererInitialized) {
+            switch (api) {
+                case GraphicsAPI::OpenGL:
+                    ImGui_ImplOpenGL3_Shutdown();
+                    break;
+                case GraphicsAPI::SDLRenderer:
+                    ImGui_ImplSDLRenderer3_Shutdown();
+                    break;
+                case GraphicsAPI::Vulkan:
+                    vkDeviceWaitIdle(m_VulkanInitInfo.Device);
+                    m_VulkanInitInfo.Device = VK_NULL_HANDLE;
+                    ImGui_ImplVulkan_Shutdown();
+                    break;
+                default:
+                    break;
+            }
+
+            m_IsRendererInitialized = false;
+        }
+    }
+
     void ImGuiLayer::SetVulkanInitInfo(const ImGui_ImplVulkan_InitInfo& info) {
         if(m_IsRendererInitialized){
             NV_LOG_WARN("ImGui Vulkan backend already initialized");
@@ -69,7 +98,11 @@ namespace Nova::Core {
         }
         m_VulkanInitInfo = info;
 
+        //because initialized for other
+        ImGui_ImplSDL3_Shutdown();
+
         if(m_GraphicsAPI == GraphicsAPI::Vulkan) {
+            ImGui_ImplSDL3_InitForVulkan(m_Window.GetSDLWindow());
             ImGui_ImplVulkan_Init(&m_VulkanInitInfo);
 
             // init_info.Allocator = m_VulkanInitInfo.m_Allocator;
@@ -82,24 +115,7 @@ namespace Nova::Core {
     }
 
     void ImGuiLayer::OnDetach() {
-        if(m_IsRendererInitialized) {
-            switch (m_GraphicsAPI) {
-                case GraphicsAPI::OpenGL:
-                    ImGui_ImplOpenGL3_Shutdown();
-                    break;
-                case GraphicsAPI::SDLRenderer:
-                    ImGui_ImplSDLRenderer3_Shutdown();
-                    break;
-                case GraphicsAPI::Vulkan:
-                    ImGui_ImplVulkan_Shutdown();
-                    break;
-                default:
-                    break;
-            }
-
-            m_IsRendererInitialized = false;
-        }
-
+        DestroyImGuiBackend(m_GraphicsAPI);
         ImGui_ImplSDL3_Shutdown();
         ImGui::DestroyContext();
     }
@@ -171,6 +187,10 @@ namespace Nova::Core {
             }
 
             case GraphicsAPI::Vulkan: {
+                if (m_VulkanBeforeRenderCallback) {
+                    m_VulkanBeforeRenderCallback();
+                }
+
                 if (m_CurrentCommandBuffer != VK_NULL_HANDLE) {
                     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), m_CurrentCommandBuffer);
                 }

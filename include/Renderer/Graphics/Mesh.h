@@ -4,20 +4,21 @@
 #include <vector>
 #include <memory>
 
+#include "Api.h"
 #include "Renderer/Graphics/Vertex.h"
 
 namespace Nova::Core::Renderer::Graphics {
 
-	struct Mesh {
+	struct NV_API Mesh {
 
 		Mesh() = default;
-		Mesh(std::vector<Vertex> vertices, std::vector<int> indices): m_Vertices(vertices), m_Indices(indices) {}
+		Mesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices): m_Vertices(vertices), m_Indices(indices) {}
 		virtual ~Mesh() = default;
 
 		const std::vector<Vertex>& GetVertices() const { return m_Vertices; }
-		const std::vector<int>& GetIndices() const { return m_Indices; }
+		const std::vector<uint32_t>& GetIndices() const { return m_Indices; }
 		std::vector<Vertex>& GetVertices() { return m_Vertices; }
-		std::vector<int>& GetIndices() { return m_Indices; }
+		std::vector<uint32_t>& GetIndices() { return m_Indices; }
 
 		virtual void Upload(const Renderer::Graphics::Mesh& mesh);
 		virtual void Release();
@@ -26,7 +27,7 @@ namespace Nova::Core::Renderer::Graphics {
 		virtual void Draw()   const;
 		virtual void Unbind() const;
 
-		//primitives
+		// Primitive factories
 		static std::shared_ptr<Mesh> CreatePlane();
 		static std::shared_ptr<Mesh> CreateCube(float halfExtent = 0.5f);
 		static std::shared_ptr<Mesh> CreateSphere(float radius = 0.5f, int latitudeSegments = 16, int longitudeSegments = 32);
@@ -35,7 +36,7 @@ namespace Nova::Core::Renderer::Graphics {
 		//static std::shared_ptr<Mesh> CreateTorus();
 
 		std::vector<Vertex> m_Vertices;
-		std::vector<int>	m_Indices;
+		std::vector<uint32_t>	m_Indices;
 	};
 	
 } // namespace Nova::Core::Renderer::Graphics

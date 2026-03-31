@@ -3,9 +3,11 @@
 
 #include <glm/glm.hpp>
 
+#include "Api.h"
+
 namespace Nova::Core::Renderer::Graphics {
 
-	struct Vertex {
+	struct NV_API Vertex {
 		glm::vec3 m_Position{ 0.0f, 0.0f, 0.0f };
 		glm::vec3 m_Normal{ 0.0f, 1.0f, 0.0f };
 		glm::vec2 m_TexCoord{ 0.0f, 0.0f };

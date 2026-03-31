@@ -1,11 +1,12 @@
 #ifndef IDCOMPONENT_H
 #define IDCOMPONENT_H
 
+#include "Api.h"
 #include "Core/UUID.h"
 
 namespace Nova::Core::Scene::ECS::Components {
 
-	struct IDComponent {
+	struct NV_API IDComponent {
 		UUID m_ID = 0;
 
 		IDComponent() = default;

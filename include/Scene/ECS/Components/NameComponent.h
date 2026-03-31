@@ -3,9 +3,11 @@
 
 #include <string>
 
+#include "Api.h"
+
 namespace Nova::Core::Scene::ECS::Components {
 
-	struct NameComponent {
+	struct NV_API NameComponent {
 		std::string m_Name;
 
 		NameComponent() = default;

@@ -7,11 +7,12 @@
 #include <memory>
 #include <algorithm>
 
+#include "Api.h"
 #include "Core/Layer.h"
 
 namespace Nova::Core {
 
-    class LayerStack {
+    class NV_API LayerStack {
     public:
         LayerStack() = default;
         ~LayerStack();
@@ -63,7 +64,7 @@ namespace Nova::Core {
         std::vector<Layer*> m_Layers;
         unsigned int m_LayerInsertIndex = 0;
 
-        struct PendingTransition {
+        struct NV_API PendingTransition {
             Layer* from;
             Layer* to;
         };

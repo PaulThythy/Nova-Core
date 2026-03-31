@@ -6,11 +6,19 @@ namespace Nova::Core {
 
     LayerStack::~LayerStack()
 	{
-		for (Layer* layer : m_Layers)
-		{
-			layer->OnDetach();
-			delete layer;
-		}
+
+        /*for (Layer* layer : m_Layers)
+        {
+            layer->OnDetach();
+            delete layer;
+        }*/
+        // Detach in reverse order (LIFO) to respect dependencies between layers
+        for (auto it = m_Layers.rbegin(); it != m_Layers.rend(); ++it)
+        {
+            Layer* layer = *it;
+            layer->OnDetach();
+            delete layer;
+        }
 	}
 
     // PushLayer: insert a Layer before the overlay insertion point.

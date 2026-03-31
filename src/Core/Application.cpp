@@ -1,6 +1,7 @@
 #include "Core/Application.h"
+#include "Core/Log.h"
 
-#include <iostream>
+#include <cstdlib>
 #include <filesystem>
 #include <ranges>
 
@@ -10,7 +11,7 @@ namespace Nova::Core {
 
     Application::Application(const Window::WindowDesc& windowDesc) : m_IsRunning(false) {
         if (s_Instance) {
-            std::cerr << "Warning: Application instance already exists\n";
+            NV_LOG_WARN("Application instance already exists");
         }
         s_Instance = this;
 
@@ -43,53 +44,78 @@ namespace Nova::Core {
         const double freq = (double)SDL_GetPerformanceFrequency();
 
         while(m_IsRunning) {
+            SDL_WindowID mainWindowID = SDL_GetWindowID(m_Window->GetSDLWindow());
+
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
                 if (m_ImGuiLayer)
                     m_ImGuiLayer->ProcessSDLEvent(event);
 
                 switch (event.type) {
-                    case SDL_EVENT_QUIT: {
-                        WindowClosedEvent e;
-                        m_Window->RaiseEvent(e);
+                    case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
+                        if (event.window.windowID == mainWindowID) {
+                            WindowClosedEvent e;
+                            m_Window->RaiseEvent(e);
+                        }
                         break;
                     }
                     case SDL_EVENT_WINDOW_RESIZED: {
-                        int w = event.window.data1;
-                        int h = event.window.data2;
-                        WindowResizeEvent e((uint32_t)w, (uint32_t)h);
-                        m_Window->RaiseEvent(e);
+                        if (event.window.windowID == mainWindowID) {
+                            int w = event.window.data1;
+                            int h = event.window.data2;
+                            WindowResizeEvent e((uint32_t)w, (uint32_t)h);
+                            m_Window->RaiseEvent(e);
+                        }
+                        break;
+                    }
+                    case SDL_EVENT_QUIT: {
+                        if (event.window.windowID == mainWindowID) {
+                            WindowClosedEvent e;
+                            m_Window->RaiseEvent(e);
+                        }
                         break;
                     }
                     case SDL_EVENT_MOUSE_MOTION: {
-                        MouseMovedEvent e((double)event.motion.x, (double)event.motion.y);
-                        m_Window->RaiseEvent(e);
+                        if (event.window.windowID == mainWindowID) {
+                            MouseMovedEvent e((double)event.motion.x, (double)event.motion.y);
+                            m_Window->RaiseEvent(e);
+                        }
                         break;
                     }
                     case SDL_EVENT_MOUSE_WHEEL: {
-                        MouseScrolledEvent e((double)event.wheel.x, (double)event.wheel.y);
-                        m_Window->RaiseEvent(e);
+                        if(event.window.windowID == mainWindowID) {
+                            MouseScrolledEvent e((double)event.wheel.x, (double)event.wheel.y);
+                            m_Window->RaiseEvent(e);
+                        }
                         break;
                     }
                     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
-                        MouseButtonPressedEvent e((int)event.button.button);
-                        m_Window->RaiseEvent(e);
+                        if(event.window.windowID == mainWindowID) {
+                            MouseButtonPressedEvent e((int)event.button.button);
+                            m_Window->RaiseEvent(e);
+                        }
                         break;
                     }
                     case SDL_EVENT_MOUSE_BUTTON_UP: {
-                        MouseButtonReleasedEvent e((int)event.button.button);
-                        m_Window->RaiseEvent(e);
+                        if(event.window.windowID == mainWindowID) {
+                            MouseButtonReleasedEvent e((int)event.button.button);
+                            m_Window->RaiseEvent(e);
+                        }
                         break;
                     }
                     case SDL_EVENT_KEY_DOWN: {
-                        bool repeat = event.key.repeat != 0;
-                        KeyPressedEvent e((int)event.key.key, repeat);
-                        m_Window->RaiseEvent(e);
+                        if(event.window.windowID == mainWindowID) {
+                            bool repeat = event.key.repeat != 0;
+                            KeyPressedEvent e((int)event.key.key, repeat);
+                            m_Window->RaiseEvent(e);
+                        }
                         break;
                     }
                     case SDL_EVENT_KEY_UP: {
-                        KeyReleasedEvent e((int)event.key.key);
-                        m_Window->RaiseEvent(e);
+                        if(event.window.windowID == mainWindowID) {
+                            KeyReleasedEvent e((int)event.key.key);
+                            m_Window->RaiseEvent(e);
+                        }
                         break;
                     }
                     default:
@@ -126,6 +152,9 @@ namespace Nova::Core {
                 layer->OnUpdate(dt);
 
             for (Layer* layer : m_LayerStack)
+                layer->OnBegin();
+
+            for (Layer* layer : m_LayerStack)
                 layer->OnRender();
             
             if (m_ImGuiLayer) {
@@ -136,6 +165,9 @@ namespace Nova::Core {
 
                 m_ImGuiLayer->End();
             }
+
+            for (Layer* layer : m_LayerStack)
+                layer->OnEnd();
 
             m_LayerStack.ProcessPendingTransitions();
 
@@ -150,7 +182,7 @@ namespace Nova::Core {
     void Application::InitWindow(const Window::WindowDesc& windowDesc) {
         m_Window = new Window;
         if (!m_Window->Create(windowDesc)) {
-            std::cerr << "Failed to create window\n";
+            NV_LOG_FATAL("Failed to create window");
             exit(EXIT_FAILURE);
         }
     }
