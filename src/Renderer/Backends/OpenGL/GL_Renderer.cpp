@@ -73,8 +73,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         std::filesystem::path p = std::filesystem::current_path();
         std::filesystem::path shaderDir = p / "Nova-Core" / "Resources" / "Engine" / "Shaders";
-        std::filesystem::path vertPath = shaderDir / "model.vert.slang";
-        std::filesystem::path fragPath = shaderDir / "model.frag.slang";
+        std::filesystem::path vertPath = shaderDir / "Scene.vert.slang";
+        std::filesystem::path fragPath = shaderDir / "Scene.frag.slang";
 
         using Nova::Core::Asset::AssetManager;
         using Nova::Core::Asset::Assets::ShaderAsset;
@@ -201,7 +201,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         // Clear it here so the user never sees undefined texture contents while resizing.
         glBindFramebuffer(GL_FRAMEBUFFER, m_Framebuffer);
         glViewport(0, 0, m_ViewportWidth, m_ViewportHeight);
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -221,7 +221,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
 
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 

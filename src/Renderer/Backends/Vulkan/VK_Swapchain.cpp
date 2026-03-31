@@ -666,8 +666,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		Nova::Core::Renderer::RHI::RHI_ShaderDesc fDesc{};
 		fDesc.m_Stage = RHI_ShaderStage::Fragment;
 
-		auto vertAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "model.vert.slang", vDesc);
-		auto fragAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "model.frag.slang", fDesc);
+		auto vertAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "Scene.vert.slang", vDesc);
+		auto fragAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "Scene.frag.slang", fDesc);
 
 		if (!vertAsset || !fragAsset) { NV_LOG_WARN("CreateModelPipeline: failed to acquire shaders"); return; }
 		if (!vertAsset->Compile()) { NV_LOG_WARN(("VS compile failed:\n" + vertAsset->GetLastLog()).c_str()); return; }
