@@ -14,10 +14,6 @@
 [submodule "vendors/ImGuizmo"]
 	path = vendors/ImGuizmo
 	url = https://github.com/CedricGuillemet/ImGuizmo.git
-[submodule "vendors/glslang"]
-	path = vendors/glslang
-	url = ../../KhronosGroup/glslang.git
-	branch = main
 [submodule "vendors/slang"]
 	path = vendors/slang
 	url = https://github.com/shader-slang/slang.git
