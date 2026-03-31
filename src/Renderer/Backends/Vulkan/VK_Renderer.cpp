@@ -201,6 +201,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_Shader.reset();
 
+        for (VkPipeline p : m_FullscreenPipelines)
+            vkDestroyPipeline(m_VKDevice.GetDevice(), p, nullptr);
+        m_FullscreenPipelines.clear();
+
         for (auto& [key, mesh] : m_MeshCache) {
             if (mesh) {
                 mesh->Release();
@@ -406,8 +410,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_Shader->SetParameter("view", view);
         m_Shader->SetParameter("proj", proj);
-        m_Shader->SetParameter("viewProj", view * proj);
-        m_Shader->SetParameter("invViewProj", glm::inverse(view * proj));
+        m_Shader->SetParameter("viewProj", proj * view);
+        m_Shader->SetParameter("invViewProj", glm::inverse(proj * view));
     }
 
     void VK_Renderer::SetModelMatrix(const glm::mat4& model) {
@@ -811,6 +815,165 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         // next frame-in-flight
         m_VKSwapchain.AdvanceFrame();
+    }
+
+    // =========================================================================
+    // Fullscreen-triangle shader (used by EditorLayer for grid, etc.)
+    // =========================================================================
+
+    RHI::RHI_Shaders* VK_Renderer::CreateFullscreenShader(
+        const std::vector<uint32_t>& vertSpirv,
+        const std::vector<uint32_t>& fragSpirv)
+    {
+        VkDevice device = m_VKDevice.GetDevice();
+
+        VK_ShaderModule vertModule, fragModule;
+        if (!vertModule.Create(device, vertSpirv) ||
+            !fragModule.Create(device, fragSpirv))
+        {
+            NV_LOG_WARN("CreateFullscreenShader: failed to create shader modules");
+            return nullptr;
+        }
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = vertModule.GetModule();
+        stages[0].pName  = "main";
+        stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = fragModule.GetModule();
+        stages[1].pName  = "main";
+
+        VkPipelineVertexInputStateCreateInfo vertexInput{};
+        vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+        VkPipelineInputAssemblyStateCreateInfo inputAsm{};
+        inputAsm.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAsm.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.scissorCount  = 1;
+
+        VkPipelineRasterizationStateCreateInfo raster{};
+        raster.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        raster.polygonMode = VK_POLYGON_MODE_FILL;
+        raster.cullMode    = VK_CULL_MODE_NONE;
+        raster.frontFace   = VK_FRONT_FACE_CLOCKWISE;
+        raster.lineWidth   = 1.0f;
+
+        VkPipelineMultisampleStateCreateInfo msaa{};
+        msaa.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        msaa.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable  = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp   = VK_COMPARE_OP_LESS_OR_EQUAL;
+
+        VkPipelineColorBlendAttachmentState blendAttachment{};
+        blendAttachment.blendEnable         = VK_TRUE;
+        blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        blendAttachment.colorBlendOp        = VK_BLEND_OP_ADD;
+        blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        blendAttachment.alphaBlendOp        = VK_BLEND_OP_ADD;
+        blendAttachment.colorWriteMask      =
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+        VkPipelineColorBlendStateCreateInfo blend{};
+        blend.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        blend.attachmentCount = 1;
+        blend.pAttachments    = &blendAttachment;
+
+        VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        VkPipelineDynamicStateCreateInfo dynamic{};
+        dynamic.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamic.dynamicStateCount = 2;
+        dynamic.pDynamicStates    = dynamicStates;
+
+        VkPipelineLayout layout = m_VKSwapchain.GetModelPipelineLayout();
+
+        VkGraphicsPipelineCreateInfo pipe{};
+        pipe.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipe.stageCount          = 2;
+        pipe.pStages             = stages;
+        pipe.pVertexInputState   = &vertexInput;
+        pipe.pInputAssemblyState = &inputAsm;
+        pipe.pViewportState      = &viewportState;
+        pipe.pRasterizationState = &raster;
+        pipe.pMultisampleState   = &msaa;
+        pipe.pDepthStencilState  = &depthStencil;
+        pipe.pColorBlendState    = &blend;
+        pipe.pDynamicState       = &dynamic;
+        pipe.layout              = layout;
+        pipe.renderPass          = m_VKSwapchain.GetBackBufferRenderPass();
+        pipe.subpass             = 0;
+
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        VkResult res = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipe, nullptr, &pipeline);
+
+        vertModule.Destroy();
+        fragModule.Destroy();
+
+        if (res != VK_SUCCESS) {
+            NV_LOG_WARN("CreateFullscreenShader: pipeline creation failed");
+            return nullptr;
+        }
+
+        m_FullscreenPipelines.push_back(pipeline);
+
+        auto* shader = new VK_Shaders();
+        shader->SetPipeline(pipeline, layout);
+        shader->SetSceneBuffers(device,
+            m_VKSwapchain.GetBufGlobals(),    m_VKSwapchain.GetBufGlobalsMemory(),
+            m_VKSwapchain.GetBufMvp(),        m_VKSwapchain.GetBufMvpMemory(),
+            m_VKSwapchain.GetBufMaterials(),  m_VKSwapchain.GetBufMaterialsMemory(),
+            m_VKSwapchain.GetBufInstances(),  m_VKSwapchain.GetBufInstancesMemory(),
+            m_VKSwapchain.GetBufInstancesSize(),
+            m_VKSwapchain.GetSceneDescriptorSet());
+
+        NV_LOG_INFO("Fullscreen shader pipeline created.");
+        return shader;
+    }
+
+    void VK_Renderer::DestroyFullscreenShader(RHI::RHI_Shaders* shader) {
+        if (!shader) return;
+        vkDeviceWaitIdle(m_VKDevice.GetDevice());
+
+        auto* vkShader = static_cast<VK_Shaders*>(shader);
+        VkPipeline pipeline = vkShader->GetPipeline();
+        if (pipeline != VK_NULL_HANDLE) {
+            auto it = std::find(m_FullscreenPipelines.begin(), m_FullscreenPipelines.end(), pipeline);
+            if (it != m_FullscreenPipelines.end())
+                m_FullscreenPipelines.erase(it);
+            vkDestroyPipeline(m_VKDevice.GetDevice(), pipeline, nullptr);
+        }
+
+        delete vkShader;
+    }
+
+    void VK_Renderer::DrawFullscreen(RHI::RHI_Shaders* shader) {
+        if (!m_FrameActive || !shader) return;
+
+        VkCommandBuffer cmd = m_VKSwapchain.GetCommandBuffers()[m_VKSwapchain.GetAcquiredImageIndex()];
+
+        if (m_Shader && m_Shader->IsValid())
+            m_Shader->ApplyParameters(cmd);
+
+        shader->Bind(cmd);
+
+        VkDescriptorSet sceneDs = m_VKSwapchain.GetSceneDescriptorSet();
+        VkPipelineLayout layout = m_VKSwapchain.GetModelPipelineLayout();
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout,
+            static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &sceneDs, 0, nullptr);
+
+        vkCmdDraw(cmd, 3, 1, 0, 0);
     }
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

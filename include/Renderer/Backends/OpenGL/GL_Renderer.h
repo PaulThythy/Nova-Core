@@ -37,6 +37,12 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         RHI::RHI_Shaders* GetShader() override { return m_Shader.get(); }
         GLuint GetProgram() const { return m_Shader ? static_cast<GLuint>(reinterpret_cast<uintptr_t>(m_Shader->GetNativeHandle())) : 0; }
 
+        RHI::RHI_Shaders* CreateFullscreenShader(
+            const std::vector<uint32_t>& vertSpirv,
+            const std::vector<uint32_t>& fragSpirv) override;
+        void DestroyFullscreenShader(RHI::RHI_Shaders* shader) override;
+        void DrawFullscreen(RHI::RHI_Shaders* shader) override;
+
     private:
         std::unique_ptr<GL_Shaders> m_Shader;
 
@@ -49,6 +55,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         bool CreateFramebuffer(int width, int height);
         void DestroyFramebuffer();
+
+        GLuint m_EmptyVAO{ 0 };
     };
 
 } // namespace Nova::Core::Renderer::Backends::OpenGL

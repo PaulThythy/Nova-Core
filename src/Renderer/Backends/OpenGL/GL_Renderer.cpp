@@ -164,6 +164,11 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             glDeleteProgram(prog);
         }
 
+        if (m_EmptyVAO != 0) {
+            glDeleteVertexArrays(1, &m_EmptyVAO);
+            m_EmptyVAO = 0;
+        }
+
         DestroyFramebuffer();
 
         glDisable(GL_DEPTH_TEST);
@@ -231,8 +236,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         m_Shader->SetParameter("view", view);
         m_Shader->SetParameter("proj", proj);
-        m_Shader->SetParameter("viewProj", view * proj);
-        m_Shader->SetParameter("invViewProj", glm::inverse(view * proj));
+        m_Shader->SetParameter("viewProj", proj * view);
+        m_Shader->SetParameter("invViewProj", glm::inverse(proj * view));
     }
 
     void GL_Renderer::SetModelMatrix(const glm::mat4& model) {
@@ -393,6 +398,77 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         // Return to default framebuffer so ImGui can render its own draw data.
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    // =========================================================================
+    // Fullscreen-triangle shader (used by EditorLayer for grid, etc.)
+    // =========================================================================
+
+    RHI::RHI_Shaders* GL_Renderer::CreateFullscreenShader(
+        const std::vector<uint32_t>& vertSpirv,
+        const std::vector<uint32_t>& fragSpirv)
+    {
+        std::string log;
+
+        GLuint vs = LoadSpirvShader(GL_VERTEX_SHADER, vertSpirv, "main", log);
+        if (!vs) { NV_LOG_WARN(("CreateFullscreenShader VS failed: " + log).c_str()); return nullptr; }
+
+        GLuint fs = LoadSpirvShader(GL_FRAGMENT_SHADER, fragSpirv, "main", log);
+        if (!fs) { NV_LOG_WARN(("CreateFullscreenShader FS failed: " + log).c_str()); glDeleteShader(vs); return nullptr; }
+
+        GLuint prog = glCreateProgram();
+        glAttachShader(prog, vs);
+        glAttachShader(prog, fs);
+        glLinkProgram(prog);
+
+        glDetachShader(prog, vs);
+        glDetachShader(prog, fs);
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+
+        if (!CheckGLProgram(prog, log)) {
+            glDeleteProgram(prog);
+            return nullptr;
+        }
+
+        auto* shader = new GL_Shaders();
+        shader->SetProgram(prog);
+
+        NV_LOG_INFO("Fullscreen shader program linked from SPIR-V.");
+        return shader;
+    }
+
+    void GL_Renderer::DestroyFullscreenShader(RHI::RHI_Shaders* shader) {
+        if (!shader) return;
+        auto* glShader = static_cast<GL_Shaders*>(shader);
+        GLuint prog = glShader->GetProgram();
+        delete glShader;
+        if (prog != 0)
+            glDeleteProgram(prog);
+    }
+
+    void GL_Renderer::DrawFullscreen(RHI::RHI_Shaders* shader) {
+        if (!shader) return;
+
+        if (m_Shader && m_Shader->IsValid())
+            m_Shader->ApplyParameters(nullptr);
+
+        auto* glShader = static_cast<GL_Shaders*>(shader);
+        glUseProgram(glShader->GetProgram());
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LEQUAL);
+
+        if (m_EmptyVAO == 0)
+            glGenVertexArrays(1, &m_EmptyVAO);
+
+        glBindVertexArray(m_EmptyVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glBindVertexArray(0);
+
+        glDepthFunc(GL_LEQUAL);
     }
 
 } // namespace Nova::Core::Renderer::Backends::OpenGL
