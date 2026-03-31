@@ -2,6 +2,8 @@
 #define RHI_RENDERER_H
 
 #include <memory>
+#include <vector>
+#include <cstdint>
 
 #include "Api.h"
 #include "Core/GraphicsAPI.h"
@@ -77,6 +79,25 @@ namespace Nova::Core::Renderer::RHI {
 
         /** Returns the current/default shader (e.g. model shader). Ownership stays with the renderer. */
         virtual RHI_Shaders* GetShader() = 0;
+
+        /**
+         * Create a fullscreen-triangle shader from compiled SPIR-V.
+         * The resulting pipeline has no vertex input, alpha blending, depth test/write enabled.
+         * Uses the same engine descriptor set (NovaUniforms) as the model shader.
+         * Caller owns the returned pointer and must call DestroyFullscreenShader() to free it.
+         */
+        virtual RHI_Shaders* CreateFullscreenShader(
+            const std::vector<uint32_t>& vertSpirv,
+            const std::vector<uint32_t>& fragSpirv) = 0;
+
+        /** Destroy a shader created by CreateFullscreenShader(). */
+        virtual void DestroyFullscreenShader(RHI_Shaders* shader) = 0;
+
+        /**
+         * Draw a fullscreen triangle (3 vertices, SV_VertexID) with the given shader.
+         * Flushes the current scene parameters (view, proj, globals) before drawing.
+         */
+        virtual void DrawFullscreen(RHI_Shaders* shader) = 0;
     };
 
 } // namespace Nova::Core::Renderer::RHI

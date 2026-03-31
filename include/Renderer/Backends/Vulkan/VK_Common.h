@@ -10,7 +10,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     static inline void CheckVkResult(VkResult err) {
         if (err == VK_SUCCESS) return;
-        NV_LOG_ERROR((std::string("Vulkan error: ") + std::to_string((int)err)).c_str());
+        //NV_LOG_ERROR((std::string("Vulkan error: ") + std::to_string((int)err)).c_str());
     }
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

@@ -48,6 +48,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         RHI::RHI_Shaders* GetShader() override { return m_Shader.get(); }
 
+        RHI::RHI_Shaders* CreateFullscreenShader(
+            const std::vector<uint32_t>& vertSpirv,
+            const std::vector<uint32_t>& fragSpirv) override;
+        void DestroyFullscreenShader(RHI::RHI_Shaders* shader) override;
+        void DrawFullscreen(RHI::RHI_Shaders* shader) override;
+
     private:
         void BeginImGuiRenderPass();
         bool TransitionViewportImageToShaderRead();
@@ -61,6 +67,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_Swapchain m_VKSwapchain;
 
         std::unique_ptr<VK_Shaders> m_Shader;
+        std::vector<VkPipeline> m_FullscreenPipelines;
         std::unordered_map<const Renderer::Graphics::Mesh*, std::shared_ptr<VK_Mesh>> m_MeshCache;
 
         std::shared_ptr<VK_Mesh> GetOrUploadMesh(const std::shared_ptr<Renderer::Graphics::Mesh>& cpuMesh);

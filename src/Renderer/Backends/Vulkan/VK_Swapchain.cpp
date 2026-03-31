@@ -662,14 +662,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		Nova::Core::Renderer::RHI::RHI_ShaderDesc vDesc{};
 		vDesc.m_Stage = RHI_ShaderStage::Vertex;
-		vDesc.m_GlslVersion = 450;
 
 		Nova::Core::Renderer::RHI::RHI_ShaderDesc fDesc{};
 		fDesc.m_Stage = RHI_ShaderStage::Fragment;
-		fDesc.m_GlslVersion = 450;
 
-		auto vertAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "model.vert", vDesc);
-		auto fragAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "model.frag", fDesc);
+		auto vertAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "model.vert.slang", vDesc);
+		auto fragAsset = AssetManager::Get().Acquire<ShaderAsset>(shaderDir / "model.frag.slang", fDesc);
 
 		if (!vertAsset || !fragAsset) { NV_LOG_WARN("CreateModelPipeline: failed to acquire shaders"); return; }
 		if (!vertAsset->Compile()) { NV_LOG_WARN(("VS compile failed:\n" + vertAsset->GetLastLog()).c_str()); return; }
@@ -694,13 +692,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		stages[1].module = fragModule.GetModule();
 		stages[1].pName = "main";
 
-		// ---- Vertex input matching Vertex struct ----
-		// location 0 = position (vec3)
-		// location 1 = normal   (vec3)
-		// location 2 = texcoord (vec2)
-		// location 3 = color    (vec3)
-		// location 4 = tangent  (vec3)
-		// location 5 = bitangent(vec3)
+		// Vertex buffer stride matches the full Vertex layout; only declare attributes
+		// consumed by model.vert.slang (locations 0–1) to satisfy validation.
 		VkVertexInputBindingDescription binding{};
 		binding.binding = 0;
 		binding.stride = sizeof(Renderer::Graphics::Vertex);
@@ -764,21 +757,21 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		dynamic.dynamicStateCount = 2;
 		dynamic.pDynamicStates = dynamicStates;
 
-		// ---- Descriptor set layout: binding 0 = Globals UBO, 1 = MVP UBO, 2 = Instances SSBO, 3 = Material UBO ----
+		// Descriptor set layout: matches NovaEngine ParameterBlock field order (Slang bindings 0..Count-1).
 		VkDescriptorSetLayoutBinding bindings[4]{};
-		bindings[0].binding = 0;
+		bindings[0].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Globals);
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bindings[0].descriptorCount = 1;
 		bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-		bindings[1].binding = 1;
+		bindings[1].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp);
 		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bindings[1].descriptorCount = 1;
-		bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-		bindings[2].binding = 2;
+		bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+		bindings[2].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Instances);
 		bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		bindings[2].descriptorCount = 1;
-		bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-		bindings[3].binding = 3;
+		bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+		bindings[3].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material);
 		bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bindings[3].descriptorCount = 1;
 		bindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -792,18 +785,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to create scene set layout"); return; }
 
-		// ---- Globals UBO buffer ----
+		// ---- Globals buffer ----
 		const VkDeviceSize globalsSize = sizeof(Renderer::RHI::Globals);
 		VkBufferCreateInfo bufInfo{};
 		bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufInfo.size = globalsSize;
 		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 		bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_GlobalsUBOBuffer);
+		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufGlobals);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
 		VkMemoryRequirements memReq;
-		vkGetBufferMemoryRequirements(m_Device, m_GlobalsUBOBuffer, &memReq);
+		vkGetBufferMemoryRequirements(m_Device, m_BufGlobals, &memReq);
 		VkPhysicalDeviceMemoryProperties memProps;
 		vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProps);
 		uint32_t memTypeIndex = UINT32_MAX;
@@ -814,25 +807,25 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 				break;
 			}
 		}
-		if (memTypeIndex == UINT32_MAX) { NV_LOG_WARN("CreateModelPipeline: no host-visible memory for Globals UBO"); DestroyModelPipeline(); return; }
+		if (memTypeIndex == UINT32_MAX) { NV_LOG_WARN("CreateModelPipeline: no host-visible memory for Globals buffer"); DestroyModelPipeline(); return; }
 		VkMemoryAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memReq.size;
 		allocInfo.memoryTypeIndex = memTypeIndex;
-		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_GlobalsUBOMemory);
+		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_BufGlobalsMemory);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkBindBufferMemory(m_Device, m_GlobalsUBOBuffer, m_GlobalsUBOMemory, 0);
+		vkBindBufferMemory(m_Device, m_BufGlobals, m_BufGlobalsMemory, 0);
 
-		// ---- MVP UBO buffer ----
-		const VkDeviceSize mvpSize = sizeof(Renderer::RHI::UBO_MVP);
+		// ---- MVP buffer ----
+		const VkDeviceSize mvpSize = sizeof(Renderer::RHI::MVP);
 		bufInfo.size = mvpSize;
 		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 		bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_MVPUBOBuffer);
+		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufMvp);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkGetBufferMemoryRequirements(m_Device, m_MVPUBOBuffer, &memReq);
+		vkGetBufferMemoryRequirements(m_Device, m_BufMvp, &memReq);
 		memTypeIndex = UINT32_MAX;
 		for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
 			if ((memReq.memoryTypeBits & (1u << i)) &&
@@ -841,22 +834,22 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 				break;
 			}
 		}
-		if (memTypeIndex == UINT32_MAX) { NV_LOG_WARN("CreateModelPipeline: no host-visible memory for MVP UBO"); DestroyModelPipeline(); return; }
+		if (memTypeIndex == UINT32_MAX) { NV_LOG_WARN("CreateModelPipeline: no host-visible memory for MVP buffer"); DestroyModelPipeline(); return; }
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memReq.size;
 		allocInfo.memoryTypeIndex = memTypeIndex;
-		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_MVPUBOMemory);
+		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_BufMvpMemory);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkBindBufferMemory(m_Device, m_MVPUBOBuffer, m_MVPUBOMemory, 0);
+		vkBindBufferMemory(m_Device, m_BufMvp, m_BufMvpMemory, 0);
 
-		// ---- Material UBO buffer ----
-		const VkDeviceSize materialSize = sizeof(Renderer::RHI::UBO_Material);
+		// ---- Materials buffer ----
+		const VkDeviceSize materialSize = sizeof(Renderer::RHI::Material);
 		bufInfo.size = materialSize;
-		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_MaterialUBOBuffer);
+		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufMaterials);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkGetBufferMemoryRequirements(m_Device, m_MaterialUBOBuffer, &memReq);
+		vkGetBufferMemoryRequirements(m_Device, m_BufMaterials, &memReq);
 		memTypeIndex = UINT32_MAX;
 		for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
 			if ((memReq.memoryTypeBits & (1u << i)) &&
@@ -868,19 +861,19 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (memTypeIndex == UINT32_MAX) { DestroyModelPipeline(); return; }
 		allocInfo.allocationSize = memReq.size;
 		allocInfo.memoryTypeIndex = memTypeIndex;
-		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_MaterialUBOMemory);
+		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_BufMaterialsMemory);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkBindBufferMemory(m_Device, m_MaterialUBOBuffer, m_MaterialUBOMemory, 0);
+		vkBindBufferMemory(m_Device, m_BufMaterials, m_BufMaterialsMemory, 0);
 
-		// ---- Instance SSBO buffer ----
-		const VkDeviceSize instanceSize = sizeof(Renderer::RHI::SSBO_InstanceData) * MAX_MODEL_INSTANCES;
+		// ---- Instances buffer ----
+		const VkDeviceSize instanceSize = sizeof(Renderer::RHI::Instance) * MAX_MODEL_INSTANCES;
 		bufInfo.size = instanceSize;
 		bufInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_InstanceBuffer);
+		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufInstances);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkGetBufferMemoryRequirements(m_Device, m_InstanceBuffer, &memReq);
+		vkGetBufferMemoryRequirements(m_Device, m_BufInstances, &memReq);
 		memTypeIndex = UINT32_MAX;
 		for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
 			if ((memReq.memoryTypeBits & (1u << i)) &&
@@ -892,11 +885,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (memTypeIndex == UINT32_MAX) { DestroyModelPipeline(); return; }
 		allocInfo.allocationSize = memReq.size;
 		allocInfo.memoryTypeIndex = memTypeIndex;
-		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_InstanceBufferMemory);
+		res = vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_BufInstancesMemory);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
-		vkBindBufferMemory(m_Device, m_InstanceBuffer, m_InstanceBufferMemory, 0);
-		m_InstanceBufferSize = instanceSize;
+		vkBindBufferMemory(m_Device, m_BufInstances, m_BufInstancesMemory, 0);
+		m_BufInstancesSize = instanceSize;
 
 		// ---- Allocate descriptor set (from ImGui pool) ----
 		VkDescriptorSetAllocateInfo allocSetInfo{};
@@ -909,46 +902,46 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to allocate scene descriptor set"); DestroyModelPipeline(); return; }
 
 		VkDescriptorBufferInfo globalsBufInfo{};
-		globalsBufInfo.buffer = m_GlobalsUBOBuffer;
+		globalsBufInfo.buffer = m_BufGlobals;
 		globalsBufInfo.offset = 0;
 		globalsBufInfo.range = globalsSize;
 		VkDescriptorBufferInfo mvpBufInfo{};
-		mvpBufInfo.buffer = m_MVPUBOBuffer;
+		mvpBufInfo.buffer = m_BufMvp;
 		mvpBufInfo.offset = 0;
 		mvpBufInfo.range = mvpSize;
 		VkDescriptorBufferInfo materialBufInfo{};
-		materialBufInfo.buffer = m_MaterialUBOBuffer;
+		materialBufInfo.buffer = m_BufMaterials;
 		materialBufInfo.offset = 0;
 		materialBufInfo.range = materialSize;
 		VkDescriptorBufferInfo instanceBufInfo{};
-		instanceBufInfo.buffer = m_InstanceBuffer;
+		instanceBufInfo.buffer = m_BufInstances;
 		instanceBufInfo.offset = 0;
 		instanceBufInfo.range = instanceSize;
 		VkWriteDescriptorSet writes[4]{};
 		writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[0].dstSet = m_SceneDescriptorSet;
-		writes[0].dstBinding = 0;
+		writes[0].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Globals);
 		writes[0].dstArrayElement = 0;
 		writes[0].descriptorCount = 1;
 		writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		writes[0].pBufferInfo = &globalsBufInfo;
 		writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[1].dstSet = m_SceneDescriptorSet;
-		writes[1].dstBinding = 1;
+		writes[1].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp);
 		writes[1].dstArrayElement = 0;
 		writes[1].descriptorCount = 1;
 		writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		writes[1].pBufferInfo = &mvpBufInfo;
 		writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[2].dstSet = m_SceneDescriptorSet;
-		writes[2].dstBinding = 2;
+		writes[2].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Instances);
 		writes[2].dstArrayElement = 0;
 		writes[2].descriptorCount = 1;
 		writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		writes[2].pBufferInfo = &instanceBufInfo;
 		writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[3].dstSet = m_SceneDescriptorSet;
-		writes[3].dstBinding = 3;
+		writes[3].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material);
 		writes[3].dstArrayElement = 0;
 		writes[3].descriptorCount = 1;
 		writes[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1002,15 +995,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			vkFreeDescriptorSets(m_Device, m_ImGuiDescriptorPool, 1, &m_SceneDescriptorSet);
 			m_SceneDescriptorSet = VK_NULL_HANDLE;
 		}
-		if (m_InstanceBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_InstanceBuffer, nullptr); m_InstanceBuffer = VK_NULL_HANDLE; }
-		if (m_InstanceBufferMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_InstanceBufferMemory, nullptr); m_InstanceBufferMemory = VK_NULL_HANDLE; }
-		m_InstanceBufferSize = 0;
-		if (m_MaterialUBOBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_MaterialUBOBuffer, nullptr); m_MaterialUBOBuffer = VK_NULL_HANDLE; }
-		if (m_MaterialUBOMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_MaterialUBOMemory, nullptr); m_MaterialUBOMemory = VK_NULL_HANDLE; }
-		if (m_MVPUBOBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_MVPUBOBuffer, nullptr); m_MVPUBOBuffer = VK_NULL_HANDLE; }
-		if (m_MVPUBOMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_MVPUBOMemory, nullptr); m_MVPUBOMemory = VK_NULL_HANDLE; }
-		if (m_GlobalsUBOBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_GlobalsUBOBuffer, nullptr); m_GlobalsUBOBuffer = VK_NULL_HANDLE; }
-		if (m_GlobalsUBOMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_GlobalsUBOMemory, nullptr); m_GlobalsUBOMemory = VK_NULL_HANDLE; }
+		if (m_BufInstances != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufInstances, nullptr); m_BufInstances = VK_NULL_HANDLE; }
+		if (m_BufInstancesMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufInstancesMemory, nullptr); m_BufInstancesMemory = VK_NULL_HANDLE; }
+		m_BufInstancesSize = 0;
+		if (m_BufMaterials != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufMaterials, nullptr); m_BufMaterials = VK_NULL_HANDLE; }
+		if (m_BufMaterialsMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufMaterialsMemory, nullptr); m_BufMaterialsMemory = VK_NULL_HANDLE; }
+		if (m_BufMvp != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufMvp, nullptr); m_BufMvp = VK_NULL_HANDLE; }
+		if (m_BufMvpMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufMvpMemory, nullptr); m_BufMvpMemory = VK_NULL_HANDLE; }
+		if (m_BufGlobals != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufGlobals, nullptr); m_BufGlobals = VK_NULL_HANDLE; }
+		if (m_BufGlobalsMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufGlobalsMemory, nullptr); m_BufGlobalsMemory = VK_NULL_HANDLE; }
 		if (m_SceneSetLayout != VK_NULL_HANDLE) {
 			vkDestroyDescriptorSetLayout(m_Device, m_SceneSetLayout, nullptr);
 			m_SceneSetLayout = VK_NULL_HANDLE;

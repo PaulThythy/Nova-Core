@@ -18,3 +18,6 @@
 	path = vendors/glslang
 	url = ../../KhronosGroup/glslang.git
 	branch = main
+[submodule "vendors/slang"]
+	path = vendors/slang
+	url = https://github.com/shader-slang/slang.git

@@ -339,14 +339,23 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             queueCreateInfos.push_back(qci);
         }
 
-        // Enable only what you need here (keep empty for now)
-        VkPhysicalDeviceFeatures enabledFeatures{};
+        // SPIR-V (Slang + import glsl, SV_InstanceID, etc.) may declare the DrawParameters capability
+        // → require shaderDrawParameters (Vulkan 1.1) or VK_KHR_shader_draw_parameters.
+        VkPhysicalDeviceVulkan11Features features11{};
+        features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+        features11.shaderDrawParameters = VK_TRUE;
+
+        VkPhysicalDeviceFeatures2 features2{};
+        features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        features2.pNext = &features11;
+        features2.features = {};
 
         VkDeviceCreateInfo dci{};
         dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        dci.pNext = &features2;
         dci.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         dci.pQueueCreateInfos = queueCreateInfos.data();
-        dci.pEnabledFeatures = &enabledFeatures;
+        dci.pEnabledFeatures = nullptr;
         dci.enabledExtensionCount = static_cast<uint32_t>(requiredDeviceExtensions.size());
         dci.ppEnabledExtensionNames = requiredDeviceExtensions.data();
 

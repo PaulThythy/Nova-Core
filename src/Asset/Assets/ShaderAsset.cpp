@@ -27,16 +27,16 @@ namespace Nova::Core::Asset::Assets {
         return GetSpirv(m_LastCompiledApi);
     }
 
-    const std::string& ShaderAsset::GetGlsl() const {
-        return GetGlsl(m_LastCompiledApi);
+    const std::string& ShaderAsset::GetSource() const {
+        return GetSource(m_LastCompiledApi);
     }
 
     const std::vector<uint32_t>& ShaderAsset::GetSpirv(GraphicsAPI api) const {
         return (api == GraphicsAPI::OpenGL) ? m_SpirvOpenGL : m_SpirvVulkan;
     }
 
-    const std::string& ShaderAsset::GetGlsl(GraphicsAPI api) const {
-        return (api == GraphicsAPI::OpenGL) ? m_GlslOpenGL : m_GlslVulkan;
+    const std::string& ShaderAsset::GetSource(GraphicsAPI api) const {
+        return (api == GraphicsAPI::OpenGL) ? m_SourceOpenGL : m_SourceVulkan;
     }
 
     bool ShaderAsset::Compile() {
@@ -74,15 +74,10 @@ namespace Nova::Core::Asset::Assets {
         RHI::RHI_ShaderDesc shaderDesc = m_Desc;
         shaderDesc.m_FilePath = m_Path;
 
-        // --- Minimal platform-specific defines ---
         if (api == GraphicsAPI::Vulkan) {
-            opts.m_Definitions.emplace_back("gl_VertexID", "gl_VertexIndex");
-            opts.m_Definitions.emplace_back("gl_InstanceID", "gl_InstanceIndex");
             opts.m_Definitions.emplace_back("NOVA_VULKAN", "1");
         }
         else {
-            opts.m_Definitions.emplace_back("gl_VertexIndex", "gl_VertexID");
-            opts.m_Definitions.emplace_back("gl_InstanceIndex", "gl_InstanceID");
             opts.m_Definitions.emplace_back("NOVA_OPENGL", "1");
         }
 
@@ -99,12 +94,12 @@ namespace Nova::Core::Asset::Assets {
         // Always store the generated SPIR-V, which is now shared by both backends.
         if (api == GraphicsAPI::Vulkan) {
             m_SpirvVulkan = std::move(out.m_Spirv);
-            m_GlslVulkan = std::move(out.m_Glsl); // useful for debugging
+            m_SourceVulkan = std::move(out.m_Source);
             m_CompiledVulkan = true;
         }
         else {
             m_SpirvOpenGL = std::move(out.m_Spirv);
-            m_GlslOpenGL = std::move(out.m_Glsl); // useful for debugging
+            m_SourceOpenGL = std::move(out.m_Source);
             m_CompiledOpenGL = true;
         }
 
