@@ -7,19 +7,14 @@ namespace Nova::Core::Asset::Assets {
     using namespace Nova::Core;
     using namespace Nova::Core::Renderer;
 
-    ShaderAsset::ShaderAsset(std::filesystem::path shaderPath,
-        RHI::RHI_ShaderDesc desc,
-        RHI::RHI_ShaderCompileOptions options)
+    ShaderAsset::ShaderAsset(std::filesystem::path shaderPath, RHI::RHI_ShaderCompileInput compileInput)
         : Asset(AssetType::Shader, std::move(shaderPath)),
-        m_Desc(std::move(desc)),
-        m_Options(std::move(options))
+        m_Input(std::move(compileInput))
     {
-        // The shader file path comes from Asset::m_Path, so keep it as the source of truth here.
-        m_Desc.m_FilePath = m_Path;
+        m_Input.m_File = m_Path;
 
-        // Infer the shader stage when it was not provided explicitly.
-        if (m_Desc.m_Stage == RHI::RHI_ShaderStage::Unknown) {
-            m_Desc.m_Stage = RHI::ShaderStageFromFileExtension(m_Path);
+        if (m_Input.m_Stage == RHI::RHI_ShaderStage::Unknown) {
+            m_Input.m_Stage = RHI::ShaderStageFromFileExtension(m_Path);
         }
     }
 
@@ -59,7 +54,7 @@ namespace Nova::Core::Asset::Assets {
             return true;
         }
 
-        RHI::RHI_ShaderCompileOptions opts = m_Options;
+        RHI::RHI_ShaderCompileInput opts = m_Input;
         opts.m_TargetApi = api;
 
         const std::filesystem::path engineShaderRoot =
@@ -71,27 +66,25 @@ namespace Nova::Core::Asset::Assets {
         opts.m_IncludeDirs.push_back(engineShaderRoot);
         opts.m_IncludeDirs.push_back(editorShaderRoot);
 
-        RHI::RHI_ShaderDesc shaderDesc = m_Desc;
-        shaderDesc.m_FilePath = m_Path;
+        opts.m_File = m_Path;
+        opts.m_SkipCache = force;
 
         if (api == GraphicsAPI::Vulkan) {
-            opts.m_Definitions.emplace_back("NOVA_VULKAN", "1");
+            opts.m_Defines.emplace_back("NOVA_VULKAN", "1");
         }
         else {
-            opts.m_Definitions.emplace_back("NOVA_OPENGL", "1");
+            opts.m_Defines.emplace_back("NOVA_OPENGL", "1");
         }
 
-        RHI::RHI_ShaderCompilationOutput out{};
-        const bool ok = RHI::CompileShader(shaderDesc, opts, out);
+        RHI::RHI_ShaderCompileResult out = RHI::RHI_ShaderCompiler::Compile(opts);
 
         m_LastLog = out.m_Log;
-        if (!ok) {
+        if (!out.m_Success) {
             if (api == GraphicsAPI::Vulkan) m_CompiledVulkan = false;
             if (api == GraphicsAPI::OpenGL) m_CompiledOpenGL = false;
             return false;
         }
 
-        // Always store the generated SPIR-V, which is now shared by both backends.
         if (api == GraphicsAPI::Vulkan) {
             m_SpirvVulkan = std::move(out.m_Spirv);
             m_SourceVulkan = std::move(out.m_Source);
@@ -103,7 +96,7 @@ namespace Nova::Core::Asset::Assets {
             m_CompiledOpenGL = true;
         }
 
-        m_Desc.m_Stage = out.m_Stage;
+        m_Input.m_Stage = out.m_Stage;
         m_LastCompiledApi = api;
         return true;
     }

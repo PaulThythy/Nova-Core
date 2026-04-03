@@ -9,9 +9,8 @@ namespace Nova::Core::Asset::Assets {
 
     class NV_API ShaderAsset final : public Asset{
     public:
-        ShaderAsset(std::filesystem::path shaderPath, 
-            Nova::Core::Renderer::RHI::RHI_ShaderDesc desc = {},
-            Nova::Core::Renderer::RHI::RHI_ShaderCompileOptions options = {});
+        ShaderAsset(std::filesystem::path shaderPath,
+            Nova::Core::Renderer::RHI::RHI_ShaderCompileInput compileInput = {});
 
         bool Compile();
 
@@ -20,22 +19,19 @@ namespace Nova::Core::Asset::Assets {
 
         // Accessors populated after compilation.
         const std::vector<uint32_t>& GetSpirv() const;
-        /// Source .slang conservé après compilation (débogage).
+        // Source .slang conservé après compilation (débogage).
         const std::string& GetSource() const;
         const std::string& GetLastLog() const { return m_LastLog; }
 
         const std::vector<uint32_t>& GetSpirv(Nova::Core::GraphicsAPI api) const;
         const std::string& GetSource(Nova::Core::GraphicsAPI api) const;
 
-        Nova::Core::Renderer::RHI::RHI_ShaderStage GetStage() const { return m_Stage; }
+        Nova::Core::Renderer::RHI::RHI_ShaderStage GetStage() const { return m_Input.m_Stage; }
 
     private:
         bool CompileInternal(Nova::Core::GraphicsAPI api, bool force);
 
-        Nova::Core::Renderer::RHI::RHI_ShaderDesc m_Desc;
-        Nova::Core::Renderer::RHI::RHI_ShaderCompileOptions m_Options;
-
-        Nova::Core::Renderer::RHI::RHI_ShaderStage m_Stage = Nova::Core::Renderer::RHI::RHI_ShaderStage::Unknown;
+        Nova::Core::Renderer::RHI::RHI_ShaderCompileInput m_Input;
 
         bool m_CompiledVulkan = false;
         bool m_CompiledOpenGL = false;

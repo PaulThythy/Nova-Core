@@ -78,16 +78,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         using Nova::Core::Asset::AssetManager;
         using Nova::Core::Asset::Assets::ShaderAsset;
-        using Nova::Core::Renderer::RHI::RHI_ShaderStage;
-
-        Nova::Core::Renderer::RHI::RHI_ShaderDesc vDesc{};
-        vDesc.m_Stage = RHI_ShaderStage::Vertex;
-
-        Nova::Core::Renderer::RHI::RHI_ShaderDesc fDesc{};
-        fDesc.m_Stage = RHI_ShaderStage::Fragment;
-
-        auto vert = AssetManager::Get().Acquire<ShaderAsset>(vertPath, vDesc);
-        auto frag = AssetManager::Get().Acquire<ShaderAsset>(fragPath, fDesc);
+        auto vert = AssetManager::Get().Acquire<ShaderAsset>(vertPath);
+        auto frag = AssetManager::Get().Acquire<ShaderAsset>(fragPath);
 
         NV_ASSERT_MSG(vert, "GL_Renderer::Create failed to acquire the vertex shader asset.");
         NV_ASSERT_MSG(frag, "GL_Renderer::Create failed to acquire the fragment shader asset.");

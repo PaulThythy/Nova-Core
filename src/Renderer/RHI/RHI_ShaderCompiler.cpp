@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <functional>
 #include <cstring>
 #include <fstream>
 #include <mutex>
 #include <sstream>
 #include <string_view>
+#include <unordered_map>
 
 #include <slang-com-helper.h>
 #include <slang-com-ptr.h>
@@ -14,12 +16,9 @@
 
 namespace Nova::Core::Renderer::RHI {
 
-    std::mutex g_SlangMutex;
+    std::mutex g_Mutex;
+    std::unordered_map<std::string, RHI_ShaderCompileResult> g_MemoryCache;
     Slang::ComPtr<slang::IGlobalSession> g_GlobalSession;
-
-    // ---------------------------------------------------------------------------
-    // Small helpers
-    // ---------------------------------------------------------------------------
 
     std::string ToSlangPathString(const std::filesystem::path& path) {
         return path.generic_string();
@@ -68,14 +67,12 @@ namespace Nova::Core::Renderer::RHI {
         }
     }
 
-    /// Create global session once (caller must hold g_SlangMutex).
     bool EnsureGlobalSessionUnlocked(std::string& outErr) {
         if (g_GlobalSession) {
             return true;
         }
         SlangGlobalSessionDesc desc{};
         desc.structureSize = sizeof(desc);
-        // Needed for `import glsl` (e.g. matrix inverse intrinsics).
         desc.enableGLSL = true;
 
         const SlangResult hr = slang::createGlobalSession(&desc, g_GlobalSession.writeRef());
@@ -94,7 +91,7 @@ namespace Nova::Core::Renderer::RHI {
         return profile;
     }
 
-    void FillLinkOptions(const RHI_ShaderCompileOptions& options, std::vector<slang::CompilerOptionEntry>& outOpts) {
+    void FillLinkOptions(const RHI_ShaderCompileInput& input, std::vector<slang::CompilerOptionEntry>& outOpts) {
         outOpts.clear();
         outOpts.reserve(2);
 
@@ -102,18 +99,17 @@ namespace Nova::Core::Renderer::RHI {
         dbg.name = slang::CompilerOptionName::DebugInformation;
         dbg.value.kind = slang::CompilerOptionValueKind::Int;
         dbg.value.intValue0 =
-            options.m_DebugInfo ? SLANG_DEBUG_INFO_LEVEL_STANDARD : SLANG_DEBUG_INFO_LEVEL_NONE;
+            input.m_Debug ? SLANG_DEBUG_INFO_LEVEL_STANDARD : SLANG_DEBUG_INFO_LEVEL_NONE;
         outOpts.push_back(dbg);
 
         slang::CompilerOptionEntry opt{};
         opt.name = slang::CompilerOptionName::Optimization;
         opt.value.kind = slang::CompilerOptionValueKind::Int;
         opt.value.intValue0 =
-            options.m_Optimize ? SLANG_OPTIMIZATION_LEVEL_HIGH : SLANG_OPTIMIZATION_LEVEL_NONE;
+            input.m_Optimize ? SLANG_OPTIMIZATION_LEVEL_HIGH : SLANG_OPTIMIZATION_LEVEL_NONE;
         outOpts.push_back(opt);
     }
 
-    /// After link(), extract SPIR-V for target 0 / entry point 0 into `out`.
     bool GetLinkedSpirv(
         slang::IComponentType* linked,
         std::string& log,
@@ -141,15 +137,12 @@ namespace Nova::Core::Renderer::RHI {
         return true;
     }
 
-    /// Full Slang pipeline: session → module → entry point → composite → link → SPIR-V.
     bool CompileSlangFileToSpirv(
         slang::IGlobalSession* global,
-        const RHI_ShaderDesc& desc,
-        const RHI_ShaderCompileOptions& options,
-        RHI_ShaderStage stage,
+        const RHI_ShaderCompileInput& input,
         std::string&& fileContents,
-        RHI_ShaderCompilationOutput& out) {
-        const SlangStage slangStage = RhiStageToSlangStage(stage);
+        RHI_ShaderCompileResult& out) {
+        const SlangStage slangStage = RhiStageToSlangStage(input.m_Stage);
         if (slangStage == SLANG_STAGE_NONE) {
             out.m_Log = "Invalid shader stage";
             return false;
@@ -160,13 +153,12 @@ namespace Nova::Core::Renderer::RHI {
         target.format = SLANG_SPIRV;
         target.profile = ResolveSpirvProfile(global);
 
-        // #include / import paths: shader directory + user includes.
         std::vector<std::string> searchPathStrings;
         {
             const std::filesystem::path parent =
-                desc.m_FilePath.has_parent_path() ? desc.m_FilePath.parent_path() : std::filesystem::current_path();
+                input.m_File.has_parent_path() ? input.m_File.parent_path() : std::filesystem::current_path();
             searchPathStrings.push_back(ToSlangPathString(parent));
-            for (const auto& inc : options.m_IncludeDirs) {
+            for (const auto& inc : input.m_IncludeDirs) {
                 searchPathStrings.push_back(ToSlangPathString(inc));
             }
         }
@@ -177,8 +169,8 @@ namespace Nova::Core::Renderer::RHI {
         }
 
         std::vector<slang::PreprocessorMacroDesc> macros;
-        macros.reserve(options.m_Definitions.size());
-        for (const auto& def : options.m_Definitions) {
+        macros.reserve(input.m_Defines.size());
+        for (const auto& def : input.m_Defines) {
             slang::PreprocessorMacroDesc m{};
             m.name = def.first.c_str();
             m.value = def.second.empty() ? "1" : def.second.c_str();
@@ -201,7 +193,7 @@ namespace Nova::Core::Renderer::RHI {
             return false;
         }
 
-        const std::string moduleName = desc.m_FilePath.stem().string();
+        const std::string moduleName = input.m_File.stem().string();
         std::string log;
 
         Slang::ComPtr<ISlangBlob> diagLoad;
@@ -216,7 +208,7 @@ namespace Nova::Core::Renderer::RHI {
         Slang::ComPtr<slang::IEntryPoint> entryPoint;
         Slang::ComPtr<ISlangBlob> diagEp;
         const SlangResult epHr = module->findAndCheckEntryPoint(
-            desc.m_EntryPoint.c_str(),
+            input.m_EntryPoint.c_str(),
             slangStage,
             entryPoint.writeRef(),
             diagEp.writeRef());
@@ -238,7 +230,7 @@ namespace Nova::Core::Renderer::RHI {
         }
 
         std::vector<slang::CompilerOptionEntry> linkOpts;
-        FillLinkOptions(options, linkOpts);
+        FillLinkOptions(input, linkOpts);
 
         Slang::ComPtr<slang::IComponentType> linked;
         Slang::ComPtr<ISlangBlob> diagLink;
@@ -265,9 +257,154 @@ namespace Nova::Core::Renderer::RHI {
         return true;
     }
 
-    // =============================================================================
-    // Public API
-    // =============================================================================
+    // -----------------------------------------------------------------------------
+
+    std::filesystem::path RHI_ShaderCompiler::GetCacheDirectory() {
+        auto dir = std::filesystem::current_path() / "Cache" / "Shaders";
+        std::filesystem::create_directories(dir);
+        return dir;
+    }
+
+    std::string RHI_ShaderCompiler::ComputeHash(const RHI_ShaderCompileInput& input) {
+        std::string hash = input.m_File.generic_string();
+
+        std::error_code ec;
+        const auto ft = std::filesystem::last_write_time(input.m_File, ec);
+        if (!ec) {
+            hash += std::to_string(ft.time_since_epoch().count());
+        }
+
+        hash += std::to_string(static_cast<int>(input.m_TargetApi));
+        hash += std::to_string(static_cast<int>(input.m_Stage));
+        hash += input.m_EntryPoint;
+        hash += std::to_string(input.m_Debug ? 1 : 0);
+        hash += std::to_string(input.m_Optimize ? 1 : 0);
+
+        for (const auto& inc : input.m_IncludeDirs) {
+            hash += inc.generic_string();
+        }
+        for (const auto& d : input.m_Defines) {
+            hash += d.first;
+            hash += d.second;
+        }
+
+        return std::to_string(std::hash<std::string>{}(hash));
+    }
+
+    bool RHI_ShaderCompiler::NeedsRecompile(const RHI_ShaderCompileInput& input, const std::string& hash) {
+        (void)input;
+        const auto path = GetCacheDirectory() / (hash + ".spv");
+        return !std::filesystem::exists(path);
+    }
+
+    bool RHI_ShaderCompiler::LoadCache(const std::string& hash, RHI_ShaderCompileResult& out) {
+        const auto path = GetCacheDirectory() / (hash + ".spv");
+        if (!std::filesystem::exists(path)) {
+            return false;
+        }
+
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open()) {
+            return false;
+        }
+
+        file.seekg(0, std::ios::end);
+        const auto end = file.tellg();
+        file.seekg(0);
+        const auto size = static_cast<size_t>(end);
+        if (size < 4 || (size % 4) != 0) {
+            return false;
+        }
+
+        out.m_Spirv.resize(size / sizeof(uint32_t));
+        file.read(reinterpret_cast<char*>(out.m_Spirv.data()), static_cast<std::streamsize>(size));
+
+        out.m_Success = true;
+        return true;
+    }
+
+    void RHI_ShaderCompiler::SaveCache(const std::string& hash, const RHI_ShaderCompileResult& result) {
+        const auto path = GetCacheDirectory() / (hash + ".spv");
+        std::ofstream file(path, std::ios::binary);
+        if (!file.is_open()) {
+            return;
+        }
+        file.write(
+            reinterpret_cast<const char*>(result.m_Spirv.data()),
+            static_cast<std::streamsize>(result.m_Spirv.size() * sizeof(uint32_t)));
+    }
+
+    RHI_ShaderCompileResult RHI_ShaderCompiler::Compile(const RHI_ShaderCompileInput& input) {
+        RHI_ShaderCompileInput in = input;
+        if (in.m_Stage == RHI_ShaderStage::Unknown) {
+            in.m_Stage = ShaderStageFromFileExtension(in.m_File);
+        }
+
+        RHI_ShaderCompileResult failure{};
+        failure.m_TargetApi = in.m_TargetApi;
+
+        if (in.m_Stage == RHI_ShaderStage::Unknown) {
+            failure.m_Log =
+                "Cannot infer shader stage from file name (expected e.g. *.vert.slang): " + in.m_File.string();
+            return failure;
+        }
+
+        std::lock_guard<std::mutex> lock(g_Mutex);
+
+        const std::string hash = ComputeHash(in);
+
+        if (!in.m_SkipCache) {
+            if (const auto it = g_MemoryCache.find(hash); it != g_MemoryCache.end()) {
+                return it->second;
+            }
+
+            if (!NeedsRecompile(in, hash)) {
+                RHI_ShaderCompileResult disk{};
+                if (LoadCache(hash, disk)) {
+                    disk.m_Stage = in.m_Stage;
+                    disk.m_TargetApi = in.m_TargetApi;
+                    std::string readErr;
+                    ReadTextFile(in.m_File, disk.m_Source, readErr);
+                    std::error_code ec;
+                    disk.m_LastWriteTime = std::filesystem::last_write_time(in.m_File, ec);
+                    disk.m_Success = true;
+                    g_MemoryCache[hash] = disk;
+                    return disk;
+                }
+            }
+        }
+
+        std::string sessionErr;
+        if (!EnsureGlobalSessionUnlocked(sessionErr)) {
+            failure.m_Log = std::move(sessionErr);
+            return failure;
+        }
+
+        std::string source;
+        std::string readErr;
+        if (!ReadTextFile(in.m_File, source, readErr)) {
+            failure.m_Log = std::move(readErr);
+            return failure;
+        }
+
+        RHI_ShaderCompileResult out{};
+        out.m_Stage = in.m_Stage;
+        out.m_TargetApi = in.m_TargetApi;
+
+        if (!CompileSlangFileToSpirv(g_GlobalSession.get(), in, std::move(source), out)) {
+            return out;
+        }
+
+        std::error_code ec;
+        out.m_LastWriteTime = std::filesystem::last_write_time(in.m_File, ec);
+
+        if (!in.m_SkipCache) {
+            SaveCache(hash, out);
+            g_MemoryCache[hash] = out;
+        }
+
+        return out;
+    }
 
     bool ReadTextFile(const std::filesystem::path& path, std::string& outText, std::string& outError) {
         std::ifstream file(path, std::ios::in | std::ios::binary);
@@ -321,60 +458,16 @@ namespace Nova::Core::Renderer::RHI {
     }
 
     bool EnsureSlangInitialized() {
-        std::lock_guard<std::mutex> lock(g_SlangMutex);
+        std::lock_guard<std::mutex> lock(g_Mutex);
         std::string err;
         return EnsureGlobalSessionUnlocked(err);
     }
 
     void ShutdownSlang() {
-        std::lock_guard<std::mutex> lock(g_SlangMutex);
+        std::lock_guard<std::mutex> lock(g_Mutex);
+        g_MemoryCache.clear();
         g_GlobalSession.setNull();
         slang::shutdown();
-    }
-
-    bool CompileShader(
-        const RHI_ShaderDesc& desc,
-        const RHI_ShaderCompileOptions& options,
-        RHI_ShaderCompilationOutput& out) {
-        out = RHI_ShaderCompilationOutput{};
-        out.m_TargetApi = options.m_TargetApi;
-
-        RHI_ShaderStage stage = desc.m_Stage;
-        if (stage == RHI_ShaderStage::Unknown) {
-            stage = ShaderStageFromFileExtension(desc.m_FilePath);
-        }
-        out.m_Stage = stage;
-
-        if (stage == RHI_ShaderStage::Unknown) {
-            out.m_Log =
-                "Cannot infer shader stage from file name (expected e.g. *.vert.slang): " + desc.m_FilePath.string();
-            return false;
-        }
-
-        std::string source;
-        {
-            std::string readErr;
-            if (!ReadTextFile(desc.m_FilePath, source, readErr)) {
-                out.m_Log = std::move(readErr);
-                return false;
-            }
-        }
-
-        std::lock_guard<std::mutex> lock(g_SlangMutex);
-
-        std::string sessionErr;
-        if (!EnsureGlobalSessionUnlocked(sessionErr)) {
-            out.m_Log = std::move(sessionErr);
-            return false;
-        }
-
-        return CompileSlangFileToSpirv(
-            g_GlobalSession.get(),
-            desc,
-            options,
-            stage,
-            std::move(source),
-            out);
     }
 
 } // namespace Nova::Core::Renderer::RHI
