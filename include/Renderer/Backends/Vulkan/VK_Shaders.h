@@ -56,9 +56,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         /** Set pipeline and layout (owned by swapchain/renderer). Call after pipeline creation. */
         void SetPipeline(VkPipeline pipeline, VkPipelineLayout layout);
 
-        /** Set scene buffers (Globals/Mvp/Materials/Instances) and descriptor set for ApplyParameters. */
+        /** Set scene buffers (frame uniforms / MVP / materials / instances) and descriptor set for ApplyParameters. */
         void SetSceneBuffers(VkDevice device,
-            VkBuffer bufGlobals, VkDeviceMemory bufGlobalsMemory,
+            VkBuffer bufFrameUniforms, VkDeviceMemory bufFrameUniformsMemory,
             VkBuffer bufMvp, VkDeviceMemory bufMvpMemory,
             VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory,
             VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
@@ -78,8 +78,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
 
         VkDevice m_Device = VK_NULL_HANDLE;
-        VkBuffer m_BufGlobals = VK_NULL_HANDLE;
-        VkDeviceMemory m_BufGlobalsMemory = VK_NULL_HANDLE;
+        VkBuffer m_BufFrameUniforms = VK_NULL_HANDLE;
+        VkDeviceMemory m_BufFrameUniformsMemory = VK_NULL_HANDLE;
         VkBuffer m_BufMvp = VK_NULL_HANDLE;
         VkDeviceMemory m_BufMvpMemory = VK_NULL_HANDLE;
         VkBuffer m_BufMaterials = VK_NULL_HANDLE;

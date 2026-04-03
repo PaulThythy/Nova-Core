@@ -751,7 +751,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		// Descriptor set layout: matches NovaEngine ParameterBlock field order (Slang bindings 0..Count-1).
 		VkDescriptorSetLayoutBinding bindings[4]{};
-		bindings[0].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Globals);
+		bindings[0].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::FrameUniforms);
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bindings[0].descriptorCount = 1;
 		bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -778,7 +778,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to create scene set layout"); return; }
 
 		// ---- Globals buffer ----
-		const VkDeviceSize globalsSize = sizeof(Renderer::RHI::Globals);
+		const VkDeviceSize globalsSize = sizeof(Renderer::RHI::FrameUniforms);
 		VkBufferCreateInfo bufInfo{};
 		bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufInfo.size = globalsSize;
@@ -912,7 +912,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkWriteDescriptorSet writes[4]{};
 		writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[0].dstSet = m_SceneDescriptorSet;
-		writes[0].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Globals);
+		writes[0].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::FrameUniforms);
 		writes[0].dstArrayElement = 0;
 		writes[0].descriptorCount = 1;
 		writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;

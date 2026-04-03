@@ -44,15 +44,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Shaders::SetSceneBuffers(VkDevice device,
-        VkBuffer bufGlobals, VkDeviceMemory bufGlobalsMemory,
+        VkBuffer bufFrameUniforms, VkDeviceMemory bufFrameUniformsMemory,
         VkBuffer bufMvp, VkDeviceMemory bufMvpMemory,
         VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory,
         VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
         VkDescriptorSet sceneDescriptorSet)
     {
         m_Device = device;
-        m_BufGlobals = bufGlobals;
-        m_BufGlobalsMemory = bufGlobalsMemory;
+        m_BufFrameUniforms = bufFrameUniforms;
+        m_BufFrameUniformsMemory = bufFrameUniformsMemory;
         m_BufMvp = bufMvp;
         m_BufMvpMemory = bufMvpMemory;
         m_BufMaterials = bufMaterials;
@@ -73,14 +73,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (!apiContext || m_PipelineLayout == VK_NULL_HANDLE) return;
         VkCommandBuffer cmd = static_cast<VkCommandBuffer>(apiContext);
 
-        // Globals (EngineResourceSlot::Globals)
-        if (m_BufGlobalsMemory != VK_NULL_HANDLE) {
-            RHI::Globals globals{};
-            const auto globalsLayout = RHI::GetGlobalsLayout();
-            for (const auto& [name, offset] : globalsLayout) {
+        // Frame uniforms (EngineResourceSlot::FrameUniforms)
+        if (m_BufFrameUniformsMemory != VK_NULL_HANDLE) {
+            RHI::FrameUniforms frameUniforms{};
+            const auto frameUniformsLayout = RHI::GetFrameUniformsLayout();
+            for (const auto& [name, offset] : frameUniformsLayout) {
                 auto it = m_Parameters.find(name);
                 if (it == m_Parameters.end()) continue;
-                char* dst = reinterpret_cast<char*>(&globals) + offset;
+                char* dst = reinterpret_cast<char*>(&frameUniforms) + offset;
                 std::visit([dst](auto&& v) {
                     using T = std::decay_t<decltype(v)>;
                     if constexpr (std::is_same_v<T, int>) *reinterpret_cast<int*>(dst) = v;
@@ -90,9 +90,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 }, it->second);
             }
             void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_BufGlobalsMemory, 0, sizeof(RHI::Globals), 0, &mapped) == VK_SUCCESS) {
-                std::memcpy(mapped, &globals, sizeof(RHI::Globals));
-                vkUnmapMemory(m_Device, m_BufGlobalsMemory);
+            if (vkMapMemory(m_Device, m_BufFrameUniformsMemory, 0, sizeof(RHI::FrameUniforms), 0, &mapped) == VK_SUCCESS) {
+                std::memcpy(mapped, &frameUniforms, sizeof(RHI::FrameUniforms));
+                vkUnmapMemory(m_Device, m_BufFrameUniformsMemory);
             }
         }
 

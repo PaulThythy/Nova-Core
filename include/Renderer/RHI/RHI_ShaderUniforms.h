@@ -29,15 +29,16 @@ namespace Nova::Core::Renderer::RHI {
 
     // Matches NovaEngine field order in NovaUniforms.slang (bindings 0..Count-1 in set 0).
     enum class EngineResourceSlot : uint32_t {
-        Globals = 0,
+        FrameUniforms = 0,
         Mvp = 1,
         Instances = 2,
         Material = 3,
         Count = 4
     };
 
-    struct NV_API Globals {
+    struct NV_API FrameUniforms {
         alignas(16) glm::vec3 iResolution{ 0.0f, 0.0f, 0.0f };
+        alignas(4)  float     _padAfterRes{ 0.0f };
         alignas(4)  float     iTime{ 0.0f };
         alignas(4)  float     iTimeDelta{ 0.0f };
         alignas(4)  float     iFrameRate{ 0.0f };
@@ -63,46 +64,96 @@ namespace Nova::Core::Renderer::RHI {
         alignas(16) glm::vec4 color{ 1.0f, 1.0f, 1.0f, 1.0f };
     };
 
+    // Aligné sur Material.slang (cbuffer D3D / std140) — bool GPU = 32 bits ; padding final explicite.
     struct NV_API Material {
-        alignas(16) glm::vec4 baseColorFactor{ 1.0f, 1.0f, 1.0f, 1.0f };
-        alignas(16) glm::vec4 emissiveFactor{ 0.0f, 0.0f, 0.0f, 1.0f }; // xyz used
-        alignas(4)  float     metallicFactor{ 0.0f };
-        alignas(4)  float     roughnessFactor{ 1.0f };
-        alignas(4)  float     normalScale{ 1.0f };
-        alignas(4)  float     occlusionStrength{ 1.0f };
-        alignas(4)  float     emissiveStrength{ 0.0f };
-        alignas(4)  float     alphaCutoff{ 0.5f };
-        alignas(4)  int       alphaMode{ 0 };
-        alignas(4)  int       _pad0{ 0 };
+        float       base{ 0.8f };
+        glm::vec3   baseColor{ 1.0f, 1.0f, 1.0f };
+        float       diffuseRoughness{ 0.0f };
+        float       metalness{ 0.0f };
+        glm::vec3   metalColor{ 1.0f, 1.0f, 1.0f };
+        float       specular{ 1.0f };
+        glm::vec3   specularColor{ 1.0f, 1.0f, 1.0f };
+        float       specularRoughness{ 0.2f };
+        float       specularIOR{ 1.5f };
+        float       specularAnisotropy{ 0.0f };
+        float       specularRotation{ 0.0f };
+        float       transmission{ 0.0f };
+        glm::vec3   transmissionColor{ 1.0f, 1.0f, 1.0f };
+        float       subsurface{ 0.0f };
+        glm::vec3   subsurfaceColor{ 1.0f, 1.0f, 1.0f };
+        glm::vec3   subsurfaceRadius{ 1.0f, 1.0f, 1.0f };
+        float       subsurfaceScale{ 1.0f };
+        float       subsurfaceAnisotropy{ 0.0f };
+        float       sheen{ 0.0f };
+        glm::vec3   sheenColor{ 1.0f, 1.0f, 1.0f };
+        float       sheenRoughness{ 0.3f };
+        float       coat{ 0.0f };
+        glm::vec3   coatColor{ 1.0f, 1.0f, 1.0f };
+        float       coatRoughness{ 0.1f };
+        float       coatAnisotropy{ 0.0f };
+        float       coatRotation{ 0.0f };
+        float       coatIOR{ 1.5f };
+        float       coatAffectColor{ 0.0f };
+        float       coatAffectRoughness{ 0.0f };
+        float       emission{ 0.0f };
+        glm::vec3   emissionColor{ 1.0f, 1.0f, 1.0f };
+        glm::vec3   opacity{ 1.0f, 1.0f, 1.0f };
+        uint32_t    thinWalled{ 0 };
+        uint32_t    isOpaque{ 1 };
+        glm::uvec2  _padCbufferAlign{ 0u, 0u };
     };
 
     inline std::unordered_map<std::string, size_t> GetMaterialParameterLayout() {
         return {
-        // Base color
-            { "u_BaseColorFactor", offsetof(Material, baseColorFactor) },
-
-            { "u_EmissiveFactor", offsetof(Material, emissiveFactor) },
-            { "u_MetallicFactor", offsetof(Material, metallicFactor) },
-            { "u_RoughnessFactor", offsetof(Material, roughnessFactor) },
-            { "u_NormalScale", offsetof(Material, normalScale) },
-            { "u_OcclusionStrength", offsetof(Material, occlusionStrength) },
-            { "u_EmissiveStrength", offsetof(Material, emissiveStrength) },
-            { "u_AlphaCutoff", offsetof(Material, alphaCutoff) },
-            { "u_AlphaMode", offsetof(Material, alphaMode) },
+            { "base",                 offsetof(Material, base) },
+            { "baseColor",            offsetof(Material, baseColor) },
+            { "diffuseRoughness",     offsetof(Material, diffuseRoughness) },
+            { "metalness",            offsetof(Material, metalness) },
+            { "metalColor",           offsetof(Material, metalColor) },
+            { "specular",             offsetof(Material, specular) },
+            { "specularColor",        offsetof(Material, specularColor) },
+            { "specularRoughness",    offsetof(Material, specularRoughness) },
+            { "specularIOR",          offsetof(Material, specularIOR) },
+            { "specularAnisotropy",   offsetof(Material, specularAnisotropy) },
+            { "specularRotation",     offsetof(Material, specularRotation) },
+            { "transmission",         offsetof(Material, transmission) },
+            { "transmissionColor",    offsetof(Material, transmissionColor) },
+            { "subsurface",           offsetof(Material, subsurface) },
+            { "subsurfaceColor",      offsetof(Material, subsurfaceColor) },
+            { "subsurfaceRadius",     offsetof(Material, subsurfaceRadius) },
+            { "subsurfaceScale",      offsetof(Material, subsurfaceScale) },
+            { "subsurfaceAnisotropy", offsetof(Material, subsurfaceAnisotropy) },
+            { "sheen",                offsetof(Material, sheen) },
+            { "sheenColor",           offsetof(Material, sheenColor) },
+            { "sheenRoughness",       offsetof(Material, sheenRoughness) },
+            { "coat",                 offsetof(Material, coat) },
+            { "coatColor",            offsetof(Material, coatColor) },
+            { "coatRoughness",        offsetof(Material, coatRoughness) },
+            { "coatAnisotropy",       offsetof(Material, coatAnisotropy) },
+            { "coatRotation",         offsetof(Material, coatRotation) },
+            { "coatIOR",              offsetof(Material, coatIOR) },
+            { "coatAffectColor",      offsetof(Material, coatAffectColor) },
+            { "coatAffectRoughness",  offsetof(Material, coatAffectRoughness) },
+            { "emission",             offsetof(Material, emission) },
+            { "emissionColor",        offsetof(Material, emissionColor) },
+            { "opacity",              offsetof(Material, opacity) },
+            { "thinWalled",           offsetof(Material, thinWalled) },
+            { "isOpaque",             offsetof(Material, isOpaque) },
         };
     }
 
-    inline std::unordered_map<std::string, size_t> GetGlobalsLayout() {
+    inline std::unordered_map<std::string, size_t> GetFrameUniformsLayout() {
         return {
-            { "iResolution",  offsetof(Globals, iResolution)  },
-            { "iTime",        offsetof(Globals, iTime)        },
-            { "iTimeDelta",   offsetof(Globals, iTimeDelta)   },
-            { "iFrameRate",   offsetof(Globals, iFrameRate)   },
-            { "iFrame",       offsetof(Globals, iFrame)       },
-            { "u_UseInstancing", offsetof(Globals, u_UseInstancing) },
-            { "u_CameraPos",  offsetof(Globals, u_CameraPos)  },
-            { "iMouse",       offsetof(Globals, iMouse)       },
-            { "iDate",        offsetof(Globals, iDate)        },
+            { "iResolution",     offsetof(FrameUniforms, iResolution) },
+            { "_padAfterRes",    offsetof(FrameUniforms, _padAfterRes) },
+            { "iTime",           offsetof(FrameUniforms, iTime) },
+            { "iTimeDelta",      offsetof(FrameUniforms, iTimeDelta) },
+            { "iFrameRate",      offsetof(FrameUniforms, iFrameRate) },
+            { "iFrame",          offsetof(FrameUniforms, iFrame) },
+            { "u_UseInstancing", offsetof(FrameUniforms, u_UseInstancing) },
+            { "u_CameraPos",     offsetof(FrameUniforms, u_CameraPos) },
+            { "iMouse",          offsetof(FrameUniforms, iMouse) },
+            { "iDate",           offsetof(FrameUniforms, iDate) },
         };
     }
 

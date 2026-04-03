@@ -14,7 +14,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     // --- GL_Shaders ---
     GL_Shaders::~GL_Shaders() {
         if (m_BufInstances != 0) { glDeleteBuffers(1, &m_BufInstances); m_BufInstances = 0; }
-        if (m_BufGlobals != 0) { glDeleteBuffers(1, &m_BufGlobals); m_BufGlobals = 0; }
+        if (m_BufFrameUniforms != 0) { glDeleteBuffers(1, &m_BufFrameUniforms); m_BufFrameUniforms = 0; }
         if (m_BufMaterial != 0) { glDeleteBuffers(1, &m_BufMaterial); m_BufMaterial = 0; }
         if (m_BufMvp != 0) { glDeleteBuffers(1, &m_BufMvp); m_BufMvp = 0; }
         m_Program = 0;
@@ -40,12 +40,12 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
         glBindBufferBase(GL_UNIFORM_BUFFER, static_cast<GLuint>(RHI::EngineResourceSlot::Material), m_BufMaterial);
 
-        if (m_BufGlobals != 0) { glDeleteBuffers(1, &m_BufGlobals); m_BufGlobals = 0; }
-        glGenBuffers(1, &m_BufGlobals);
-        glBindBuffer(GL_UNIFORM_BUFFER, m_BufGlobals);
-        glBufferData(GL_UNIFORM_BUFFER, sizeof(RHI::Globals), nullptr, GL_DYNAMIC_DRAW);
+        if (m_BufFrameUniforms != 0) { glDeleteBuffers(1, &m_BufFrameUniforms); m_BufFrameUniforms = 0; }
+        glGenBuffers(1, &m_BufFrameUniforms);
+        glBindBuffer(GL_UNIFORM_BUFFER, m_BufFrameUniforms);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(RHI::FrameUniforms), nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
-        glBindBufferBase(GL_UNIFORM_BUFFER, static_cast<GLuint>(RHI::EngineResourceSlot::Globals), m_BufGlobals);
+        glBindBufferBase(GL_UNIFORM_BUFFER, static_cast<GLuint>(RHI::EngineResourceSlot::FrameUniforms), m_BufFrameUniforms);
 
         if (m_BufInstances != 0) { glDeleteBuffers(1, &m_BufInstances); m_BufInstances = 0; }
         glGenBuffers(1, &m_BufInstances);
@@ -78,10 +78,10 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glBindBufferBase(GL_UNIFORM_BUFFER, static_cast<GLuint>(RHI::EngineResourceSlot::Material), m_BufMaterial);
     }
 
-    void GL_Shaders::UploadGlobalsUBO() {
-        if (m_BufGlobals == 0) return;
-        RHI::Globals data{};
-        const auto layout = RHI::GetGlobalsLayout();
+    void GL_Shaders::UploadFrameUniformsUBO() {
+        if (m_BufFrameUniforms == 0) return;
+        RHI::FrameUniforms data{};
+        const auto layout = RHI::GetFrameUniformsLayout();
         for (const auto& [name, offset] : layout) {
             auto it = m_Parameters.find(name);
             if (it == m_Parameters.end()) continue;
@@ -94,10 +94,10 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
                 else if constexpr (std::is_same_v<T, glm::vec4>) *reinterpret_cast<glm::vec4*>(dst) = v;
             }, it->second);
         }
-        glBindBuffer(GL_UNIFORM_BUFFER, m_BufGlobals);
-        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(RHI::Globals), &data);
+        glBindBuffer(GL_UNIFORM_BUFFER, m_BufFrameUniforms);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(RHI::FrameUniforms), &data);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
-        glBindBufferBase(GL_UNIFORM_BUFFER, static_cast<GLuint>(RHI::EngineResourceSlot::Globals), m_BufGlobals);
+        glBindBufferBase(GL_UNIFORM_BUFFER, static_cast<GLuint>(RHI::EngineResourceSlot::FrameUniforms), m_BufFrameUniforms);
     }
 
     GLint GL_Shaders::GetLocation(const std::string& name) {
@@ -136,14 +136,14 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         }
 
         UploadMaterialUBO();
-        UploadGlobalsUBO();
+        UploadFrameUniformsUBO();
 
         const auto materialLayout = RHI::GetMaterialParameterLayout();
-        const auto globalsLayout = RHI::GetGlobalsLayout();
+        const auto frameUniformsLayout = RHI::GetFrameUniformsLayout();
         for (const auto& [name, value] : m_Parameters) {
             if (name == "model" || name == "view" || name == "proj" || name == "viewProj" || name == "invViewProj")
                 continue;
-            if (materialLayout.count(name) || globalsLayout.count(name))
+            if (materialLayout.count(name) || frameUniformsLayout.count(name))
                 continue;
             GLint loc = GetLocation(name);
             if (loc < 0) continue;

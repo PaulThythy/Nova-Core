@@ -34,12 +34,12 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     private:
         GLint GetLocation(const std::string& name);
         void UploadMaterialUBO();
-        void UploadGlobalsUBO();
+        void UploadFrameUniformsUBO();
 
         GLuint m_Program{ 0 };
         GLuint m_BufMvp{ 0 };
         GLuint m_BufMaterial{ 0 };
-        GLuint m_BufGlobals{ 0 };
+        GLuint m_BufFrameUniforms{ 0 };
         GLuint m_BufInstances{ 0 };
         size_t m_InstanceBufferSize{ 0 };
         std::unordered_map<std::string, GLint> m_LocationCache;

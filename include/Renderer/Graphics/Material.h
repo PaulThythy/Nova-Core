@@ -22,26 +22,25 @@
          float m_AlphaCutoff{ 0.5f };
          int   m_AlphaMode{ 0 }; // 0=Opaque, 1=Mask, 2=Blend (placeholder)
  
-         // Note: shader parameter name is `u_BaseColorFactor`.
-         static Material FromColor(const glm::vec4& color) {
-             Material m{};
-             m.m_BaseColorFactor = color;
-             return m;
-         }
- 
-         RHI::Material ToRhi() const {
-             RHI::Material out{};
-             out.baseColorFactor = m_BaseColorFactor;
-             out.emissiveFactor = glm::vec4(m_EmissiveFactor, 1.0f);
-             out.metallicFactor = m_MetallicFactor;
-             out.roughnessFactor = m_RoughnessFactor;
-             out.normalScale = m_NormalScale;
-             out.occlusionStrength = m_OcclusionStrength;
-             out.emissiveStrength = m_EmissiveStrength;
-             out.alphaCutoff = m_AlphaCutoff;
-             out.alphaMode = m_AlphaMode;
-             return out;
-         }
+        static Material FromColor(const glm::vec4& color) {
+            Material m{};
+            m.m_BaseColorFactor = color;
+            return m;
+        }
+
+        RHI::Material ToRhi() const {
+            RHI::Material out{};
+            out.base = 1.0f;
+            out.baseColor = glm::vec3(m_BaseColorFactor);
+            out.metalness = m_MetallicFactor;
+            out.specularRoughness = m_RoughnessFactor;
+            out.emissionColor = m_EmissiveFactor;
+            out.emission = m_EmissiveStrength;
+            const float a = m_BaseColorFactor.w;
+            out.opacity = glm::vec3(a, a, a);
+            out.isOpaque = (m_AlphaMode == 0) ? 1u : 0u;
+            return out;
+        }
      };
  
  } // namespace Nova::Core::Renderer::Graphics
