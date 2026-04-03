@@ -64,42 +64,42 @@ namespace Nova::Core::Renderer::RHI {
         alignas(16) glm::vec4 color{ 1.0f, 1.0f, 1.0f, 1.0f };
     };
 
-    // Aligné sur Material.slang (cbuffer D3D / std140) — bool GPU = 32 bits ; padding final explicite.
     struct NV_API Material {
-        float       base{ 0.8f };
-        glm::vec3   baseColor{ 1.0f, 1.0f, 1.0f };
-        float       diffuseRoughness{ 0.0f };
-        float       metalness{ 0.0f };
-        glm::vec3   metalColor{ 1.0f, 1.0f, 1.0f };
-        float       specular{ 1.0f };
-        glm::vec3   specularColor{ 1.0f, 1.0f, 1.0f };
-        float       specularRoughness{ 0.2f };
-        float       specularIOR{ 1.5f };
-        float       specularAnisotropy{ 0.0f };
-        float       specularRotation{ 0.0f };
-        float       transmission{ 0.0f };
-        glm::vec3   transmissionColor{ 1.0f, 1.0f, 1.0f };
-        float       subsurface{ 0.0f };
-        glm::vec3   subsurfaceColor{ 1.0f, 1.0f, 1.0f };
-        glm::vec3   subsurfaceRadius{ 1.0f, 1.0f, 1.0f };
-        float       subsurfaceScale{ 1.0f };
-        float       subsurfaceAnisotropy{ 0.0f };
-        float       sheen{ 0.0f };
-        glm::vec3   sheenColor{ 1.0f, 1.0f, 1.0f };
-        float       sheenRoughness{ 0.3f };
-        float       coat{ 0.0f };
-        glm::vec3   coatColor{ 1.0f, 1.0f, 1.0f };
-        float       coatRoughness{ 0.1f };
-        float       coatAnisotropy{ 0.0f };
-        float       coatRotation{ 0.0f };
-        float       coatIOR{ 1.5f };
-        float       coatAffectColor{ 0.0f };
-        float       coatAffectRoughness{ 0.0f };
-        float       emission{ 0.0f };
-        glm::vec3   emissionColor{ 1.0f, 1.0f, 1.0f };
-        glm::vec3   opacity{ 1.0f, 1.0f, 1.0f };
-        uint32_t    thinWalled{ 0 };
-        uint32_t    isOpaque{ 1 };
+        alignas(4)  float       base{ 0.8f };
+        alignas(16) glm::vec3   baseColor{ 1.0f, 1.0f, 1.0f };
+        alignas(4)  float       diffuseRoughness{ 0.0f };
+        alignas(4)  float       metalness{ 0.0f };
+        alignas(16) glm::vec3   metalColor{ 1.0f, 1.0f, 1.0f };
+        alignas(4)  float       specular{ 1.0f };
+        alignas(16) glm::vec3   specularColor{ 1.0f, 1.0f, 1.0f };
+        alignas(4)  float       specularRoughness{ 0.2f };
+        alignas(4)  float       specularIOR{ 1.5f };
+        alignas(4)  float       specularAnisotropy{ 0.0f };
+        alignas(4)  float       specularRotation{ 0.0f };
+        alignas(4)  float       transmission{ 0.0f };
+        alignas(16) glm::vec3   transmissionColor{ 1.0f, 1.0f, 1.0f };
+        alignas(4)  float       subsurface{ 0.0f };
+        alignas(16) glm::vec3   subsurfaceColor{ 1.0f, 1.0f, 1.0f };
+        alignas(16) glm::vec3   subsurfaceRadius{ 1.0f, 1.0f, 1.0f };
+        alignas(4)  float       subsurfaceScale{ 1.0f };
+        alignas(4)  float       subsurfaceAnisotropy{ 0.0f };
+        alignas(4)  float       sheen{ 0.0f };
+        alignas(16) glm::vec3   sheenColor{ 1.0f, 1.0f, 1.0f };
+        alignas(4)  float       sheenRoughness{ 0.3f };
+        alignas(4)  float       coat{ 0.0f };
+        alignas(16) glm::vec3   coatColor{ 1.0f, 1.0f, 1.0f };
+        alignas(4)  float       coatRoughness{ 0.1f };
+        alignas(4)  float       coatAnisotropy{ 0.0f };
+        alignas(4)  float       coatRotation{ 0.0f };
+        alignas(4)  float       coatIOR{ 1.5f };
+        alignas(4)  float       coatAffectColor{ 0.0f };
+        alignas(4)  float       coatAffectRoughness{ 0.0f };
+        alignas(4)  float       emission{ 0.0f };
+        alignas(16) glm::vec3   emissionColor{ 1.0f, 1.0f, 1.0f };
+        alignas(16) glm::vec3   opacity{ 1.0f, 1.0f, 1.0f };
+        alignas(4)  uint32_t    thinWalled{ 0 };
+        alignas(4)  uint32_t    isOpaque{ 1 };
+        alignas(8)  glm::uvec2  _padCbufferAlign{ 0u, 0u };
     };
 
     inline std::unordered_map<std::string, size_t> GetMaterialParameterLayout() {
@@ -138,6 +138,7 @@ namespace Nova::Core::Renderer::RHI {
             { "opacity",              offsetof(Material, opacity) },
             { "thinWalled",           offsetof(Material, thinWalled) },
             { "isOpaque",             offsetof(Material, isOpaque) },
+            { "_padCbufferAlign",     offsetof(Material, _padCbufferAlign) },
         };
     }
 
@@ -151,6 +152,7 @@ namespace Nova::Core::Renderer::RHI {
             { "iFrame",          offsetof(FrameUniforms, iFrame) },
             { "u_UseInstancing", offsetof(FrameUniforms, u_UseInstancing) },
             { "u_CameraPos",     offsetof(FrameUniforms, u_CameraPos) },
+            { "_padAfterCameraPos", offsetof(FrameUniforms, _padAfterCameraPos) },
             { "iMouse",          offsetof(FrameUniforms, iMouse) },
             { "iDate",           offsetof(FrameUniforms, iDate) },
         };

@@ -81,6 +81,7 @@ Material defaultMaterial()
     material.opacity              = float3(WHITE, WHITE, WHITE);
     material.thinWalled           = false;
     material.isOpaque             = true;
+    material._padCbufferAlign     = uint2(0u, 0u);
     return material;
 }
 
