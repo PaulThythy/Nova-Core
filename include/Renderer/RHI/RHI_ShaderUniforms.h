@@ -100,7 +100,6 @@ namespace Nova::Core::Renderer::RHI {
         glm::vec3   opacity{ 1.0f, 1.0f, 1.0f };
         uint32_t    thinWalled{ 0 };
         uint32_t    isOpaque{ 1 };
-        glm::uvec2  _padCbufferAlign{ 0u, 0u };
     };
 
     inline std::unordered_map<std::string, size_t> GetMaterialParameterLayout() {

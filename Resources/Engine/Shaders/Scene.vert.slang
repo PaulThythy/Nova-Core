@@ -19,8 +19,8 @@ struct VSOut {
 [shader("vertex")]
 VSOut main(VSIn input, uint instanceID : SV_InstanceID) {
     float4x4 model = nova.mvp.model;
-    float4 color = nova.material.baseColorFactor;
-    if (nova.globals.u_UseInstancing != 0) {
+    float4 color = float4(nova.material.baseColor, 1.0);
+    if (nova.frame.u_UseInstancing != 0) {
         model = nova.instances[instanceID].model;
         color = nova.instances[instanceID].color;
     }
