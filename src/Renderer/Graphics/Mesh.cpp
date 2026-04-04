@@ -80,11 +80,11 @@ namespace Nova::Core::Renderer::Graphics {
         vertices.push_back(v5);
 
         indices.push_back(0);
-        indices.push_back(2);
         indices.push_back(1);
+        indices.push_back(2);
 
-        indices.push_back(4);
         indices.push_back(3);
+        indices.push_back(4);
         indices.push_back(5);
 
         return std::make_shared<Mesh>(std::move(vertices), std::move(indices));
