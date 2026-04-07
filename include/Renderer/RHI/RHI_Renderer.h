@@ -68,7 +68,7 @@ namespace Nova::Core::Renderer::RHI {
          * Call after all draws targeting the editor viewport / offscreen target, before ImGui.
          * OpenGL: binds the default framebuffer and sets glViewport to the window size so UI draws correctly.
          */
-        virtual void PrepareForImGui() {}
+        virtual void PrepareForImGui() = 0;
 
         // Scene state is configured separately from raw draw commands.
         virtual void BeginScene(const glm::mat4& view, const glm::mat4& proj) = 0;

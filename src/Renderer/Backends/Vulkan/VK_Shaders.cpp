@@ -46,8 +46,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_Shaders::SetSceneBuffers(VkDevice device,
         VkBuffer bufFrameUniforms, VkDeviceMemory bufFrameUniformsMemory,
-        VkBuffer bufMvp, VkDeviceMemory bufMvpMemory,
-        VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory,
+        VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride,
+        VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory, VkDeviceSize materialDynamicStride,
         VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
         VkDescriptorSet sceneDescriptorSet)
     {
@@ -56,12 +56,21 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_BufFrameUniformsMemory = bufFrameUniformsMemory;
         m_BufMvp = bufMvp;
         m_BufMvpMemory = bufMvpMemory;
+        m_MvpDynamicStride = mvpDynamicStride;
+        m_MvpDynamicOffset = 0;
         m_BufMaterials = bufMaterials;
         m_BufMaterialsMemory = bufMaterialsMemory;
+        m_MaterialDynamicStride = materialDynamicStride;
+        m_MaterialDynamicOffset = 0;
         m_BufInstances = bufInstances;
         m_BufInstancesMemory = bufInstancesMemory;
         m_BufInstancesSize = bufInstancesSize;
         m_SceneDescriptorSet = sceneDescriptorSet;
+    }
+
+    void VK_Shaders::ResetDynamicUBOs() {
+        m_MvpDynamicOffset = 0;
+        m_MaterialDynamicOffset = 0;
     }
 
     void VK_Shaders::Bind(void* apiContext) {
@@ -73,9 +82,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     void VK_Shaders::ApplyParameters(void* apiContext) {
         if (!apiContext || m_PipelineLayout == VK_NULL_HANDLE) return;
         VkCommandBuffer cmd = static_cast<VkCommandBuffer>(apiContext);
-
-        // Per-draw UBOs must be updated inside the command buffer (vkCmdUpdateBuffer), not only via
-        // host memcpy before vkQueueSubmit. Otherwise every draw in the buffer sees the last CPU write.
 
         RHI::FrameUniforms frameUniforms{};
         if (m_BufFrameUniforms != VK_NULL_HANDLE) {
@@ -122,34 +128,62 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             }
         }
 
-        bool wroteUniforms = false;
-        if (m_BufFrameUniforms != VK_NULL_HANDLE) {
-            vkCmdUpdateBuffer(cmd, m_BufFrameUniforms, 0, sizeof(RHI::FrameUniforms), &frameUniforms);
-            wroteUniforms = true;
-        }
-        if (m_BufMvp != VK_NULL_HANDLE) {
-            vkCmdUpdateBuffer(cmd, m_BufMvp, 0, sizeof(RHI::MVP), &mvp);
-            wroteUniforms = true;
-        }
-        if (m_BufMaterials != VK_NULL_HANDLE) {
-            vkCmdUpdateBuffer(cmd, m_BufMaterials, 0, sizeof(RHI::Material), &material);
-            wroteUniforms = true;
+        // Upload frame data once per draw (cheap) via host-visible coherent memory.
+        // For per-draw data (MVP, Material), use *dynamic* uniform buffers and advance offsets
+        // so each draw sees its own snapshot.
+        if (m_BufFrameUniformsMemory != VK_NULL_HANDLE) {
+            void* mapped = nullptr;
+            if (vkMapMemory(m_Device, m_BufFrameUniformsMemory, 0, sizeof(RHI::FrameUniforms), 0, &mapped) == VK_SUCCESS) {
+                std::memcpy(mapped, &frameUniforms, sizeof(RHI::FrameUniforms));
+                vkUnmapMemory(m_Device, m_BufFrameUniformsMemory);
+            }
         }
 
-        if (wroteUniforms) {
-            VkMemoryBarrier barrier{};
-            barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            barrier.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
-            vkCmdPipelineBarrier(cmd,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                0, 1, &barrier, 0, nullptr, 0, nullptr);
+        VkDeviceSize mvpOffsetThisDraw = 0;
+        if (m_BufMvpMemory != VK_NULL_HANDLE && m_MvpDynamicStride != 0) {
+            mvpOffsetThisDraw = m_MvpDynamicOffset;
+            void* mapped = nullptr;
+            if (vkMapMemory(m_Device, m_BufMvpMemory, mvpOffsetThisDraw, sizeof(RHI::MVP), 0, &mapped) == VK_SUCCESS) {
+                std::memcpy(mapped, &mvp, sizeof(RHI::MVP));
+                vkUnmapMemory(m_Device, m_BufMvpMemory);
+            }
+            m_MvpDynamicOffset += m_MvpDynamicStride;
+        }
+
+        VkDeviceSize materialOffsetThisDraw = 0;
+        if (m_BufMaterialsMemory != VK_NULL_HANDLE && m_MaterialDynamicStride != 0) {
+            materialOffsetThisDraw = m_MaterialDynamicOffset;
+            void* mapped = nullptr;
+            if (vkMapMemory(m_Device, m_BufMaterialsMemory, materialOffsetThisDraw, sizeof(RHI::Material), 0, &mapped) == VK_SUCCESS) {
+                std::memcpy(mapped, &material, sizeof(RHI::Material));
+                vkUnmapMemory(m_Device, m_BufMaterialsMemory);
+            }
+            m_MaterialDynamicOffset += m_MaterialDynamicStride;
         }
 
         if (m_SceneDescriptorSet != VK_NULL_HANDLE) {
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
-                static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &m_SceneDescriptorSet, 0, nullptr);
+            // Dynamic offsets must be provided in the order of dynamic bindings in the set layout.
+            // Here: MVP then Material.
+            uint32_t dynOffsets[2] = {
+                static_cast<uint32_t>(mvpOffsetThisDraw),
+                static_cast<uint32_t>(materialOffsetThisDraw)
+            };
+            const uint32_t dynCount =
+                (m_MvpDynamicStride != 0 && m_MaterialDynamicStride != 0) ? 2u :
+                (m_MvpDynamicStride != 0 || m_MaterialDynamicStride != 0) ? 1u : 0u;
+
+            if (dynCount == 2) {
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
+                    static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &m_SceneDescriptorSet, 2, dynOffsets);
+            } else if (dynCount == 1) {
+                // If only one dynamic binding is enabled, choose the matching offset.
+                uint32_t one = (m_MvpDynamicStride != 0) ? dynOffsets[0] : dynOffsets[1];
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
+                    static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &m_SceneDescriptorSet, 1, &one);
+            } else {
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
+                    static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &m_SceneDescriptorSet, 0, nullptr);
+            }
         }
     }
 

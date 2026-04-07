@@ -756,7 +756,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		bindings[0].descriptorCount = 1;
 		bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 		bindings[1].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp);
-		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 		bindings[1].descriptorCount = 1;
 		bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 		bindings[2].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Instances);
@@ -764,7 +764,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		bindings[2].descriptorCount = 1;
 		bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 		bindings[3].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material);
-		bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 		bindings[3].descriptorCount = 1;
 		bindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
@@ -811,8 +811,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		// ---- MVP buffer ----
 		const VkDeviceSize mvpSize = sizeof(Renderer::RHI::MVP);
-		bufInfo.size = mvpSize;
-		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		VkPhysicalDeviceProperties physProps{};
+		vkGetPhysicalDeviceProperties(m_PhysicalDevice, &physProps);
+		auto alignUp = [](VkDeviceSize v, VkDeviceSize a) -> VkDeviceSize {
+			return (a > 0) ? ((v + a - 1) / a) * a : v;
+		};
+		m_MvpDynamicStride = alignUp(mvpSize, physProps.limits.minUniformBufferOffsetAlignment);
+		const VkDeviceSize mvpBufferSize = m_MvpDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
+
+		bufInfo.size = mvpBufferSize;
+		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 		bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufMvp);
 		CheckVkResult(res);
@@ -837,8 +845,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		// ---- Materials buffer ----
 		const VkDeviceSize materialSize = sizeof(Renderer::RHI::Material);
-		bufInfo.size = materialSize;
-		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		m_MaterialDynamicStride = alignUp(materialSize, physProps.limits.minUniformBufferOffsetAlignment);
+		const VkDeviceSize materialBufferSize = m_MaterialDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
+
+		bufInfo.size = materialBufferSize;
+		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufMaterials);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
@@ -923,7 +934,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		writes[1].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp);
 		writes[1].dstArrayElement = 0;
 		writes[1].descriptorCount = 1;
-		writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 		writes[1].pBufferInfo = &mvpBufInfo;
 		writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[2].dstSet = m_SceneDescriptorSet;
@@ -937,7 +948,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		writes[3].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material);
 		writes[3].dstArrayElement = 0;
 		writes[3].descriptorCount = 1;
-		writes[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		writes[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 		writes[3].pBufferInfo = &materialBufInfo;
 		vkUpdateDescriptorSets(m_Device, 4, writes, 0, nullptr);
 

@@ -19,6 +19,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		static constexpr uint32_t FRAMES_IN_FLIGHT = 3;
 		static constexpr uint32_t MAX_MODEL_INSTANCES = 1024;
+		static constexpr uint32_t MAX_MODEL_DRAWS = 4096;
 
 		// Create() should receive every dependency required by the swapchain.
 		bool Create(VkPhysicalDevice physicalDevice,
@@ -77,8 +78,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkDeviceMemory GetBufGlobalsMemory() const { return m_BufGlobalsMemory; }
 		VkBuffer GetBufMvp() const { return m_BufMvp; }
 		VkDeviceMemory GetBufMvpMemory() const { return m_BufMvpMemory; }
+		VkDeviceSize GetMvpDynamicStride() const { return m_MvpDynamicStride; }
 		VkBuffer GetBufMaterials() const { return m_BufMaterials; }
 		VkDeviceMemory GetBufMaterialsMemory() const { return m_BufMaterialsMemory; }
+		VkDeviceSize GetMaterialDynamicStride() const { return m_MaterialDynamicStride; }
 		VkBuffer GetBufInstances() const { return m_BufInstances; }
 		VkDeviceMemory GetBufInstancesMemory() const { return m_BufInstancesMemory; }
 		VkDeviceSize GetBufInstancesSize() const { return m_BufInstancesSize; }
@@ -164,8 +167,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkDeviceMemory   m_BufGlobalsMemory = VK_NULL_HANDLE;
 		VkBuffer         m_BufMvp = VK_NULL_HANDLE;
 		VkDeviceMemory   m_BufMvpMemory = VK_NULL_HANDLE;
+		VkDeviceSize     m_MvpDynamicStride = 0;
 		VkBuffer         m_BufMaterials = VK_NULL_HANDLE;
 		VkDeviceMemory   m_BufMaterialsMemory = VK_NULL_HANDLE;
+		VkDeviceSize     m_MaterialDynamicStride = 0;
 		VkBuffer         m_BufInstances = VK_NULL_HANDLE;
 		VkDeviceMemory   m_BufInstancesMemory = VK_NULL_HANDLE;
 		VkDeviceSize     m_BufInstancesSize = 0;

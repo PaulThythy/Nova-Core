@@ -173,8 +173,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_VKSwapchain.GetBufGlobalsMemory(),
             m_VKSwapchain.GetBufMvp(),
             m_VKSwapchain.GetBufMvpMemory(),
+            m_VKSwapchain.GetMvpDynamicStride(),
             m_VKSwapchain.GetBufMaterials(),
             m_VKSwapchain.GetBufMaterialsMemory(),
+            m_VKSwapchain.GetMaterialDynamicStride(),
             m_VKSwapchain.GetBufInstances(),
             m_VKSwapchain.GetBufInstancesMemory(),
             m_VKSwapchain.GetBufInstancesSize(),
@@ -243,6 +245,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_Renderer::BeginFrame() {
         m_FrameActive = false;
+        m_ImGuiSwapchainPassBegun = false;
 
         // Safe ImGui default: never let ImGui write into an invalid command buffer.
         {
@@ -402,6 +405,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             }
         }
 
+        if (m_Shader)
+            m_Shader->ResetDynamicUBOs();
+
         m_FrameActive = true;
     }
 
@@ -479,6 +485,29 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             static_cast<uint32_t>(cmd.m_FirstIndex),
             cmd.m_VertexOffset,
             static_cast<uint32_t>(cmd.m_FirstInstance));
+    }
+
+    void VK_Renderer::PrepareForImGui() {
+        if (!m_FrameActive)
+            return;
+        if (m_RenderedToViewportThisFrame) {
+            BeginImGuiRenderPass();
+            return;
+        }
+        const uint32_t imageIndex = m_VKSwapchain.GetAcquiredImageIndex();
+        VkCommandBuffer cmd = m_VKSwapchain.GetCommandBuffers()[imageIndex];
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float)m_VKSwapchain.GetExtent().width;
+        viewport.height = (float)m_VKSwapchain.GetExtent().height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor{};
+        scissor.offset = { 0, 0 };
+        scissor.extent = m_VKSwapchain.GetExtent();
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
     }
 
     std::shared_ptr<VK_Mesh> VK_Renderer::GetOrUploadMesh(
@@ -744,6 +773,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         scissor.offset = { 0, 0 };
         scissor.extent = m_VKSwapchain.GetExtent();
         vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        m_ImGuiSwapchainPassBegun = true;
     }
 
     void* VK_Renderer::GetViewportTextureID() const {
@@ -932,8 +963,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         shader->SetPipeline(pipeline, layout);
         shader->SetSceneBuffers(device,
             m_VKSwapchain.GetBufGlobals(),    m_VKSwapchain.GetBufGlobalsMemory(),
-            m_VKSwapchain.GetBufMvp(),        m_VKSwapchain.GetBufMvpMemory(),
-            m_VKSwapchain.GetBufMaterials(),  m_VKSwapchain.GetBufMaterialsMemory(),
+            m_VKSwapchain.GetBufMvp(),        m_VKSwapchain.GetBufMvpMemory(), m_VKSwapchain.GetMvpDynamicStride(),
+            m_VKSwapchain.GetBufMaterials(),  m_VKSwapchain.GetBufMaterialsMemory(), m_VKSwapchain.GetMaterialDynamicStride(),
             m_VKSwapchain.GetBufInstances(),  m_VKSwapchain.GetBufInstancesMemory(),
             m_VKSwapchain.GetBufInstancesSize(),
             m_VKSwapchain.GetSceneDescriptorSet());
@@ -967,11 +998,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_Shader->ApplyParameters(cmd);
 
         shader->Bind(cmd);
-
-        VkDescriptorSet sceneDs = m_VKSwapchain.GetSceneDescriptorSet();
-        VkPipelineLayout layout = m_VKSwapchain.GetModelPipelineLayout();
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout,
-            static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &sceneDs, 0, nullptr);
 
         vkCmdDraw(cmd, 3, 1, 0, 0);
     }

@@ -36,6 +36,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         void BeginFrame() override;
         void EndFrame() override;
+        void PrepareForImGui() override;
 
         void BeginScene(const glm::mat4& view, const glm::mat4& proj) override;
         void SetModelMatrix(const glm::mat4& model) override;
@@ -89,8 +90,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         bool m_RenderedToViewportThisFrame = false;
         bool m_ViewportImageFirstUse = true; // true until first viewport pass (image in UNDEFINED)
         bool m_FrameActive = false;
+        bool m_ImGuiSwapchainPassBegun = false;
 	};
-
 } // namespace Nova::Core::Renderer::Backends::Vulkan
 
 #endif // VK_RENDERER_H

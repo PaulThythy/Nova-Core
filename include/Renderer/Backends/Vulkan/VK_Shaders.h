@@ -59,8 +59,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         /** Set scene buffers (frame uniforms / MVP / materials / instances) and descriptor set for ApplyParameters. */
         void SetSceneBuffers(VkDevice device,
             VkBuffer bufFrameUniforms, VkDeviceMemory bufFrameUniformsMemory,
-            VkBuffer bufMvp, VkDeviceMemory bufMvpMemory,
-            VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory,
+            VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride,
+            VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory, VkDeviceSize materialDynamicStride,
             VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
             VkDescriptorSet sceneDescriptorSet);
 
@@ -68,6 +68,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void ApplyParameters(void* apiContext = nullptr) override;
         void SetInstanceData(const std::vector<RHI::Instance>& instances) override;
         void* GetNativeHandle() const override;
+
+        /** Reset per-draw dynamic UBO offsets at frame start. */
+        void ResetDynamicUBOs();
 
         VkPipeline GetPipeline() const { return m_Pipeline; }
         VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
@@ -82,8 +85,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkDeviceMemory m_BufFrameUniformsMemory = VK_NULL_HANDLE;
         VkBuffer m_BufMvp = VK_NULL_HANDLE;
         VkDeviceMemory m_BufMvpMemory = VK_NULL_HANDLE;
+        VkDeviceSize m_MvpDynamicStride = 0;
+        VkDeviceSize m_MvpDynamicOffset = 0;
         VkBuffer m_BufMaterials = VK_NULL_HANDLE;
         VkDeviceMemory m_BufMaterialsMemory = VK_NULL_HANDLE;
+        VkDeviceSize m_MaterialDynamicStride = 0;
+        VkDeviceSize m_MaterialDynamicOffset = 0;
         VkBuffer m_BufInstances = VK_NULL_HANDLE;
         VkDeviceMemory m_BufInstancesMemory = VK_NULL_HANDLE;
         VkDeviceSize m_BufInstancesSize = 0;
