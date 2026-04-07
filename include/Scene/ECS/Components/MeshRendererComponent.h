@@ -5,13 +5,14 @@
 
 #include "Api.h"
 #include "Asset/Assets/MeshAsset.h"
-#include "Renderer/Graphics/Material.h"
+//#include "Renderer/Graphics/Material.h"
+#include "Renderer/RHI/RHI_ShaderUniforms.h"
 
 namespace Nova::Core::Scene::ECS::Components {
 
     struct NV_API MeshRendererComponent {
         std::shared_ptr<Asset::Assets::MeshAsset> m_MeshAsset;
-        Renderer::Graphics::Material m_Material{};
+        Renderer::RHI::Material m_Material{};
 
         MeshRendererComponent() = default;
 
@@ -19,7 +20,7 @@ namespace Nova::Core::Scene::ECS::Components {
             : m_MeshAsset(meshAsset) {}
 
         MeshRendererComponent(const std::shared_ptr<Asset::Assets::MeshAsset>& meshAsset,
-                              const Renderer::Graphics::Material& material)
+                              const Renderer::RHI::Material& material)
             : m_MeshAsset(meshAsset), m_Material(material) {}
     };
 

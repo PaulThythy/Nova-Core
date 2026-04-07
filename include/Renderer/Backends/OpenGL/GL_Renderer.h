@@ -24,6 +24,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         void BeginFrame() override;
         void EndFrame() override;
+        void PrepareForImGui() override;
 
         void BeginScene(const glm::mat4& view, const glm::mat4& proj) override;
         void SetModelMatrix(const glm::mat4& model) override;

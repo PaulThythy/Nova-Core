@@ -222,6 +222,14 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glUseProgram(0);
     }
 
+    void GL_Renderer::PrepareForImGui() {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        int w = 0, h = 0;
+        Nova::Core::Application::Get().GetWindow().GetWindowSize(w, h);
+        if (w > 0 && h > 0)
+            glViewport(0, 0, w, h);
+    }
+
     void GL_Renderer::BeginScene(const glm::mat4& view, const glm::mat4& proj) {
         NV_ASSERT_MSG(m_Shader && m_Shader->IsValid(), "GL_Renderer::BeginScene requires a valid shader.");
         if (!m_Shader || !m_Shader->IsValid()) return;
@@ -269,9 +277,6 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         }
 
         glMesh->Unbind();
-
-        // Return to default framebuffer so ImGui can render its own draw data.
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     bool GL_Renderer::CreateFramebuffer(int width, int height) {
@@ -387,9 +392,6 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         }
 
         glMesh->Unbind();
-
-        // Return to default framebuffer so ImGui can render its own draw data.
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     // =========================================================================

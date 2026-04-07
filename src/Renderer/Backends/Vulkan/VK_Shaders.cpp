@@ -2,6 +2,7 @@
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
 
 #include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <cstring>
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
@@ -73,9 +74,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (!apiContext || m_PipelineLayout == VK_NULL_HANDLE) return;
         VkCommandBuffer cmd = static_cast<VkCommandBuffer>(apiContext);
 
-        // Frame uniforms (EngineResourceSlot::FrameUniforms)
-        if (m_BufFrameUniformsMemory != VK_NULL_HANDLE) {
-            RHI::FrameUniforms frameUniforms{};
+        // Per-draw UBOs must be updated inside the command buffer (vkCmdUpdateBuffer), not only via
+        // host memcpy before vkQueueSubmit. Otherwise every draw in the buffer sees the last CPU write.
+
+        RHI::FrameUniforms frameUniforms{};
+        if (m_BufFrameUniforms != VK_NULL_HANDLE) {
             const auto frameUniformsLayout = RHI::GetFrameUniformsLayout();
             for (const auto& [name, offset] : frameUniformsLayout) {
                 auto it = m_Parameters.find(name);
@@ -89,32 +92,20 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                     else if constexpr (std::is_same_v<T, glm::vec4>) *reinterpret_cast<glm::vec4*>(dst) = v;
                 }, it->second);
             }
-            void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_BufFrameUniformsMemory, 0, sizeof(RHI::FrameUniforms), 0, &mapped) == VK_SUCCESS) {
-                std::memcpy(mapped, &frameUniforms, sizeof(RHI::FrameUniforms));
-                vkUnmapMemory(m_Device, m_BufFrameUniformsMemory);
-            }
         }
 
-        // MVP (EngineResourceSlot::Mvp)
-        if (m_BufMvpMemory != VK_NULL_HANDLE) {
-            RHI::MVP mvp{};
+        RHI::MVP mvp{};
+        if (m_BufMvp != VK_NULL_HANDLE) {
             auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj"), itVP = m_Parameters.find("viewProj"), itInvVP = m_Parameters.find("invViewProj");
             if (itM != m_Parameters.end() && std::holds_alternative<glm::mat4>(itM->second)) mvp.model = std::get<glm::mat4>(itM->second);
             if (itV != m_Parameters.end() && std::holds_alternative<glm::mat4>(itV->second)) mvp.view = std::get<glm::mat4>(itV->second);
             if (itP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itP->second)) mvp.proj = std::get<glm::mat4>(itP->second);
             if (itVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itVP->second)) mvp.viewProj = std::get<glm::mat4>(itVP->second);
             if (itInvVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itInvVP->second)) mvp.invViewProj = std::get<glm::mat4>(itInvVP->second);
-            void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_BufMvpMemory, 0, sizeof(RHI::MVP), 0, &mapped) == VK_SUCCESS) {
-                std::memcpy(mapped, &mvp, sizeof(RHI::MVP));
-                vkUnmapMemory(m_Device, m_BufMvpMemory);
-            }
         }
 
-        // Material (EngineResourceSlot::Material)
-        if (m_BufMaterialsMemory != VK_NULL_HANDLE) {
-            RHI::Material material{};
+        RHI::Material material{};
+        if (m_BufMaterials != VK_NULL_HANDLE) {
             const auto layout = RHI::GetMaterialParameterLayout();
             for (const auto& [name, offset] : layout) {
                 auto it = m_Parameters.find(name);
@@ -122,15 +113,38 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 char* dst = reinterpret_cast<char*>(&material) + offset;
                 std::visit([dst](auto&& v) {
                     using T = std::decay_t<decltype(v)>;
-                    if constexpr (std::is_same_v<T, glm::vec3>) *reinterpret_cast<glm::vec4*>(dst) = glm::vec4(v, 1.0f);
+                    if constexpr (std::is_same_v<T, glm::vec3>)
+                        std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 3);
                     else if constexpr (std::is_same_v<T, glm::vec4>) *reinterpret_cast<glm::vec4*>(dst) = v;
+                    else if constexpr (std::is_same_v<T, float>) *reinterpret_cast<float*>(dst) = v;
+                    else if constexpr (std::is_same_v<T, int>) *reinterpret_cast<int*>(dst) = v;
                 }, it->second);
             }
-            void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_BufMaterialsMemory, 0, sizeof(RHI::Material), 0, &mapped) == VK_SUCCESS) {
-                std::memcpy(mapped, &material, sizeof(RHI::Material));
-                vkUnmapMemory(m_Device, m_BufMaterialsMemory);
-            }
+        }
+
+        bool wroteUniforms = false;
+        if (m_BufFrameUniforms != VK_NULL_HANDLE) {
+            vkCmdUpdateBuffer(cmd, m_BufFrameUniforms, 0, sizeof(RHI::FrameUniforms), &frameUniforms);
+            wroteUniforms = true;
+        }
+        if (m_BufMvp != VK_NULL_HANDLE) {
+            vkCmdUpdateBuffer(cmd, m_BufMvp, 0, sizeof(RHI::MVP), &mvp);
+            wroteUniforms = true;
+        }
+        if (m_BufMaterials != VK_NULL_HANDLE) {
+            vkCmdUpdateBuffer(cmd, m_BufMaterials, 0, sizeof(RHI::Material), &material);
+            wroteUniforms = true;
+        }
+
+        if (wroteUniforms) {
+            VkMemoryBarrier barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
+            vkCmdPipelineBarrier(cmd,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                0, 1, &barrier, 0, nullptr, 0, nullptr);
         }
 
         if (m_SceneDescriptorSet != VK_NULL_HANDLE) {

@@ -782,7 +782,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkBufferCreateInfo bufInfo{};
 		bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufInfo.size = globalsSize;
-		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufGlobals);
 		CheckVkResult(res);
@@ -812,7 +812,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		// ---- MVP buffer ----
 		const VkDeviceSize mvpSize = sizeof(Renderer::RHI::MVP);
 		bufInfo.size = mvpSize;
-		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufMvp);
 		CheckVkResult(res);
@@ -838,6 +838,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		// ---- Materials buffer ----
 		const VkDeviceSize materialSize = sizeof(Renderer::RHI::Material);
 		bufInfo.size = materialSize;
+		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufMaterials);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }

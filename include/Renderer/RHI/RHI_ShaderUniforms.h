@@ -97,8 +97,8 @@ namespace Nova::Core::Renderer::RHI {
         alignas(4)  float       emission{ 0.0f };
         alignas(16) glm::vec3   emissionColor{ 1.0f, 1.0f, 1.0f };
         alignas(16) glm::vec3   opacity{ 1.0f, 1.0f, 1.0f };
-        alignas(4)  uint32_t    thinWalled{ 0 };
-        alignas(4)  uint32_t    isOpaque{ 1 };
+        alignas(4)  int         thinWalled{ 0 };
+        alignas(4)  int         isOpaque{ 1 };
         alignas(8)  glm::uvec2  _padCbufferAlign{ 0u, 0u };
     };
 
