@@ -21,6 +21,8 @@
 #include <vector>
 #include <filesystem>
 
+#include "Renderer/RHI/RHI_ShaderCompiler.h"
+
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
     bool VK_Renderer::TransitionViewportImageToShaderRead() {
@@ -944,14 +946,25 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     RHI::RHI_Shaders* VK_Renderer::CreateFullscreenShader(
-        const std::vector<uint32_t>& vertSpirv,
-        const std::vector<uint32_t>& fragSpirv)
+        const RHI::RHI_ShaderCompileInput& vertIn,
+        const RHI::RHI_ShaderCompileInput& fragIn)
     {
+        RHI::RHI_ShaderCompileResult vertOut = RHI::RHI_ShaderCompiler::Compile(vertIn);
+        if (!vertOut.m_Success) {
+            NV_LOG_WARN(("CreateFullscreenShader vertex compile failed:\n" + vertOut.m_Log).c_str());
+            return nullptr;
+        }
+        RHI::RHI_ShaderCompileResult fragOut = RHI::RHI_ShaderCompiler::Compile(fragIn);
+        if (!fragOut.m_Success) {
+            NV_LOG_WARN(("CreateFullscreenShader fragment compile failed:\n" + fragOut.m_Log).c_str());
+            return nullptr;
+        }
+
         VkDevice device = m_VKDevice.GetDevice();
 
         VK_ShaderModule vertModule, fragModule;
-        if (!vertModule.Create(device, vertSpirv) ||
-            !fragModule.Create(device, fragSpirv))
+        if (!vertModule.Create(device, vertOut.m_Spirv) ||
+            !fragModule.Create(device, fragOut.m_Spirv))
         {
             NV_LOG_WARN("CreateFullscreenShader: failed to create shader modules");
             return nullptr;

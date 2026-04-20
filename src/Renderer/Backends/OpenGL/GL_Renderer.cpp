@@ -13,6 +13,7 @@
 #include "Asset/Assets/ShaderAsset.h"
 
 #include "Renderer/Backends/OpenGL/GL_Mesh.h"
+#include "Renderer/RHI/RHI_ShaderCompiler.h"
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
@@ -403,15 +404,26 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     // =========================================================================
 
     RHI::RHI_Shaders* GL_Renderer::CreateFullscreenShader(
-        const std::vector<uint32_t>& vertSpirv,
-        const std::vector<uint32_t>& fragSpirv)
+        const RHI::RHI_ShaderCompileInput& vertIn,
+        const RHI::RHI_ShaderCompileInput& fragIn)
     {
+        RHI::RHI_ShaderCompileResult vertOut = RHI::RHI_ShaderCompiler::Compile(vertIn);
+        if (!vertOut.m_Success) {
+            NV_LOG_WARN(("CreateFullscreenShader vertex compile failed:\n" + vertOut.m_Log).c_str());
+            return nullptr;
+        }
+        RHI::RHI_ShaderCompileResult fragOut = RHI::RHI_ShaderCompiler::Compile(fragIn);
+        if (!fragOut.m_Success) {
+            NV_LOG_WARN(("CreateFullscreenShader fragment compile failed:\n" + fragOut.m_Log).c_str());
+            return nullptr;
+        }
+
         std::string log;
 
-        GLuint vs = LoadSpirvShader(GL_VERTEX_SHADER, vertSpirv, "main", log);
+        GLuint vs = LoadSpirvShader(GL_VERTEX_SHADER, vertOut.m_Spirv, "main", log);
         if (!vs) { NV_LOG_WARN(("CreateFullscreenShader VS failed: " + log).c_str()); return nullptr; }
 
-        GLuint fs = LoadSpirvShader(GL_FRAGMENT_SHADER, fragSpirv, "main", log);
+        GLuint fs = LoadSpirvShader(GL_FRAGMENT_SHADER, fragOut.m_Spirv, "main", log);
         if (!fs) { NV_LOG_WARN(("CreateFullscreenShader FS failed: " + log).c_str()); glDeleteShader(vs); return nullptr; }
 
         GLuint prog = glCreateProgram();
@@ -432,7 +444,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         auto* shader = new GL_Shaders();
         shader->SetProgram(prog);
 
-        NV_LOG_INFO("Fullscreen shader program linked from SPIR-V.");
+        NV_LOG_INFO("Fullscreen shader program linked.");
         return shader;
     }
 

@@ -39,8 +39,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         GLuint GetProgram() const { return m_Shader ? static_cast<GLuint>(reinterpret_cast<uintptr_t>(m_Shader->GetNativeHandle())) : 0; }
 
         RHI::RHI_Shaders* CreateFullscreenShader(
-            const std::vector<uint32_t>& vertSpirv,
-            const std::vector<uint32_t>& fragSpirv) override;
+            const RHI::RHI_ShaderCompileInput& vertIn,
+            const RHI::RHI_ShaderCompileInput& fragIn) override;
         void DestroyFullscreenShader(RHI::RHI_Shaders* shader) override;
         void DrawFullscreen(RHI::RHI_Shaders* shader) override;
 

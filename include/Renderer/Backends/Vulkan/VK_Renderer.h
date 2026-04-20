@@ -50,8 +50,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         RHI::RHI_Shaders* GetShader() override { return m_Shader.get(); }
 
         RHI::RHI_Shaders* CreateFullscreenShader(
-            const std::vector<uint32_t>& vertSpirv,
-            const std::vector<uint32_t>& fragSpirv) override;
+            const RHI::RHI_ShaderCompileInput& vertIn,
+            const RHI::RHI_ShaderCompileInput& fragIn) override;
         void DestroyFullscreenShader(RHI::RHI_Shaders* shader) override;
         void DrawFullscreen(RHI::RHI_Shaders* shader) override;
 

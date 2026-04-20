@@ -8,6 +8,7 @@
 #include "Api.h"
 #include "Core/GraphicsAPI.h"
 #include "Renderer/Graphics/Mesh.h"
+#include "Renderer/RHI/RHI_ShaderCompiler.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 
 namespace Nova::Core::Renderer::RHI {
@@ -87,15 +88,16 @@ namespace Nova::Core::Renderer::RHI {
         virtual RHI_Shaders* GetShader() = 0;
 
         /**
-         * Create a fullscreen pass shader from compiled SPIR-V.
+         * Create a fullscreen pass shader from shader sources (Slang inputs).
+         * Each backend compiles for its graphics API; callers do not pass SPIR-V or other IR.
          * Vertex stage expects position (location 0) and UV (location 1), stride 16 bytes (2× float2).
          * The pipeline uses alpha blending and depth test/write like the editor grid pass.
          * Uses the same engine descriptor set (NovaUniforms) as the model shader.
          * Caller owns the returned pointer and must call DestroyFullscreenShader() to free it.
          */
         virtual RHI_Shaders* CreateFullscreenShader(
-            const std::vector<uint32_t>& vertSpirv,
-            const std::vector<uint32_t>& fragSpirv) = 0;
+            const RHI_ShaderCompileInput& vertIn,
+            const RHI_ShaderCompileInput& fragIn) = 0;
 
         /** Destroy a shader created by CreateFullscreenShader(). */
         virtual void DestroyFullscreenShader(RHI_Shaders* shader) = 0;
