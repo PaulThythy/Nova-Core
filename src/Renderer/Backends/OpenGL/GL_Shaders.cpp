@@ -8,6 +8,7 @@
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
 
 #include <glm/glm.hpp>
+#include <cstring>
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
@@ -66,7 +67,11 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             char* dst = reinterpret_cast<char*>(&data) + offset;
             std::visit([dst](auto&& v) {
                 using T = std::decay_t<decltype(v)>;
-                if constexpr (std::is_same_v<T, glm::vec3>) *reinterpret_cast<glm::vec4*>(dst) = glm::vec4(v, 1.0f);
+                // Must match VK_Shaders::ApplyParameters: only 12 bytes for vec3 so the next
+                // Material fields (offsets from RHI::Material) are not overwritten. Writing a
+                // vec4 here used to corrupt specularRoughness / metalness and killed specular on GL.
+                if constexpr (std::is_same_v<T, glm::vec3>)
+                    std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 3);
                 else if constexpr (std::is_same_v<T, glm::vec4>) *reinterpret_cast<glm::vec4*>(dst) = v;
                 else if constexpr (std::is_same_v<T, float>) *reinterpret_cast<float*>(dst) = v;
                 else if constexpr (std::is_same_v<T, int>) *reinterpret_cast<int*>(dst) = v;

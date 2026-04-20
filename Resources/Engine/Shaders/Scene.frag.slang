@@ -6,19 +6,34 @@ struct PSIn {
     [[vk::location(2)]] float4 v_Color;
 };
 
+static const float3 lightPosition = float3(0.0, 4.0, 0.0);
+static const float3 lightDirection = float3(0.0, -1.0, 0.0);
+static const float3 lightColor = float3(1.0, 1.0, 1.0);
+static const float lightIntensity = 1.0;
+
 [shader("fragment")]
 float4 main(PSIn input) : SV_Target0 {
-    // Simple directional light in world space.
-    float3 L = normalize(float3(1.0, 2.0, 1.0));
     float3 N = normalize(input.v_Normal);
     float3 V = normalize(nova.frame.u_CameraPos - input.v_Pos);
+    float3 base = nova.material.base * nova.material.baseColor;
 
-    float3 lightColor = float3(4.0, 4.0, 4.0);
-    float3 ambient = 0.03 * nova.material.baseColor.rgb;
+    // IBL approx / fill — same base as diffuse PBR.
+    float3 ambient = 0.03 * base;
 
-    float3 radiance = evalPBR(nova.material, N, V, L, lightColor);
+    // Directional light: `lightDirection` is the direction of propagation (e.g. downward for a sun overhead).
+    // Towards the source: opposite of the propagation direction.
+    float3 L_dir = normalize(-lightDirection);
+    float3 radianceDir = evalPBR(nova.material, N, V, L_dir, lightColor * lightIntensity);
+
+    // Point light: softened inverse-square attenuation for stable behavior near the source.
+    float3 toLight = lightPosition - input.v_Pos;
+    float distSq = max(dot(toLight, toLight), 1e-4);
+    float3 L_point = toLight * rsqrt(distSq);
+    float attenuation = 1.0 / (1.0 + distSq);
+    float3 radiancePoint = evalPBR(nova.material, N, V, L_point, lightColor * lightIntensity * attenuation);
+
     float3 emissive = nova.material.emissionColor.rgb * nova.material.emission;
 
-    float3 color = ambient + radiance + emissive;
+    float3 color = ambient + radianceDir + radiancePoint + emissive;
     return float4(color, 1.0);
 }
