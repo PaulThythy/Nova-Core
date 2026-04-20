@@ -23,6 +23,7 @@ namespace Nova::Core {
             int m_Width         = 1280;
             int m_Height        = 720;
             bool m_Resizable    = true;
+            bool m_Maximized    = false;
             GraphicsAPI m_GraphicsAPI = GraphicsAPI::OpenGL;
             int m_GL_Major      = 3;
             int m_GL_Minor      = 3;

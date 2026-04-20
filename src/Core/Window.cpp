@@ -60,6 +60,7 @@ namespace Nova::Core {
         if (m_Desc.m_GraphicsAPI == GraphicsAPI::OpenGL)  flags |= SDL_WINDOW_OPENGL;
         if (m_Desc.m_GraphicsAPI == GraphicsAPI::Vulkan)  flags |= SDL_WINDOW_VULKAN;
         if (m_Desc.m_Resizable) flags |= SDL_WINDOW_RESIZABLE;
+        if (m_Desc.m_Maximized) flags |= SDL_WINDOW_MAXIMIZED;
 
         m_Window = SDL_CreateWindow(m_Desc.m_Title, m_Desc.m_Width, m_Desc.m_Height, flags);
         if (!m_Window) {
