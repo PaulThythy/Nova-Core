@@ -57,7 +57,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         bool CreateFramebuffer(int width, int height);
         void DestroyFramebuffer();
 
-        GLuint m_EmptyVAO{ 0 };
+        GLuint m_FullscreenVAO{ 0 };
+        GLuint m_FullscreenVBO{ 0 };
     };
 
 } // namespace Nova::Core::Renderer::Backends::OpenGL

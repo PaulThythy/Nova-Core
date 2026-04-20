@@ -87,8 +87,9 @@ namespace Nova::Core::Renderer::RHI {
         virtual RHI_Shaders* GetShader() = 0;
 
         /**
-         * Create a fullscreen-triangle shader from compiled SPIR-V.
-         * The resulting pipeline has no vertex input, alpha blending, depth test/write enabled.
+         * Create a fullscreen pass shader from compiled SPIR-V.
+         * Vertex stage expects position (location 0) and UV (location 1), stride 16 bytes (2× float2).
+         * The pipeline uses alpha blending and depth test/write like the editor grid pass.
          * Uses the same engine descriptor set (NovaUniforms) as the model shader.
          * Caller owns the returned pointer and must call DestroyFullscreenShader() to free it.
          */
@@ -100,7 +101,7 @@ namespace Nova::Core::Renderer::RHI {
         virtual void DestroyFullscreenShader(RHI_Shaders* shader) = 0;
 
         /**
-         * Draw a fullscreen triangle (3 vertices, SV_VertexID) with the given shader.
+         * Draw a fullscreen quad (two triangles, 6 vertices) with baked NDC positions and UVs.
          * Flushes the current scene parameters (view, proj, globals) before drawing.
          */
         virtual void DrawFullscreen(RHI_Shaders* shader) = 0;

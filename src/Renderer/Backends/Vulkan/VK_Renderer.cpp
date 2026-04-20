@@ -183,6 +183,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_VKSwapchain.GetSceneDescriptorSet()
         );
 
+        CreateFullscreenQuadBuffer();
+
         NV_LOG_INFO("Vulkan renderer created successfully (minimal mode).");
         return true;
     }
@@ -196,6 +198,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         // Viewport framebuffer first: frees its descriptor set from the ImGui pool.
         DestroyViewportFramebuffer();
+
+        DestroyFullscreenQuadBuffer();
 
         // Shutdown ImGui's Vulkan backend before the descriptor pool and device are destroyed.
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
@@ -849,8 +853,95 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     // =========================================================================
-    // Fullscreen-triangle shader (used by EditorLayer for grid, etc.)
+    // Fullscreen quad shader (used by EditorLayer for grid, etc.)
     // =========================================================================
+
+    void VK_Renderer::CreateFullscreenQuadBuffer() {
+        VkDevice device = m_VKDevice.GetDevice();
+        if (device == VK_NULL_HANDLE)
+            return;
+
+        static const float kQuadVerts[] = {
+            -1.f, -1.f, 0.f, 0.f,
+             1.f, -1.f, 1.f, 0.f,
+            -1.f,  1.f, 0.f, 1.f,
+            -1.f,  1.f, 0.f, 1.f,
+             1.f, -1.f, 1.f, 0.f,
+             1.f,  1.f, 1.f, 1.f,
+        };
+
+        VkBufferCreateInfo bufInfo{};
+        bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufInfo.size = sizeof(kQuadVerts);
+        bufInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VkResult res = vkCreateBuffer(device, &bufInfo, nullptr, &m_FullscreenQuadBuffer);
+        CheckVkResult(res);
+        if (res != VK_SUCCESS)
+            return;
+
+        VkMemoryRequirements memReq{};
+        vkGetBufferMemoryRequirements(device, m_FullscreenQuadBuffer, &memReq);
+
+        const VkPhysicalDeviceMemoryProperties& memProps = m_VKDevice.GetMemoryProperties();
+        uint32_t memTypeIndex = UINT32_MAX;
+        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+            if ((memReq.memoryTypeBits & (1u << i)) &&
+                (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
+                (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+                memTypeIndex = i;
+                break;
+            }
+        }
+        if (memTypeIndex == UINT32_MAX) {
+            NV_LOG_WARN("CreateFullscreenQuadBuffer: no host-visible coherent memory type");
+            vkDestroyBuffer(device, m_FullscreenQuadBuffer, nullptr);
+            m_FullscreenQuadBuffer = VK_NULL_HANDLE;
+            return;
+        }
+
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memReq.size;
+        allocInfo.memoryTypeIndex = memTypeIndex;
+        res = vkAllocateMemory(device, &allocInfo, nullptr, &m_FullscreenQuadMemory);
+        CheckVkResult(res);
+        if (res != VK_SUCCESS) {
+            vkDestroyBuffer(device, m_FullscreenQuadBuffer, nullptr);
+            m_FullscreenQuadBuffer = VK_NULL_HANDLE;
+            return;
+        }
+
+        vkBindBufferMemory(device, m_FullscreenQuadBuffer, m_FullscreenQuadMemory, 0);
+
+        void* data = nullptr;
+        res = vkMapMemory(device, m_FullscreenQuadMemory, 0, sizeof(kQuadVerts), 0, &data);
+        CheckVkResult(res);
+        if (res != VK_SUCCESS) {
+            vkFreeMemory(device, m_FullscreenQuadMemory, nullptr);
+            m_FullscreenQuadMemory = VK_NULL_HANDLE;
+            vkDestroyBuffer(device, m_FullscreenQuadBuffer, nullptr);
+            m_FullscreenQuadBuffer = VK_NULL_HANDLE;
+            return;
+        }
+        std::memcpy(data, kQuadVerts, sizeof(kQuadVerts));
+        vkUnmapMemory(device, m_FullscreenQuadMemory);
+    }
+
+    void VK_Renderer::DestroyFullscreenQuadBuffer() {
+        VkDevice device = m_VKDevice.GetDevice();
+        if (device == VK_NULL_HANDLE)
+            return;
+        if (m_FullscreenQuadBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(device, m_FullscreenQuadBuffer, nullptr);
+            m_FullscreenQuadBuffer = VK_NULL_HANDLE;
+        }
+        if (m_FullscreenQuadMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(device, m_FullscreenQuadMemory, nullptr);
+            m_FullscreenQuadMemory = VK_NULL_HANDLE;
+        }
+    }
 
     RHI::RHI_Shaders* VK_Renderer::CreateFullscreenShader(
         const std::vector<uint32_t>& vertSpirv,
@@ -876,8 +967,27 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         stages[1].module = fragModule.GetModule();
         stages[1].pName  = "main";
 
+        VkVertexInputBindingDescription vertexBinding{};
+        vertexBinding.binding = 0;
+        vertexBinding.stride = sizeof(float) * 4;
+        vertexBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        VkVertexInputAttributeDescription vertexAttrs[2]{};
+        vertexAttrs[0].location = 0;
+        vertexAttrs[0].binding = 0;
+        vertexAttrs[0].format = VK_FORMAT_R32G32_SFLOAT;
+        vertexAttrs[0].offset = 0;
+        vertexAttrs[1].location = 1;
+        vertexAttrs[1].binding = 0;
+        vertexAttrs[1].format = VK_FORMAT_R32G32_SFLOAT;
+        vertexAttrs[1].offset = sizeof(float) * 2;
+
         VkPipelineVertexInputStateCreateInfo vertexInput{};
         vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInput.vertexBindingDescriptionCount = 1;
+        vertexInput.pVertexBindingDescriptions = &vertexBinding;
+        vertexInput.vertexAttributeDescriptionCount = 2;
+        vertexInput.pVertexAttributeDescriptions = vertexAttrs;
 
         VkPipelineInputAssemblyStateCreateInfo inputAsm{};
         inputAsm.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -999,7 +1109,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         shader->Bind(cmd);
 
-        vkCmdDraw(cmd, 3, 1, 0, 0);
+        if (m_FullscreenQuadBuffer == VK_NULL_HANDLE) {
+            NV_LOG_WARN("DrawFullscreen: fullscreen quad buffer not allocated");
+            return;
+        }
+        VkDeviceSize offsets[] = { 0 };
+        vkCmdBindVertexBuffers(cmd, 0, 1, &m_FullscreenQuadBuffer, offsets);
+        vkCmdDraw(cmd, 6, 1, 0, 0);
     }
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

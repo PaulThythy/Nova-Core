@@ -61,6 +61,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void CreateViewportFramebuffer(int w, int h);
         void DestroyViewportFramebuffer();
 
+        void CreateFullscreenQuadBuffer();
+        void DestroyFullscreenQuadBuffer();
+
     private:
         // Core Vulkan objects (wrappers)
         VK_Instance m_VKInstance;
@@ -91,6 +94,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         bool m_ViewportImageFirstUse = true; // true until first viewport pass (image in UNDEFINED)
         bool m_FrameActive = false;
         bool m_ImGuiSwapchainPassBegun = false;
+
+        VkBuffer       m_FullscreenQuadBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory m_FullscreenQuadMemory = VK_NULL_HANDLE;
 	};
 } // namespace Nova::Core::Renderer::Backends::Vulkan
 

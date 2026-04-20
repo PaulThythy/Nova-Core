@@ -156,9 +156,13 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             glDeleteProgram(prog);
         }
 
-        if (m_EmptyVAO != 0) {
-            glDeleteVertexArrays(1, &m_EmptyVAO);
-            m_EmptyVAO = 0;
+        if (m_FullscreenVBO != 0) {
+            glDeleteBuffers(1, &m_FullscreenVBO);
+            m_FullscreenVBO = 0;
+        }
+        if (m_FullscreenVAO != 0) {
+            glDeleteVertexArrays(1, &m_FullscreenVAO);
+            m_FullscreenVAO = 0;
         }
 
         DestroyFramebuffer();
@@ -395,7 +399,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     }
 
     // =========================================================================
-    // Fullscreen-triangle shader (used by EditorLayer for grid, etc.)
+    // Fullscreen quad pass (used by EditorLayer for grid, etc.)
     // =========================================================================
 
     RHI::RHI_Shaders* GL_Renderer::CreateFullscreenShader(
@@ -455,11 +459,33 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LEQUAL);
 
-        if (m_EmptyVAO == 0)
-            glGenVertexArrays(1, &m_EmptyVAO);
+        // Fullscreen quad: two triangles, interleaved position.xy + uv (16-byte stride).
+        static const float kQuadVerts[] = {
+            -1.f, -1.f, 0.f, 0.f,
+             1.f, -1.f, 1.f, 0.f,
+            -1.f,  1.f, 0.f, 1.f,
+            -1.f,  1.f, 0.f, 1.f,
+             1.f, -1.f, 1.f, 0.f,
+             1.f,  1.f, 1.f, 1.f,
+        };
 
-        glBindVertexArray(m_EmptyVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        if (m_FullscreenVAO == 0) {
+            glGenVertexArrays(1, &m_FullscreenVAO);
+            glGenBuffers(1, &m_FullscreenVBO);
+            glBindVertexArray(m_FullscreenVAO);
+            glBindBuffer(GL_ARRAY_BUFFER, m_FullscreenVBO);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(kQuadVerts), kQuadVerts, GL_STATIC_DRAW);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, reinterpret_cast<const void*>(0));
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4,
+                reinterpret_cast<const void*>(sizeof(float) * 2));
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glBindVertexArray(0);
+        }
+
+        glBindVertexArray(m_FullscreenVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
 
         glDepthFunc(GL_LEQUAL);
