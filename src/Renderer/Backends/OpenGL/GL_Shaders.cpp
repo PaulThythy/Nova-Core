@@ -93,8 +93,10 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
                 using T = std::decay_t<decltype(v)>;
                 if constexpr (std::is_same_v<T, int>) *reinterpret_cast<int*>(dst) = v;
                 else if constexpr (std::is_same_v<T, float>) *reinterpret_cast<float*>(dst) = v;
-                else if constexpr (std::is_same_v<T, glm::vec3>) *reinterpret_cast<glm::vec3*>(dst) = v;
-                else if constexpr (std::is_same_v<T, glm::vec4>) *reinterpret_cast<glm::vec4*>(dst) = v;
+                if constexpr (std::is_same_v<T, glm::vec3>)
+                    std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 3);
+                if constexpr (std::is_same_v<T, glm::vec4>)
+                    std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 4);
             }, it->second);
         }
         glBindBuffer(GL_UNIFORM_BUFFER, m_BufFrameUniforms);
