@@ -62,7 +62,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride,
             VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory, VkDeviceSize materialDynamicStride,
             VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
-            VkDescriptorSet sceneDescriptorSet);
+            VkDescriptorSet sceneDescriptorSet,
+            VkDescriptorSet userDescriptorSet = VK_NULL_HANDLE);
 
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
@@ -71,6 +72,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         /** Reset per-draw dynamic UBO offsets at frame start. */
         void ResetDynamicUBOs();
+
+        /**
+         * Update a single binding in the user descriptor set (set 1).
+         * This is a low-level helper used by RHI_ShaderResourceSet.
+         */
+        void WriteUserDescriptor(uint32_t binding, VkDescriptorType type,
+            const VkDescriptorBufferInfo* bufferInfo,
+            const VkDescriptorImageInfo* imageInfo);
 
         VkPipeline GetPipeline() const { return m_Pipeline; }
         VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
@@ -96,6 +105,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkDeviceSize m_BufInstancesSize = 0;
         
         VkDescriptorSet m_SceneDescriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet m_UserDescriptorSet = VK_NULL_HANDLE;
     };
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

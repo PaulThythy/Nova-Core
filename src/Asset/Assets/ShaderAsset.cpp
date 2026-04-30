@@ -26,12 +26,20 @@ namespace Nova::Core::Asset::Assets {
         return GetSource(m_LastCompiledApi);
     }
 
+    const RHI::RHI_ProgramReflection& ShaderAsset::GetReflection() const {
+        return GetReflection(m_LastCompiledApi);
+    }
+
     const std::vector<uint32_t>& ShaderAsset::GetSpirv(GraphicsAPI api) const {
         return (api == GraphicsAPI::OpenGL) ? m_SpirvOpenGL : m_SpirvVulkan;
     }
 
     const std::string& ShaderAsset::GetSource(GraphicsAPI api) const {
         return (api == GraphicsAPI::OpenGL) ? m_SourceOpenGL : m_SourceVulkan;
+    }
+
+    const RHI::RHI_ProgramReflection& ShaderAsset::GetReflection(GraphicsAPI api) const {
+        return (api == GraphicsAPI::OpenGL) ? m_ReflectionOpenGL : m_ReflectionVulkan;
     }
 
     bool ShaderAsset::Compile() {
@@ -88,11 +96,13 @@ namespace Nova::Core::Asset::Assets {
         if (api == GraphicsAPI::Vulkan) {
             m_SpirvVulkan = std::move(out.m_Spirv);
             m_SourceVulkan = std::move(out.m_Source);
+            m_ReflectionVulkan = std::move(out.m_Reflection);
             m_CompiledVulkan = true;
         }
         else {
             m_SpirvOpenGL = std::move(out.m_Spirv);
             m_SourceOpenGL = std::move(out.m_Source);
+            m_ReflectionOpenGL = std::move(out.m_Reflection);
             m_CompiledOpenGL = true;
         }
 

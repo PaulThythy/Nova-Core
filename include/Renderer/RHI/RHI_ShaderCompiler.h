@@ -9,6 +9,7 @@
 
 #include "Api.h"
 #include "Core/GraphicsAPI.h"
+#include "Renderer/RHI/RHI_ShaderReflection.h"
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -53,6 +54,11 @@ namespace Nova::Core::Renderer::RHI {
         std::vector<uint32_t> m_Spirv;
         std::string m_Source;
         std::string m_Log;
+
+        // Backend-agnostic reflection extracted from Slang.
+        // When the result was loaded from cache and reflection could not be loaded,
+        // this may be empty.
+        RHI_ProgramReflection m_Reflection{};
 
         std::filesystem::file_time_type m_LastWriteTime{};
     };

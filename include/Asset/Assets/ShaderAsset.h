@@ -26,6 +26,9 @@ namespace Nova::Core::Asset::Assets {
         const std::vector<uint32_t>& GetSpirv(Nova::Core::GraphicsAPI api) const;
         const std::string& GetSource(Nova::Core::GraphicsAPI api) const;
 
+        const Nova::Core::Renderer::RHI::RHI_ProgramReflection& GetReflection() const;
+        const Nova::Core::Renderer::RHI::RHI_ProgramReflection& GetReflection(Nova::Core::GraphicsAPI api) const;
+
         Nova::Core::Renderer::RHI::RHI_ShaderStage GetStage() const { return m_Input.m_Stage; }
 
     private:
@@ -41,6 +44,9 @@ namespace Nova::Core::Asset::Assets {
 
         std::string m_SourceVulkan;
         std::string m_SourceOpenGL;
+
+        Nova::Core::Renderer::RHI::RHI_ProgramReflection m_ReflectionVulkan{};
+        Nova::Core::Renderer::RHI::RHI_ProgramReflection m_ReflectionOpenGL{};
 
         Nova::Core::GraphicsAPI m_LastCompiledApi = Nova::Core::GraphicsAPI::Vulkan;
         std::string m_LastLog;

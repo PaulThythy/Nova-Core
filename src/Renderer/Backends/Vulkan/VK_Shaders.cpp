@@ -49,7 +49,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride,
         VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory, VkDeviceSize materialDynamicStride,
         VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
-        VkDescriptorSet sceneDescriptorSet)
+        VkDescriptorSet sceneDescriptorSet,
+        VkDescriptorSet userDescriptorSet)
     {
         m_Device = device;
         m_BufFrameUniforms = bufFrameUniforms;
@@ -66,11 +67,31 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_BufInstancesMemory = bufInstancesMemory;
         m_BufInstancesSize = bufInstancesSize;
         m_SceneDescriptorSet = sceneDescriptorSet;
+        m_UserDescriptorSet = userDescriptorSet;
     }
 
     void VK_Shaders::ResetDynamicUBOs() {
         m_MvpDynamicOffset = 0;
         m_MaterialDynamicOffset = 0;
+    }
+
+    void VK_Shaders::WriteUserDescriptor(uint32_t binding, VkDescriptorType type,
+        const VkDescriptorBufferInfo* bufferInfo,
+        const VkDescriptorImageInfo* imageInfo)
+    {
+        if (m_Device == VK_NULL_HANDLE || m_UserDescriptorSet == VK_NULL_HANDLE) return;
+
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = m_UserDescriptorSet;
+        write.dstBinding = binding;
+        write.dstArrayElement = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = type;
+        write.pBufferInfo = bufferInfo;
+        write.pImageInfo = imageInfo;
+
+        vkUpdateDescriptorSets(m_Device, 1, &write, 0, nullptr);
     }
 
     void VK_Shaders::Bind(void* apiContext) {
@@ -187,6 +208,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
                     static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &m_SceneDescriptorSet, 0, nullptr);
             }
+        }
+
+        // Bind user descriptor set (set 1) if present. Keep it separate so we don't have to
+        // compute a merged dynamic offset list yet (user set is typically non-dynamic).
+        if (m_UserDescriptorSet != VK_NULL_HANDLE) {
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
+                static_cast<uint32_t>(RHI::kUserDescriptorSet), 1, &m_UserDescriptorSet, 0, nullptr);
         }
     }
 

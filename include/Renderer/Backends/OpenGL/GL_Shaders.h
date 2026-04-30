@@ -10,6 +10,7 @@
 #include "Core/Log.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
+#include "Renderer/RHI/RHI_ShaderReflection.h"
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
@@ -21,6 +22,21 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         /** Set the program. Creates engine buffers for slots in EngineResourceSlot. Call after linking. */
         void SetProgram(GLuint program);
+
+        /** Provide merged reflection (VS+FS) to drive resource binding. */
+        void SetReflection(const RHI::RHI_ProgramReflection& reflection);
+
+        // User resources (set/binding -> bindingPoint = set*64+binding).
+        // These are backend-specific and will be wrapped by a higher-level RHI API.
+        void SetUserUniformBuffer(uint32_t set, uint32_t binding, GLuint buffer);
+        void SetUserStorageBuffer(uint32_t set, uint32_t binding, GLuint buffer);
+        void SetUserTexture(uint32_t set, uint32_t binding, GLuint texture);
+        void SetUserSampler(uint32_t set, uint32_t binding, GLuint sampler);
+
+        static constexpr uint32_t kMaxBindingsPerSet = 64;
+        static constexpr GLuint ToBindingPoint(uint32_t set, uint32_t binding) {
+            return static_cast<GLuint>(set * kMaxBindingsPerSet + binding);
+        }
 
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
@@ -43,6 +59,11 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         GLuint m_BufInstances{ 0 };
         size_t m_InstanceBufferSize{ 0 };
         std::unordered_map<std::string, GLint> m_LocationCache;
+
+        std::unordered_map<GLuint, GLuint> m_UserUniformBuffers; // bindingPoint -> buffer
+        std::unordered_map<GLuint, GLuint> m_UserStorageBuffers; // bindingPoint -> buffer
+        std::unordered_map<GLuint, GLuint> m_UserTextures;       // unit -> texture
+        std::unordered_map<GLuint, GLuint> m_UserSamplers;       // unit -> sampler
     };
 
     // --- Free functions (compile/link helpers) ---

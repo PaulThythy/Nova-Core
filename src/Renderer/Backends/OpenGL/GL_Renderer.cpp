@@ -14,6 +14,7 @@
 
 #include "Renderer/Backends/OpenGL/GL_Mesh.h"
 #include "Renderer/RHI/RHI_ShaderCompiler.h"
+#include "Renderer/RHI/RHI_ShaderReflection.h"
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
@@ -140,6 +141,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
             return false;
         }
         m_Shader->SetProgram(prog);
+        m_Shader->SetReflection(RHI::MergeProgramReflections({ vert->GetReflection(), frag->GetReflection() }));
 
         // Defer framebuffer creation to the first Resize() call from the client.
         m_ViewportWidth = 0;
@@ -443,6 +445,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         auto* shader = new GL_Shaders();
         shader->SetProgram(prog);
+        shader->SetReflection(RHI::MergeProgramReflections({ vertOut.m_Reflection, fragOut.m_Reflection }));
 
         NV_LOG_INFO("Fullscreen shader program linked.");
         return shader;

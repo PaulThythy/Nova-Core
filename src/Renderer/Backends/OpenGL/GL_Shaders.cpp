@@ -57,6 +57,26 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, static_cast<GLuint>(RHI::EngineResourceSlot::Instances), m_BufInstances);
     }
 
+    void GL_Shaders::SetReflection(const RHI::RHI_ProgramReflection& reflection) {
+        RHI::RHI_Shaders::SetReflection(reflection);
+    }
+
+    void GL_Shaders::SetUserUniformBuffer(uint32_t set, uint32_t binding, GLuint buffer) {
+        m_UserUniformBuffers[ToBindingPoint(set, binding)] = buffer;
+    }
+
+    void GL_Shaders::SetUserStorageBuffer(uint32_t set, uint32_t binding, GLuint buffer) {
+        m_UserStorageBuffers[ToBindingPoint(set, binding)] = buffer;
+    }
+
+    void GL_Shaders::SetUserTexture(uint32_t set, uint32_t binding, GLuint texture) {
+        m_UserTextures[ToBindingPoint(set, binding)] = texture;
+    }
+
+    void GL_Shaders::SetUserSampler(uint32_t set, uint32_t binding, GLuint sampler) {
+        m_UserSamplers[ToBindingPoint(set, binding)] = sampler;
+    }
+
     void GL_Shaders::UploadMaterialUBO() {
         if (m_BufMaterial == 0) return;
         RHI::Material data{};
@@ -125,6 +145,20 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         if (m_Program == 0) return;
 
         glUseProgram(m_Program);
+
+        // Apply user resources (buffers/textures/samplers) using a stable set/binding -> bindingPoint mapping.
+        for (const auto& [bindingPoint, buf] : m_UserUniformBuffers) {
+            glBindBufferBase(GL_UNIFORM_BUFFER, bindingPoint, buf);
+        }
+        for (const auto& [bindingPoint, buf] : m_UserStorageBuffers) {
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bindingPoint, buf);
+        }
+        for (const auto& [unit, tex] : m_UserTextures) {
+            glBindTextureUnit(unit, tex);
+        }
+        for (const auto& [unit, sampler] : m_UserSamplers) {
+            glBindSampler(unit, sampler);
+        }
 
         if (m_BufMvp != 0) {
             RHI::MVP mvp{};

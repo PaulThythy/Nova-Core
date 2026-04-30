@@ -6,7 +6,7 @@
 // Custom shaders (e.g. in Nova-App): #include this file to get `nova`, then add
 // your own resources in a *second* descriptor set, e.g.:
 //   struct MyData { Texture2D albedo; }
-//   ParameterBlock<MyData> user : register(space1);
+//   [[vk::binding(0, 1)]] ParameterBlock<MyData> user;
 // Bind set 0 = engine (this file), set 1 = your ParameterBlock in your pipeline.
 //
 // Do not `import glsl` here: the GLSL module reserves descriptor set 0 for its own
@@ -52,4 +52,4 @@ struct NovaEngine {
     ConstantBuffer<Material> material;
 };
 
-ParameterBlock<NovaEngine> nova : register(space0);
+[[vk::binding(0, 0)]] ParameterBlock<NovaEngine> nova;

@@ -10,6 +10,7 @@
 #include "Renderer/Backends/Vulkan/VK_Common.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
+#include "Renderer/RHI/RHI_ShaderReflection.h"
 #include "Renderer/Backends/Vulkan/VK_Shaders.h"
 #include "Renderer/Graphics/Vertex.h"
 
@@ -17,6 +18,87 @@
 #include "Asset/Assets/ShaderAsset.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
+
+	static VkShaderStageFlags ToVkStageFlags(RHI::RHI_ShaderStageMask mask) {
+		VkShaderStageFlags out = 0;
+		const uint32_t m = static_cast<uint32_t>(mask);
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Vertex)) out |= VK_SHADER_STAGE_VERTEX_BIT;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Fragment)) out |= VK_SHADER_STAGE_FRAGMENT_BIT;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Geometry)) out |= VK_SHADER_STAGE_GEOMETRY_BIT;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessCtrl)) out |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessEval)) out |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Compute)) out |= VK_SHADER_STAGE_COMPUTE_BIT;
+		return out;
+	}
+
+	static VkDescriptorType ToVkDescriptorType(const RHI::RHI_BindingInfo& b) {
+		using RK = RHI::RHI_ResourceKind;
+		switch (b.kind) {
+			case RK::ConstantBuffer: return b.isDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			case RK::StorageBuffer:  return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			case RK::Texture:        return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+			case RK::Sampler:        return VK_DESCRIPTOR_TYPE_SAMPLER;
+			case RK::CombinedTextureSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			case RK::RWTexture:      return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+			case RK::RWBuffer:       return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			default:                 return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+		}
+	}
+
+	static bool CreateDescriptorSetLayoutFromReflection(
+		VkDevice device,
+		const RHI::RHI_ProgramReflection& refl,
+		uint32_t setIndex,
+		VkDescriptorSetLayout& outLayout)
+	{
+		outLayout = VK_NULL_HANDLE;
+		const auto* set = refl.FindSet(setIndex);
+		if ((!set || set->bindings.empty()) && setIndex != RHI::kUserDescriptorSet) {
+			return false;
+		}
+
+		std::vector<VkDescriptorSetLayoutBinding> bindings;
+		if (set) {
+			bindings.reserve(set->bindings.size());
+			for (const auto& b : set->bindings) {
+				VkDescriptorType type = ToVkDescriptorType(b);
+				if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM) continue;
+
+				VkDescriptorSetLayoutBinding vkB{};
+				vkB.binding = b.key.binding;
+				vkB.descriptorType = type;
+				vkB.descriptorCount = (b.arrayCount == 0) ? 1u : b.arrayCount;
+				vkB.stageFlags = ToVkStageFlags(b.stages);
+				bindings.push_back(vkB);
+			}
+		}
+
+		// Safety net: ensure (set,binding) pairs referenced by nameToBinding exist in the set layout.
+		if (setIndex == RHI::kUserDescriptorSet) {
+			// Conservative default: ensure binding 0 exists for user set.
+			const bool has0 = std::any_of(bindings.begin(), bindings.end(),
+				[](const VkDescriptorSetLayoutBinding& b) { return b.binding == 0; });
+			if (!has0) {
+				VkDescriptorSetLayoutBinding vkB{};
+				vkB.binding = 0;
+				vkB.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				vkB.descriptorCount = 1;
+				vkB.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+				bindings.push_back(vkB);
+			}
+		}
+
+		if (bindings.empty()) return false;
+
+		VkDescriptorSetLayoutCreateInfo info{};
+		info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		info.bindingCount = static_cast<uint32_t>(bindings.size());
+		info.pBindings = bindings.data();
+
+		const VkResult res = vkCreateDescriptorSetLayout(device, &info, nullptr, &outLayout);
+		CheckVkResult(res);
+		return (res == VK_SUCCESS);
+	}
 
 	VK_Swapchain::VK_SwapchainSupportDetails VK_Swapchain::QuerySwapChainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
 
@@ -749,33 +831,32 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		dynamic.dynamicStateCount = 2;
 		dynamic.pDynamicStates = dynamicStates;
 
-		// Descriptor set layout: matches NovaEngine ParameterBlock field order (Slang bindings 0..Count-1).
-		VkDescriptorSetLayoutBinding bindings[4]{};
-		bindings[0].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::FrameUniforms);
-		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		bindings[0].descriptorCount = 1;
-		bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-		bindings[1].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp);
-		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-		bindings[1].descriptorCount = 1;
-		bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-		bindings[2].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Instances);
-		bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		bindings[2].descriptorCount = 1;
-		bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-		bindings[3].binding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material);
-		bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-		bindings[3].descriptorCount = 1;
-		bindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+		// Descriptor set layouts (set 0 = engine, set 1 = user) generated from Slang reflection.
+		// Engine semantics: MVP + Material use dynamic uniform buffers.
+		{
+			RHI::RHI_ProgramReflection reflForVk =
+				RHI::MergeProgramReflections({ vertAsset->GetReflection(), fragAsset->GetReflection() });
 
-		VkDescriptorSetLayoutCreateInfo setLayoutInfo{};
-		setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		setLayoutInfo.bindingCount = 4;
-		setLayoutInfo.pBindings = bindings;
+			if (auto* set0 = const_cast<RHI::RHI_DescriptorSetLayoutInfo*>(reflForVk.FindSet(RHI::kEngineDescriptorSet))) {
+				for (auto& b : set0->bindings) {
+					if (b.key.binding == static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp) ||
+						b.key.binding == static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material))
+					{
+						if (b.kind == RHI::RHI_ResourceKind::ConstantBuffer) b.isDynamicUniformBuffer = true;
+					}
+				}
+			}
 
-		VkResult res = vkCreateDescriptorSetLayout(m_Device, &setLayoutInfo, nullptr, &m_SceneSetLayout);
-		CheckVkResult(res);
-		if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to create scene set layout"); return; }
+			m_ModelPipelineReflection = reflForVk;
+
+			if (!CreateDescriptorSetLayoutFromReflection(m_Device, reflForVk, RHI::kEngineDescriptorSet, m_SceneSetLayout)) {
+				NV_LOG_WARN("CreateModelPipeline: failed to create engine set layout (reflection missing?)");
+				return;
+			}
+
+			// User set is optional.
+			(void)CreateDescriptorSetLayoutFromReflection(m_Device, reflForVk, RHI::kUserDescriptorSet, m_UserSetLayout);
+		}
 
 		// ---- Globals buffer ----
 		const VkDeviceSize globalsSize = sizeof(Renderer::RHI::FrameUniforms);
@@ -784,7 +865,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		bufInfo.size = globalsSize;
 		bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufGlobals);
+		VkResult res = vkCreateBuffer(m_Device, &bufInfo, nullptr, &m_BufGlobals);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { DestroyModelPipeline(); return; }
 		VkMemoryRequirements memReq;
@@ -905,6 +986,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to allocate scene descriptor set"); DestroyModelPipeline(); return; }
 
+		// Optional user descriptor set (set 1)
+		if (m_UserSetLayout != VK_NULL_HANDLE) {
+			allocSetInfo.pSetLayouts = &m_UserSetLayout;
+			res = vkAllocateDescriptorSets(m_Device, &allocSetInfo, &m_UserDescriptorSet);
+			CheckVkResult(res);
+			if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to allocate user descriptor set"); DestroyModelPipeline(); return; }
+		}
+
 		VkDescriptorBufferInfo globalsBufInfo{};
 		globalsBufInfo.buffer = m_BufGlobals;
 		globalsBufInfo.offset = 0;
@@ -952,10 +1041,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		writes[3].pBufferInfo = &materialBufInfo;
 		vkUpdateDescriptorSets(m_Device, 4, writes, 0, nullptr);
 
+		VkDescriptorSetLayout setLayouts[2] = { m_SceneSetLayout, m_UserSetLayout };
+		const uint32_t setLayoutCount = (m_UserSetLayout != VK_NULL_HANDLE) ? 2u : 1u;
+
 		VkPipelineLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		layoutInfo.setLayoutCount = 1;
-		layoutInfo.pSetLayouts = &m_SceneSetLayout;
+		layoutInfo.setLayoutCount = setLayoutCount;
+		layoutInfo.pSetLayouts = setLayouts;
 		layoutInfo.pushConstantRangeCount = 0;
 		layoutInfo.pPushConstantRanges = nullptr;
 
@@ -999,6 +1091,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			vkFreeDescriptorSets(m_Device, m_ImGuiDescriptorPool, 1, &m_SceneDescriptorSet);
 			m_SceneDescriptorSet = VK_NULL_HANDLE;
 		}
+		if (m_UserDescriptorSet != VK_NULL_HANDLE && m_ImGuiDescriptorPool != VK_NULL_HANDLE) {
+			vkFreeDescriptorSets(m_Device, m_ImGuiDescriptorPool, 1, &m_UserDescriptorSet);
+			m_UserDescriptorSet = VK_NULL_HANDLE;
+		}
 		if (m_BufInstances != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufInstances, nullptr); m_BufInstances = VK_NULL_HANDLE; }
 		if (m_BufInstancesMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufInstancesMemory, nullptr); m_BufInstancesMemory = VK_NULL_HANDLE; }
 		m_BufInstancesSize = 0;
@@ -1011,6 +1107,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (m_SceneSetLayout != VK_NULL_HANDLE) {
 			vkDestroyDescriptorSetLayout(m_Device, m_SceneSetLayout, nullptr);
 			m_SceneSetLayout = VK_NULL_HANDLE;
+		}
+		if (m_UserSetLayout != VK_NULL_HANDLE) {
+			vkDestroyDescriptorSetLayout(m_Device, m_UserSetLayout, nullptr);
+			m_UserSetLayout = VK_NULL_HANDLE;
 		}
 	}
 
@@ -1103,4 +1203,3 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 	}
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan
-

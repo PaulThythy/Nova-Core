@@ -22,8 +22,92 @@
 #include <filesystem>
 
 #include "Renderer/RHI/RHI_ShaderCompiler.h"
+#include "Renderer/RHI/RHI_ShaderReflection.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
+
+    static VkShaderStageFlags ToVkStageFlags(RHI::RHI_ShaderStageMask mask) {
+        VkShaderStageFlags out = 0;
+        const uint32_t m = static_cast<uint32_t>(mask);
+        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Vertex)) out |= VK_SHADER_STAGE_VERTEX_BIT;
+        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Fragment)) out |= VK_SHADER_STAGE_FRAGMENT_BIT;
+        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Geometry)) out |= VK_SHADER_STAGE_GEOMETRY_BIT;
+        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessCtrl)) out |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessEval)) out |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Compute)) out |= VK_SHADER_STAGE_COMPUTE_BIT;
+        return out;
+    }
+
+    static VkDescriptorType ToVkDescriptorType(const RHI::RHI_BindingInfo& b) {
+        using RK = RHI::RHI_ResourceKind;
+        switch (b.kind) {
+            case RK::ConstantBuffer: return b.isDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            case RK::StorageBuffer:  return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            case RK::Texture:        return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            case RK::Sampler:        return VK_DESCRIPTOR_TYPE_SAMPLER;
+            case RK::CombinedTextureSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            case RK::RWTexture:      return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            case RK::RWBuffer:       return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            default:                 return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+        }
+    }
+
+    static bool CreateDescriptorSetLayoutFromReflection(
+        VkDevice device,
+        const RHI::RHI_ProgramReflection& refl,
+        uint32_t setIndex,
+        VkDescriptorSetLayout& outLayout)
+    {
+        outLayout = VK_NULL_HANDLE;
+        const auto* set = refl.FindSet(setIndex);
+        if ((!set || set->bindings.empty()) && setIndex != RHI::kUserDescriptorSet) return false;
+
+        std::vector<VkDescriptorSetLayoutBinding> bindings;
+        if (set) {
+            bindings.reserve(set->bindings.size());
+            for (const auto& b : set->bindings) {
+                VkDescriptorType type = ToVkDescriptorType(b);
+                if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM) continue;
+
+                VkDescriptorSetLayoutBinding vkB{};
+                vkB.binding = b.key.binding;
+                vkB.descriptorType = type;
+                vkB.descriptorCount = (b.arrayCount == 0) ? 1u : b.arrayCount;
+                vkB.stageFlags = ToVkStageFlags(b.stages);
+                bindings.push_back(vkB);
+            }
+        }
+
+        // Safety net: if the reflection name map references (set,binding) pairs that didn't
+        // end up in `set->bindings` (known Slang reflection corner-cases), ensure they exist
+        // so pipeline layout matches SPIR-V usage.
+        if (setIndex == RHI::kUserDescriptorSet) {
+            // Conservative default: ensure binding 0 exists for user set.
+            // This matches the common case (first user cbuffer at binding 0) and avoids
+            // pipeline-layout mismatch when reflection is incomplete.
+            const bool has0 = std::any_of(bindings.begin(), bindings.end(),
+                [](const VkDescriptorSetLayoutBinding& b) { return b.binding == 0; });
+            if (!has0) {
+                VkDescriptorSetLayoutBinding vkB{};
+                vkB.binding = 0;
+                vkB.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                vkB.descriptorCount = 1;
+                vkB.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+                bindings.push_back(vkB);
+            }
+        }
+
+        if (bindings.empty()) return false;
+
+        VkDescriptorSetLayoutCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        info.bindingCount = static_cast<uint32_t>(bindings.size());
+        info.pBindings = bindings.data();
+
+        const VkResult res = vkCreateDescriptorSetLayout(device, &info, nullptr, &outLayout);
+        CheckVkResult(res);
+        return (res == VK_SUCCESS);
+    }
 
     bool VK_Renderer::TransitionViewportImageToShaderRead() {
         if (m_ViewportImage == VK_NULL_HANDLE)
@@ -182,8 +266,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_VKSwapchain.GetBufInstances(),
             m_VKSwapchain.GetBufInstancesMemory(),
             m_VKSwapchain.GetBufInstancesSize(),
-            m_VKSwapchain.GetSceneDescriptorSet()
+            m_VKSwapchain.GetSceneDescriptorSet(),
+            m_VKSwapchain.GetUserDescriptorSet()
         );
+        m_Shader->SetReflection(m_VKSwapchain.GetModelPipelineReflection());
 
         CreateFullscreenQuadBuffer();
 
@@ -212,6 +298,21 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         for (VkPipeline p : m_FullscreenPipelines)
             vkDestroyPipeline(m_VKDevice.GetDevice(), p, nullptr);
         m_FullscreenPipelines.clear();
+
+        // Ensure any dynamically-created pipeline layouts / set layouts / descriptor sets are destroyed
+        // before the device is torn down, even if individual DestroyFullscreenShader() calls were skipped.
+        if (m_VKDevice.GetDevice() != VK_NULL_HANDLE) {
+            VkDescriptorPool pool = m_VKSwapchain.GetImGuiDescriptorPool();
+            for (auto& [pipeline, state] : m_FullscreenPipelineState) {
+                if (state.userSet != VK_NULL_HANDLE && pool != VK_NULL_HANDLE) {
+                    vkFreeDescriptorSets(m_VKDevice.GetDevice(), pool, 1, &state.userSet);
+                }
+                if (state.layout != VK_NULL_HANDLE) vkDestroyPipelineLayout(m_VKDevice.GetDevice(), state.layout, nullptr);
+                if (state.set0Layout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(m_VKDevice.GetDevice(), state.set0Layout, nullptr);
+                if (state.set1Layout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(m_VKDevice.GetDevice(), state.set1Layout, nullptr);
+            }
+        }
+        m_FullscreenPipelineState.clear();
 
         for (auto& [key, mesh] : m_MeshCache) {
             if (mesh) {
@@ -1051,7 +1152,49 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         dynamic.dynamicStateCount = 2;
         dynamic.pDynamicStates    = dynamicStates;
 
-        VkPipelineLayout layout = m_VKSwapchain.GetModelPipelineLayout();
+        // Build a pipeline layout from merged reflection so custom fullscreen shaders can
+        // declare user resources in set 1 (space1).
+        RHI::RHI_ProgramReflection reflForVk =
+            RHI::MergeProgramReflections({ vertOut.m_Reflection, fragOut.m_Reflection });
+
+        // Engine semantics: MVP + Material use dynamic uniform buffers.
+        if (auto* set0 = const_cast<RHI::RHI_DescriptorSetLayoutInfo*>(reflForVk.FindSet(RHI::kEngineDescriptorSet))) {
+            for (auto& b : set0->bindings) {
+                if (b.key.binding == static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp) ||
+                    b.key.binding == static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material))
+                {
+                    if (b.kind == RHI::RHI_ResourceKind::ConstantBuffer) b.isDynamicUniformBuffer = true;
+                }
+            }
+        }
+
+        VkDescriptorSetLayout set0Layout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout set1Layout = VK_NULL_HANDLE;
+        if (!CreateDescriptorSetLayoutFromReflection(device, reflForVk, RHI::kEngineDescriptorSet, set0Layout)) {
+            NV_LOG_WARN("CreateFullscreenShader: failed to create engine set layout from reflection");
+            vertModule.Destroy();
+            fragModule.Destroy();
+            return nullptr;
+        }
+        (void)CreateDescriptorSetLayoutFromReflection(device, reflForVk, RHI::kUserDescriptorSet, set1Layout);
+
+        VkDescriptorSetLayout setLayouts[2] = { set0Layout, set1Layout };
+        const uint32_t setLayoutCount = (set1Layout != VK_NULL_HANDLE) ? 2u : 1u;
+
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        VkPipelineLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        layoutInfo.setLayoutCount = setLayoutCount;
+        layoutInfo.pSetLayouts = setLayouts;
+        VkResult res = vkCreatePipelineLayout(device, &layoutInfo, nullptr, &layout);
+        CheckVkResult(res);
+        if (res != VK_SUCCESS) {
+            vkDestroyDescriptorSetLayout(device, set0Layout, nullptr);
+            if (set1Layout) vkDestroyDescriptorSetLayout(device, set1Layout, nullptr);
+            vertModule.Destroy();
+            fragModule.Destroy();
+            return nullptr;
+        }
 
         VkGraphicsPipelineCreateInfo pipe{};
         pipe.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1070,17 +1213,42 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         pipe.subpass             = 0;
 
         VkPipeline pipeline = VK_NULL_HANDLE;
-        VkResult res = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipe, nullptr, &pipeline);
+        res = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipe, nullptr, &pipeline);
 
         vertModule.Destroy();
         fragModule.Destroy();
 
         if (res != VK_SUCCESS) {
             NV_LOG_WARN("CreateFullscreenShader: pipeline creation failed");
+            vkDestroyPipelineLayout(device, layout, nullptr);
+            vkDestroyDescriptorSetLayout(device, set0Layout, nullptr);
+            if (set1Layout) vkDestroyDescriptorSetLayout(device, set1Layout, nullptr);
             return nullptr;
         }
 
         m_FullscreenPipelines.push_back(pipeline);
+
+        // Allocate a user descriptor set if needed (set 1).
+        VkDescriptorSet userSet = VK_NULL_HANDLE;
+        if (set1Layout != VK_NULL_HANDLE) {
+            VkDescriptorSetAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo.descriptorPool = m_VKSwapchain.GetImGuiDescriptorPool();
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &set1Layout;
+            res = vkAllocateDescriptorSets(device, &allocInfo, &userSet);
+            CheckVkResult(res);
+            if (res != VK_SUCCESS) {
+                NV_LOG_WARN("CreateFullscreenShader: failed to allocate user descriptor set");
+                vkDestroyPipeline(device, pipeline, nullptr);
+                vkDestroyPipelineLayout(device, layout, nullptr);
+                vkDestroyDescriptorSetLayout(device, set0Layout, nullptr);
+                vkDestroyDescriptorSetLayout(device, set1Layout, nullptr);
+                return nullptr;
+            }
+        }
+
+        m_FullscreenPipelineState[pipeline] = FullscreenPipelineState{ layout, set0Layout, set1Layout, userSet };
 
         auto* shader = new VK_Shaders();
         shader->SetPipeline(pipeline, layout);
@@ -1090,7 +1258,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_VKSwapchain.GetBufMaterials(),  m_VKSwapchain.GetBufMaterialsMemory(), m_VKSwapchain.GetMaterialDynamicStride(),
             m_VKSwapchain.GetBufInstances(),  m_VKSwapchain.GetBufInstancesMemory(),
             m_VKSwapchain.GetBufInstancesSize(),
-            m_VKSwapchain.GetSceneDescriptorSet());
+            m_VKSwapchain.GetSceneDescriptorSet(),
+            userSet);
+        shader->SetReflection(reflForVk);
 
         NV_LOG_INFO("Fullscreen shader pipeline created.");
         return shader;
@@ -1106,6 +1276,21 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             auto it = std::find(m_FullscreenPipelines.begin(), m_FullscreenPipelines.end(), pipeline);
             if (it != m_FullscreenPipelines.end())
                 m_FullscreenPipelines.erase(it);
+
+            if (auto itState = m_FullscreenPipelineState.find(pipeline); itState != m_FullscreenPipelineState.end()) {
+                const auto state = itState->second;
+                if (state.userSet != VK_NULL_HANDLE) {
+                    VkDescriptorPool pool = m_VKSwapchain.GetImGuiDescriptorPool();
+                    if (pool != VK_NULL_HANDLE) {
+                        vkFreeDescriptorSets(m_VKDevice.GetDevice(), pool, 1, &state.userSet);
+                    }
+                }
+                if (state.layout != VK_NULL_HANDLE) vkDestroyPipelineLayout(m_VKDevice.GetDevice(), state.layout, nullptr);
+                if (state.set0Layout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(m_VKDevice.GetDevice(), state.set0Layout, nullptr);
+                if (state.set1Layout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(m_VKDevice.GetDevice(), state.set1Layout, nullptr);
+                m_FullscreenPipelineState.erase(itState);
+            }
+
             vkDestroyPipeline(m_VKDevice.GetDevice(), pipeline, nullptr);
         }
 
