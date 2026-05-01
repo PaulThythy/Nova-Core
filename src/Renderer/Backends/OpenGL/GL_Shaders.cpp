@@ -77,10 +77,46 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         m_UserSamplers[ToBindingPoint(set, binding)] = sampler;
     }
 
+    bool GL_Shaders::ApplyResourceBinding(const RHI::RHI_BindingInfo& info, const RHI::RHI_ResourceBinding& value) {
+        const uint32_t set = info.m_Key.m_Set;
+        const uint32_t binding = info.m_Key.m_Binding;
+
+        if (std::holds_alternative<RHI::RHI_BufferBinding>(value)) {
+            const auto b = std::get<RHI::RHI_BufferBinding>(value);
+            const GLuint buf = static_cast<GLuint>(b.m_Handle);
+            if (info.m_Kind == RHI::RHI_ResourceKind::ConstantBuffer)
+                SetUserUniformBuffer(set, binding, buf);
+            else if (info.m_Kind == RHI::RHI_ResourceKind::StorageBuffer || info.m_Kind == RHI::RHI_ResourceKind::RWBuffer)
+                SetUserStorageBuffer(set, binding, buf);
+            else
+                return false;
+            return true;
+        }
+
+        if (std::holds_alternative<RHI::RHI_TextureBinding>(value)) {
+            const auto t = std::get<RHI::RHI_TextureBinding>(value);
+            if (info.m_Kind != RHI::RHI_ResourceKind::Texture && info.m_Kind != RHI::RHI_ResourceKind::RWTexture &&
+                info.m_Kind != RHI::RHI_ResourceKind::CombinedTextureSampler)
+                return false;
+            SetUserTexture(set, binding, static_cast<GLuint>(t.m_TextureHandle));
+            return true;
+        }
+
+        if (std::holds_alternative<RHI::RHI_SamplerBinding>(value)) {
+            const auto s = std::get<RHI::RHI_SamplerBinding>(value);
+            if (info.m_Kind != RHI::RHI_ResourceKind::Sampler && info.m_Kind != RHI::RHI_ResourceKind::CombinedTextureSampler)
+                return false;
+            SetUserSampler(set, binding, static_cast<GLuint>(s.m_SamplerHandle));
+            return true;
+        }
+
+        return false;
+    }
+
     void GL_Shaders::UploadMaterialUBO() {
         if (m_BufMaterial == 0) return;
         RHI::Material data{};
-        const auto layout = RHI::GetMaterialParameterLayout();
+        const auto& layout = RHI::GetMaterialParameterLayout();
         for (const auto& [name, offset] : layout) {
             auto it = m_Parameters.find(name);
             if (it == m_Parameters.end()) continue;
@@ -104,7 +140,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
     void GL_Shaders::UploadFrameUniformsUBO() {
         if (m_BufFrameUniforms == 0) return;
         RHI::FrameUniforms data{};
-        const auto layout = RHI::GetFrameUniformsLayout();
+        const auto& layout = RHI::GetFrameUniformsLayout();
         for (const auto& [name, offset] : layout) {
             auto it = m_Parameters.find(name);
             if (it == m_Parameters.end()) continue;
@@ -177,8 +213,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         UploadMaterialUBO();
         UploadFrameUniformsUBO();
 
-        const auto materialLayout = RHI::GetMaterialParameterLayout();
-        const auto frameUniformsLayout = RHI::GetFrameUniformsLayout();
+        const auto& materialLayout = RHI::GetMaterialParameterLayout();
+        const auto& frameUniformsLayout = RHI::GetFrameUniformsLayout();
         for (const auto& [name, value] : m_Parameters) {
             if (name == "model" || name == "view" || name == "proj" || name == "viewProj" || name == "invViewProj")
                 continue;

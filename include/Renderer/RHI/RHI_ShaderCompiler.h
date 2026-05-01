@@ -9,25 +9,10 @@
 
 #include "Api.h"
 #include "Core/GraphicsAPI.h"
+#include "Renderer/RHI/RHI_ShaderTypes.h"
 #include "Renderer/RHI/RHI_ShaderReflection.h"
 
 namespace Nova::Core::Renderer::RHI {
-
-    enum class RHI_ShaderStage {
-        Unknown = 0,
-        Vertex,
-        Fragment,
-        Geometry,
-        TessControl,
-        TessEvaluation,
-        Compute,
-        RayGen,
-        RayMiss,
-        RayClosestHit,
-        RayAnyHit,
-        RayIntersection,
-        RayCallable
-    };
 
     struct NV_API RHI_ShaderCompileInput {
         std::filesystem::path m_File;
@@ -80,7 +65,6 @@ namespace Nova::Core::Renderer::RHI {
     NV_API bool ReadTextFile(const std::filesystem::path& path, std::string& outText, std::string& outError);
 
     NV_API RHI_ShaderStage ShaderStageFromFileExtension(const std::filesystem::path& filePath);
-    NV_API const char* ShaderStageToString(RHI_ShaderStage stage);
 
     NV_API bool EnsureSlangInitialized();
     NV_API void ShutdownSlang();

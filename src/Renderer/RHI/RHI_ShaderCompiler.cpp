@@ -85,53 +85,53 @@ namespace Nova::Core::Renderer::RHI {
             uint32_t stages = 0;
             if (!ReadU64(is, size)) return false;
             if (!ReadU32(is, stages)) return false;
-            out.pushConstants = RHI_PushConstantInfo{ static_cast<size_t>(size), static_cast<RHI_ShaderStageMask>(stages) };
+            out.m_PushConstants = RHI_PushConstantInfo{ static_cast<size_t>(size), static_cast<RHI_ShaderStageMask>(stages) };
         }
 
         // Sets + bindings
         uint32_t setCount = 0;
         if (!ReadU32(is, setCount)) return false;
-        out.sets.clear();
-        out.sets.reserve(setCount);
+        out.m_Sets.clear();
+        out.m_Sets.reserve(setCount);
         for (uint32_t si = 0; si < setCount; ++si) {
-            RHI_DescriptorSetLayoutInfo set{};
-            if (!ReadU32(is, set.set)) return false;
+            RHI_DescriptorSetLayoutInfo dsl{};
+            if (!ReadU32(is, dsl.m_Set)) return false;
             uint32_t bindingCount = 0;
             if (!ReadU32(is, bindingCount)) return false;
-            set.bindings.reserve(bindingCount);
+            dsl.m_Bindings.reserve(bindingCount);
             for (uint32_t bi = 0; bi < bindingCount; ++bi) {
                 RHI_BindingInfo b{};
-                b.key.set = set.set;
-                if (!ReadU32(is, b.key.binding)) return false;
+                b.m_Key.m_Set = dsl.m_Set;
+                if (!ReadU32(is, b.m_Key.m_Binding)) return false;
                 uint32_t kind = 0;
                 if (!ReadU32(is, kind)) return false;
-                b.kind = static_cast<RHI_ResourceKind>(static_cast<uint8_t>(kind));
-                if (!ReadU32(is, b.arrayCount)) return false;
+                b.m_Kind = static_cast<RHI_ResourceKind>(static_cast<uint8_t>(kind));
+                if (!ReadU32(is, b.m_ArrayCount)) return false;
                 uint64_t byteSize = 0;
                 if (!ReadU64(is, byteSize)) return false;
-                b.byteSizeIfKnown = static_cast<size_t>(byteSize);
-                if (!ReadString(is, b.fullName)) return false;
+                b.m_ByteSizeIfKnown = static_cast<size_t>(byteSize);
+                if (!ReadString(is, b.m_FullName)) return false;
                 uint32_t stages = 0;
                 if (!ReadU32(is, stages)) return false;
-                b.stages = static_cast<RHI_ShaderStageMask>(stages);
-                if (!ReadBool(is, b.isDynamicUniformBuffer)) return false;
-                set.bindings.push_back(std::move(b));
+                b.m_Stages = static_cast<RHI_ShaderStageMask>(stages);
+                if (!ReadBool(is, b.m_IsDynamicUniformBuffer)) return false;
+                dsl.m_Bindings.push_back(std::move(b));
             }
-            out.sets.push_back(std::move(set));
+            out.m_Sets.push_back(std::move(dsl));
         }
 
         // nameToBinding
         uint32_t nameCount = 0;
         if (!ReadU32(is, nameCount)) return false;
-        out.nameToBinding.clear();
-        out.nameToBinding.reserve(nameCount);
+        out.m_NameToBinding.clear();
+        out.m_NameToBinding.reserve(nameCount);
         for (uint32_t i = 0; i < nameCount; ++i) {
             std::string name;
             RHI_BindingKey key{};
             if (!ReadString(is, name)) return false;
-            if (!ReadU32(is, key.set)) return false;
-            if (!ReadU32(is, key.binding)) return false;
-            out.nameToBinding.emplace(std::move(name), key);
+            if (!ReadU32(is, key.m_Set)) return false;
+            if (!ReadU32(is, key.m_Binding)) return false;
+            out.m_NameToBinding.emplace(std::move(name), key);
         }
 
         return true;
@@ -146,34 +146,34 @@ namespace Nova::Core::Renderer::RHI {
         WriteU32(os, kReflectionCacheVersion);
 
         // Push constants
-        WriteBool(os, refl.pushConstants.has_value());
-        if (refl.pushConstants) {
-            WriteU64(os, static_cast<uint64_t>(refl.pushConstants->sizeBytes));
-            WriteU32(os, static_cast<uint32_t>(refl.pushConstants->stages));
+        WriteBool(os, refl.m_PushConstants.has_value());
+        if (refl.m_PushConstants) {
+            WriteU64(os, static_cast<uint64_t>(refl.m_PushConstants->m_SizeBytes));
+            WriteU32(os, static_cast<uint32_t>(refl.m_PushConstants->m_Stages));
         }
 
         // Sets + bindings
-        WriteU32(os, static_cast<uint32_t>(refl.sets.size()));
-        for (const auto& set : refl.sets) {
-            WriteU32(os, set.set);
-            WriteU32(os, static_cast<uint32_t>(set.bindings.size()));
-            for (const auto& b : set.bindings) {
-                WriteU32(os, b.key.binding);
-                WriteU32(os, static_cast<uint32_t>(b.kind));
-                WriteU32(os, b.arrayCount);
-                WriteU64(os, static_cast<uint64_t>(b.byteSizeIfKnown));
-                WriteString(os, b.fullName);
-                WriteU32(os, static_cast<uint32_t>(b.stages));
-                WriteBool(os, b.isDynamicUniformBuffer);
+        WriteU32(os, static_cast<uint32_t>(refl.m_Sets.size()));
+        for (const auto& dsl : refl.m_Sets) {
+            WriteU32(os, dsl.m_Set);
+            WriteU32(os, static_cast<uint32_t>(dsl.m_Bindings.size()));
+            for (const auto& b : dsl.m_Bindings) {
+                WriteU32(os, b.m_Key.m_Binding);
+                WriteU32(os, static_cast<uint32_t>(b.m_Kind));
+                WriteU32(os, b.m_ArrayCount);
+                WriteU64(os, static_cast<uint64_t>(b.m_ByteSizeIfKnown));
+                WriteString(os, b.m_FullName);
+                WriteU32(os, static_cast<uint32_t>(b.m_Stages));
+                WriteBool(os, b.m_IsDynamicUniformBuffer);
             }
         }
 
         // nameToBinding
-        WriteU32(os, static_cast<uint32_t>(refl.nameToBinding.size()));
-        for (const auto& [name, key] : refl.nameToBinding) {
+        WriteU32(os, static_cast<uint32_t>(refl.m_NameToBinding.size()));
+        for (const auto& [name, key] : refl.m_NameToBinding) {
             WriteString(os, name);
-            WriteU32(os, key.set);
-            WriteU32(os, key.binding);
+            WriteU32(os, key.m_Set);
+            WriteU32(os, key.m_Binding);
         }
     }
 
@@ -267,26 +267,26 @@ namespace Nova::Core::Renderer::RHI {
 
     static void EnsureSet(RHI_ProgramReflection& out, uint32_t setIndex) {
         if (out.FindSet(setIndex)) return;
-        out.sets.push_back(RHI_DescriptorSetLayoutInfo{ setIndex, {} });
+        out.m_Sets.push_back(RHI_DescriptorSetLayoutInfo{ setIndex, {} });
     }
 
     static void AddOrMergeBinding(
         RHI_ProgramReflection& out,
         const RHI_BindingInfo& b)
     {
-        EnsureSet(out, b.key.set);
-        auto* set = const_cast<RHI_DescriptorSetLayoutInfo*>(out.FindSet(b.key.set));
-        auto it = std::find_if(set->bindings.begin(), set->bindings.end(),
-            [&](const auto& x) { return x.key.binding == b.key.binding; });
-        if (it == set->bindings.end()) {
-            set->bindings.push_back(b);
+        EnsureSet(out, b.m_Key.m_Set);
+        auto* dsl = const_cast<RHI_DescriptorSetLayoutInfo*>(out.FindSet(b.m_Key.m_Set));
+        auto it = std::find_if(dsl->m_Bindings.begin(), dsl->m_Bindings.end(),
+            [&](const auto& x) { return x.m_Key.m_Binding == b.m_Key.m_Binding; });
+        if (it == dsl->m_Bindings.end()) {
+            dsl->m_Bindings.push_back(b);
         } else {
-            it->stages |= b.stages;
-            if (it->kind == RHI_ResourceKind::Unknown) it->kind = b.kind;
-            if (it->fullName.empty()) it->fullName = b.fullName;
-            if (it->byteSizeIfKnown == 0) it->byteSizeIfKnown = b.byteSizeIfKnown;
-            if (it->arrayCount == 1 && b.arrayCount != 1) it->arrayCount = b.arrayCount;
-            it->isDynamicUniformBuffer = it->isDynamicUniformBuffer || b.isDynamicUniformBuffer;
+            it->m_Stages |= b.m_Stages;
+            if (it->m_Kind == RHI_ResourceKind::Unknown) it->m_Kind = b.m_Kind;
+            if (it->m_FullName.empty()) it->m_FullName = b.m_FullName;
+            if (it->m_ByteSizeIfKnown == 0) it->m_ByteSizeIfKnown = b.m_ByteSizeIfKnown;
+            if (it->m_ArrayCount == 1 && b.m_ArrayCount != 1) it->m_ArrayCount = b.m_ArrayCount;
+            it->m_IsDynamicUniformBuffer = it->m_IsDynamicUniformBuffer || b.m_IsDynamicUniformBuffer;
         }
     }
 
@@ -422,19 +422,19 @@ namespace Nova::Core::Renderer::RHI {
             }
 
             RHI_BindingInfo bi{};
-            bi.key = RHI_BindingKey{ set, binding };
-            bi.fullName = fullName;
-            bi.stages = stageMask;
+            bi.m_Key = RHI_BindingKey{ set, binding };
+            bi.m_FullName = fullName;
+            bi.m_Stages = stageMask;
 
             // Arrays: Slang reflects array element count in type layout when known.
             if (fieldTypeLayout) {
                 const int elemCount = fieldTypeLayout->getElementCount();
-                if (elemCount > 0) bi.arrayCount = static_cast<uint32_t>(elemCount);
-                else if (elemCount == 0) bi.arrayCount = 0; // unknown/runtime sized
+                if (elemCount > 0) bi.m_ArrayCount = static_cast<uint32_t>(elemCount);
+                else if (elemCount == 0) bi.m_ArrayCount = 0; // unknown/runtime sized
             }
 
             if (fieldType) {
-                bi.kind = SlangTypeKindToResourceKind(fieldType->getKind());
+                bi.m_Kind = SlangTypeKindToResourceKind(fieldType->getKind());
 
                 if (fieldType->getKind() == slang::TypeReflection::Kind::Resource) {
                     const SlangResourceShape shape = fieldType->getResourceShape();
@@ -443,32 +443,32 @@ namespace Nova::Core::Renderer::RHI {
 
                     const bool combined = (shape & SLANG_TEXTURE_COMBINED_FLAG) != 0;
                     if (combined) {
-                        bi.kind = RHI_ResourceKind::CombinedTextureSampler;
+                        bi.m_Kind = RHI_ResourceKind::CombinedTextureSampler;
                     } else if (baseShape == SLANG_STRUCTURED_BUFFER || baseShape == SLANG_BYTE_ADDRESS_BUFFER) {
-                        bi.kind = (access == SLANG_RESOURCE_ACCESS_READ_WRITE) ? RHI_ResourceKind::RWBuffer : RHI_ResourceKind::StorageBuffer;
+                        bi.m_Kind = (access == SLANG_RESOURCE_ACCESS_READ_WRITE) ? RHI_ResourceKind::RWBuffer : RHI_ResourceKind::StorageBuffer;
                     } else if (baseShape == SLANG_ACCELERATION_STRUCTURE) {
-                        bi.kind = RHI_ResourceKind::AccelStruct;
+                        bi.m_Kind = RHI_ResourceKind::AccelStruct;
                     } else if (baseShape == SLANG_TEXTURE_1D || baseShape == SLANG_TEXTURE_2D || baseShape == SLANG_TEXTURE_3D ||
                                baseShape == SLANG_TEXTURE_CUBE || baseShape == SLANG_TEXTURE_SUBPASS || baseShape == SLANG_TEXTURE_BUFFER) {
-                        bi.kind = (access == SLANG_RESOURCE_ACCESS_READ_WRITE) ? RHI_ResourceKind::RWTexture : RHI_ResourceKind::Texture;
+                        bi.m_Kind = (access == SLANG_RESOURCE_ACCESS_READ_WRITE) ? RHI_ResourceKind::RWTexture : RHI_ResourceKind::Texture;
                     }
                 }
             }
 
             // If type-based classification failed, fall back to the parameter category from the layout.
-            if (bi.kind == RHI_ResourceKind::Unknown && fieldTypeLayout) {
+            if (bi.m_Kind == RHI_ResourceKind::Unknown && fieldTypeLayout) {
                 switch (fieldTypeLayout->getParameterCategory()) {
                     case slang::ParameterCategory::ConstantBuffer:
-                        bi.kind = RHI_ResourceKind::ConstantBuffer;
+                        bi.m_Kind = RHI_ResourceKind::ConstantBuffer;
                         break;
                     case slang::ParameterCategory::ShaderResource:
-                        bi.kind = RHI_ResourceKind::Texture;
+                        bi.m_Kind = RHI_ResourceKind::Texture;
                         break;
                     case slang::ParameterCategory::SamplerState:
-                        bi.kind = RHI_ResourceKind::Sampler;
+                        bi.m_Kind = RHI_ResourceKind::Sampler;
                         break;
                     case slang::ParameterCategory::UnorderedAccess:
-                        bi.kind = RHI_ResourceKind::RWTexture;
+                        bi.m_Kind = RHI_ResourceKind::RWTexture;
                         break;
                     default:
                         break;
@@ -476,14 +476,14 @@ namespace Nova::Core::Renderer::RHI {
             }
 
             // Byte size for constant buffers (when reflectable).
-            if (fieldTypeLayout && (bi.kind == RHI_ResourceKind::ConstantBuffer)) {
+            if (fieldTypeLayout && (bi.m_Kind == RHI_ResourceKind::ConstantBuffer)) {
                 const size_t size = static_cast<size_t>(fieldTypeLayout->getSize());
                 if (size != SLANG_UNKNOWN_SIZE && size != SLANG_UNBOUNDED_SIZE)
-                    bi.byteSizeIfKnown = size;
+                    bi.m_ByteSizeIfKnown = size;
             }
 
             AddOrMergeBinding(out, bi);
-            out.nameToBinding.emplace(fullName, bi.key);
+            out.m_NameToBinding.emplace(fullName, bi.m_Key);
         }
     }
 
@@ -651,7 +651,7 @@ namespace Nova::Core::Renderer::RHI {
 
         // Reflection: best-effort (failure should not fail compilation).
         ExtractReflectionFromLinked(linked.get(), input.m_Stage, out.m_Reflection);
-        if (out.m_Reflection.sets.empty()) {
+        if (out.m_Reflection.m_Sets.empty()) {
             // Diagnostics: dump a small excerpt of Slang reflection JSON to help map categories/bindings.
             Slang::ComPtr<ISlangBlob> jsonBlob;
             if (SLANG_SUCCEEDED(spReflection_ToJson((SlangReflection*)linked->getLayout(), nullptr, jsonBlob.writeRef())) && jsonBlob) {
@@ -859,24 +859,6 @@ namespace Nova::Core::Renderer::RHI {
         if (EndsWithIgnoreCase(name, ".rint.slang")) return RHI_ShaderStage::RayIntersection;
         if (EndsWithIgnoreCase(name, ".rcall.slang")) return RHI_ShaderStage::RayCallable;
         return RHI_ShaderStage::Unknown;
-    }
-
-    const char* ShaderStageToString(RHI_ShaderStage stage) {
-        switch (stage) {
-            case RHI_ShaderStage::Vertex:           return "Vertex";
-            case RHI_ShaderStage::Fragment:         return "Fragment";
-            case RHI_ShaderStage::Geometry:         return "Geometry";
-            case RHI_ShaderStage::TessControl:      return "Tessellation Control";
-            case RHI_ShaderStage::TessEvaluation:   return "Tessellation Evaluation";
-            case RHI_ShaderStage::Compute:          return "Compute";
-            case RHI_ShaderStage::RayGen:           return "Ray Generation";
-            case RHI_ShaderStage::RayMiss:          return "Ray Miss";
-            case RHI_ShaderStage::RayClosestHit:    return "Ray Closest Hit";
-            case RHI_ShaderStage::RayAnyHit:        return "Ray Any Hit";
-            case RHI_ShaderStage::RayIntersection:  return "Ray Intersection";
-            case RHI_ShaderStage::RayCallable:      return "Ray Callable";
-            default:                                return "Unknown";
-        }
     }
 
     bool EnsureSlangInitialized() {

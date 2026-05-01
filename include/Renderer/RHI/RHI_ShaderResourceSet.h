@@ -7,24 +7,23 @@
 #include <variant>
 
 #include "Api.h"
-#include "Core/GraphicsAPI.h"
 #include "Renderer/RHI/RHI_ShaderReflection.h"
 
 namespace Nova::Core::Renderer::RHI {
 
     struct NV_API RHI_BufferBinding {
-        uint64_t handle = 0; // VkBuffer or GLuint (cast)
-        uint64_t offset = 0;
-        uint64_t range = 0;  // 0 = VK_WHOLE_SIZE / full buffer
+        uint64_t m_Handle = 0; // VkBuffer or GLuint (cast)
+        uint64_t m_Offset = 0;
+        uint64_t m_Range = 0;  // 0 = VK_WHOLE_SIZE / full buffer
     };
 
     struct NV_API RHI_TextureBinding {
-        uint64_t textureHandle = 0; // VkImageView or GLuint texture
-        uint32_t imageLayout = 0;   // Vulkan only (VkImageLayout). 0 = default/ignore.
+        uint64_t m_TextureHandle = 0; // VkImageView or GLuint texture
+        uint32_t m_ImageLayout = 0;   // Vulkan only (VkImageLayout). 0 = default/ignore.
     };
 
     struct NV_API RHI_SamplerBinding {
-        uint64_t samplerHandle = 0; // VkSampler or GLuint sampler
+        uint64_t m_SamplerHandle = 0; // VkSampler or GLuint sampler
     };
 
     using RHI_ResourceBinding = std::variant<RHI_BufferBinding, RHI_TextureBinding, RHI_SamplerBinding>;
@@ -32,7 +31,7 @@ namespace Nova::Core::Renderer::RHI {
     /**
      * Backend-agnostic shader resource binder: set resources by reflection name.
      *
-     * - Names come from `RHI_ProgramReflection.nameToBinding`, e.g. "nova.frame" or "user.albedo".
+     * - Names come from `RHI_ProgramReflection::m_NameToBinding`, e.g. "nova.frame" or "user.albedo".
      * - Engine resources (set 0) are typically owned/bound by the renderer; this class is intended
      *   primarily for user resources in set 1.
      */

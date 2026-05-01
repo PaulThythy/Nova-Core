@@ -63,6 +63,11 @@ namespace Nova::Core::Renderer::RHI {
         virtual void* GetNativeHandle() const = 0;
 
     protected:
+        friend class RHI_ShaderResourceSet;
+
+        /** Backend hook used by `RHI_ShaderResourceSet` to apply named bindings. */
+        virtual bool ApplyResourceBinding(const RHI_BindingInfo& info, const RHI_ResourceBinding& value) = 0;
+
         std::unordered_map<std::string, UniformValue> m_Parameters;
 
         RHI_ProgramReflection m_Reflection{};

@@ -94,6 +94,60 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         vkUpdateDescriptorSets(m_Device, 1, &write, 0, nullptr);
     }
 
+    static VkDescriptorType ToVkDescriptorType(RHI::RHI_ResourceKind kind) {
+        using RK = RHI::RHI_ResourceKind;
+        switch (kind) {
+            case RK::ConstantBuffer: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            case RK::StorageBuffer:  return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            case RK::RWBuffer:       return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            case RK::Texture:        return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            case RK::Sampler:        return VK_DESCRIPTOR_TYPE_SAMPLER;
+            case RK::CombinedTextureSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            case RK::RWTexture:      return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            default:                 return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+        }
+    }
+
+    bool VK_Shaders::ApplyResourceBinding(const RHI::RHI_BindingInfo& info, const RHI::RHI_ResourceBinding& value) {
+        // This class only supports updating the user descriptor set (set 1).
+        if (info.m_Key.m_Set != RHI::kUserDescriptorSet) return false;
+        if (m_Device == VK_NULL_HANDLE || m_UserDescriptorSet == VK_NULL_HANDLE) return false;
+
+        const VkDescriptorType type = ToVkDescriptorType(info.m_Kind);
+        if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM) return false;
+
+        const uint32_t binding = info.m_Key.m_Binding;
+
+        if (std::holds_alternative<RHI::RHI_BufferBinding>(value)) {
+            const auto b = std::get<RHI::RHI_BufferBinding>(value);
+            VkDescriptorBufferInfo bi{};
+            bi.buffer = reinterpret_cast<VkBuffer>(b.m_Handle);
+            bi.offset = static_cast<VkDeviceSize>(b.m_Offset);
+            bi.range = (b.m_Range == 0) ? VK_WHOLE_SIZE : static_cast<VkDeviceSize>(b.m_Range);
+            WriteUserDescriptor(binding, type, &bi, nullptr);
+            return true;
+        }
+
+        if (std::holds_alternative<RHI::RHI_TextureBinding>(value)) {
+            const auto t = std::get<RHI::RHI_TextureBinding>(value);
+            VkDescriptorImageInfo ii{};
+            ii.imageView = reinterpret_cast<VkImageView>(t.m_TextureHandle);
+            ii.imageLayout = (t.m_ImageLayout == 0) ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : static_cast<VkImageLayout>(t.m_ImageLayout);
+            WriteUserDescriptor(binding, type, nullptr, &ii);
+            return true;
+        }
+
+        if (std::holds_alternative<RHI::RHI_SamplerBinding>(value)) {
+            const auto s = std::get<RHI::RHI_SamplerBinding>(value);
+            VkDescriptorImageInfo ii{};
+            ii.sampler = reinterpret_cast<VkSampler>(s.m_SamplerHandle);
+            WriteUserDescriptor(binding, type, nullptr, &ii);
+            return true;
+        }
+
+        return false;
+    }
+
     void VK_Shaders::Bind(void* apiContext) {
         if (!apiContext || m_Pipeline == VK_NULL_HANDLE) return;
         VkCommandBuffer cmd = static_cast<VkCommandBuffer>(apiContext);
@@ -106,7 +160,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         RHI::FrameUniforms frameUniforms{};
         if (m_BufFrameUniforms != VK_NULL_HANDLE) {
-            const auto frameUniformsLayout = RHI::GetFrameUniformsLayout();
+            const auto& frameUniformsLayout = RHI::GetFrameUniformsLayout();
             for (const auto& [name, offset] : frameUniformsLayout) {
                 auto it = m_Parameters.find(name);
                 if (it == m_Parameters.end()) continue;
@@ -135,7 +189,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         RHI::Material material{};
         if (m_BufMaterials != VK_NULL_HANDLE) {
-            const auto layout = RHI::GetMaterialParameterLayout();
+            const auto& layout = RHI::GetMaterialParameterLayout();
             for (const auto& [name, offset] : layout) {
                 auto it = m_Parameters.find(name);
                 if (it == m_Parameters.end()) continue;

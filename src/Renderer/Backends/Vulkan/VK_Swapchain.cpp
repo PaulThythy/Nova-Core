@@ -33,8 +33,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 	static VkDescriptorType ToVkDescriptorType(const RHI::RHI_BindingInfo& b) {
 		using RK = RHI::RHI_ResourceKind;
-		switch (b.kind) {
-			case RK::ConstantBuffer: return b.isDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		switch (b.m_Kind) {
+			case RK::ConstantBuffer: return b.m_IsDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 			case RK::StorageBuffer:  return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 			case RK::Texture:        return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 			case RK::Sampler:        return VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -53,22 +53,22 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 	{
 		outLayout = VK_NULL_HANDLE;
 		const auto* set = refl.FindSet(setIndex);
-		if ((!set || set->bindings.empty()) && setIndex != RHI::kUserDescriptorSet) {
+		if ((!set || set->m_Bindings.empty()) && setIndex != RHI::kUserDescriptorSet) {
 			return false;
 		}
 
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
 		if (set) {
-			bindings.reserve(set->bindings.size());
-			for (const auto& b : set->bindings) {
+			bindings.reserve(set->m_Bindings.size());
+			for (const auto& b : set->m_Bindings) {
 				VkDescriptorType type = ToVkDescriptorType(b);
 				if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM) continue;
 
 				VkDescriptorSetLayoutBinding vkB{};
-				vkB.binding = b.key.binding;
+				vkB.binding = b.m_Key.m_Binding;
 				vkB.descriptorType = type;
-				vkB.descriptorCount = (b.arrayCount == 0) ? 1u : b.arrayCount;
-				vkB.stageFlags = ToVkStageFlags(b.stages);
+				vkB.descriptorCount = (b.m_ArrayCount == 0) ? 1u : b.m_ArrayCount;
+				vkB.stageFlags = ToVkStageFlags(b.m_Stages);
 				bindings.push_back(vkB);
 			}
 		}
@@ -838,11 +838,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 				RHI::MergeProgramReflections({ vertAsset->GetReflection(), fragAsset->GetReflection() });
 
 			if (auto* set0 = const_cast<RHI::RHI_DescriptorSetLayoutInfo*>(reflForVk.FindSet(RHI::kEngineDescriptorSet))) {
-				for (auto& b : set0->bindings) {
-					if (b.key.binding == static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp) ||
-						b.key.binding == static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material))
+				for (auto& b : set0->m_Bindings) {
+					if (b.m_Key.m_Binding == static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp) ||
+						b.m_Key.m_Binding == static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material))
 					{
-						if (b.kind == RHI::RHI_ResourceKind::ConstantBuffer) b.isDynamicUniformBuffer = true;
+						if (b.m_Kind == RHI::RHI_ResourceKind::ConstantBuffer) b.m_IsDynamicUniformBuffer = true;
 					}
 				}
 			}

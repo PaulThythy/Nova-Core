@@ -48,6 +48,8 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         bool IsValid() const { return m_Program != 0; }
 
     private:
+        bool ApplyResourceBinding(const RHI::RHI_BindingInfo& info, const RHI::RHI_ResourceBinding& value) override;
+
         GLint GetLocation(const std::string& name);
         void UploadMaterialUBO();
         void UploadFrameUniformsUBO();

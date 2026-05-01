@@ -102,8 +102,8 @@ namespace Nova::Core::Renderer::RHI {
         alignas(8)  glm::uvec2  _padCbufferAlign{ 0u, 0u };
     };
 
-    inline std::unordered_map<std::string, size_t> GetMaterialParameterLayout() {
-        return {
+    inline const std::unordered_map<std::string, size_t>& GetMaterialParameterLayout() {
+        static const std::unordered_map<std::string, size_t> kLayout = {
             { "base",                 offsetof(Material, base) },
             { "baseColor",            offsetof(Material, baseColor) },
             { "diffuseRoughness",     offsetof(Material, diffuseRoughness) },
@@ -140,10 +140,11 @@ namespace Nova::Core::Renderer::RHI {
             { "isOpaque",             offsetof(Material, isOpaque) },
             { "_padCbufferAlign",     offsetof(Material, _padCbufferAlign) },
         };
+        return kLayout;
     }
 
-    inline std::unordered_map<std::string, size_t> GetFrameUniformsLayout() {
-        return {
+    inline const std::unordered_map<std::string, size_t>& GetFrameUniformsLayout() {
+        static const std::unordered_map<std::string, size_t> kLayout = {
             { "iResolution",     offsetof(FrameUniforms, iResolution) },
             { "_padAfterRes",    offsetof(FrameUniforms, _padAfterRes) },
             { "iTime",           offsetof(FrameUniforms, iTime) },
@@ -156,6 +157,7 @@ namespace Nova::Core::Renderer::RHI {
             { "iMouse",          offsetof(FrameUniforms, iMouse) },
             { "iDate",           offsetof(FrameUniforms, iDate) },
         };
+        return kLayout;
     }
 
 } // namespace Nova::Core::Renderer::RHI
