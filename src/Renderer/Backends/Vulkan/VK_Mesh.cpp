@@ -10,11 +10,11 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    VK_Mesh::VK_Mesh(const Renderer::Graphics::Mesh& mesh) : Renderer::Graphics::Mesh(mesh.GetVertices(), mesh.GetIndices()) {}
+    VK_Mesh::VK_Mesh(const Renderer::RHI::RHI_Mesh& mesh) : Renderer::RHI::RHI_Mesh(mesh.GetVertices(), mesh.GetIndices()) {}
 
     VK_Mesh::~VK_Mesh() { Release(); }
 
-    void VK_Mesh::Upload(const Renderer::Graphics::Mesh& mesh) {
+    void VK_Mesh::Upload(const Renderer::RHI::RHI_Mesh& mesh) {
         Release();
 
         if (m_Device == VK_NULL_HANDLE) {

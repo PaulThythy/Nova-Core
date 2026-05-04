@@ -3,17 +3,17 @@
 
 #include <glad/gl.h>
 #include "Api.h"
-#include "Renderer/Graphics/Mesh.h"
+#include "Renderer/RHI/RHI_Mesh.h"
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
-	struct NV_API GL_Mesh : public Renderer::Graphics::Mesh{
+	struct NV_API GL_Mesh : public Renderer::RHI::RHI_Mesh{
 
 		GL_Mesh() = default;
-		explicit GL_Mesh(const Renderer::Graphics::Mesh& mesh);
+		explicit GL_Mesh(const Renderer::RHI::RHI_Mesh& mesh);
 		~GL_Mesh() override;
 
-		void Upload(const Renderer::Graphics::Mesh& mesh) override;
+		void Upload(const Renderer::RHI::RHI_Mesh& mesh) override;
 		void Release() override;
 
 		void Bind() const override;

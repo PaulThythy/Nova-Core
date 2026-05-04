@@ -1,21 +1,21 @@
-#include "Renderer/Graphics/Mesh.h"
+#include "Renderer/RHI/RHI_Mesh.h"
 
 #include <glm/gtc/constants.hpp>
 
-namespace Nova::Core::Renderer::Graphics {
+namespace Nova::Core::Renderer::RHI {
 
-    void Mesh::Upload(const Renderer::Graphics::Mesh&) {}
+    void RHI_Mesh::Upload(const Renderer::RHI::RHI_Mesh&) {}
 
-    void Mesh::Release() {}
+    void RHI_Mesh::Release() {}
 
-    void Mesh::Bind() const {}
+    void RHI_Mesh::Bind() const {}
 
-    void Mesh::Draw() const {}
+    void RHI_Mesh::Draw() const {}
 
-    void Mesh::Unbind() const {}
+    void RHI_Mesh::Unbind() const {}
 
-    std::shared_ptr<Mesh> Mesh::CreatePlane() {
-        std::vector<Vertex> vertices;
+    std::shared_ptr<RHI_Mesh> RHI_Mesh::CreatePlane() {
+        std::vector<Graphics::Vertex> vertices;
         vertices.reserve(6); // 2 triangles * 3 vertices
 
         std::vector<uint32_t> indices;
@@ -35,38 +35,38 @@ namespace Nova::Core::Renderer::Graphics {
         };
 
         // --- Triangle 0 vertices (p0, p1, p2) ---
-        Vertex v0; // yellow
+        Graphics::Vertex v0; // yellow
         v0.m_Position = p0;
         v0.m_Normal = normal;
         v0.m_TexCoord = { 0.0f, 0.0f };
         v0.m_Color = triColors[0];
 
-        Vertex v1; // magenta
+        Graphics::Vertex v1; // magenta
         v1.m_Position = p1;
         v1.m_Normal = normal;
         v1.m_TexCoord = { 1.0f, 0.0f };
         v1.m_Color = triColors[1];
 
-        Vertex v2; // cyan
+        Graphics::Vertex v2; // cyan
         v2.m_Position = p2;
         v2.m_Normal = normal;
         v2.m_TexCoord = { 1.0f, 1.0f };
         v2.m_Color = triColors[2];
 
         // --- Triangle 1 vertices (p0, p2, p3) ---
-        Vertex v3; // yellow
+        Graphics::Vertex v3; // yellow
         v3.m_Position = p0;
         v3.m_Normal = normal;
         v3.m_TexCoord = { 0.0f, 0.0f };
         v3.m_Color = triColors[0];
 
-        Vertex v4; // magenta
+        Graphics::Vertex v4; // magenta
         v4.m_Position = p2;
         v4.m_Normal = normal;
         v4.m_TexCoord = { 1.0f, 1.0f };
         v4.m_Color = triColors[1];
 
-        Vertex v5; // cyan
+        Graphics::Vertex v5; // cyan
         v5.m_Position = p3;
         v5.m_Normal = normal;
         v5.m_TexCoord = { 0.0f, 1.0f };
@@ -87,11 +87,11 @@ namespace Nova::Core::Renderer::Graphics {
         indices.push_back(4);
         indices.push_back(5);
 
-        return std::make_shared<Mesh>(std::move(vertices), std::move(indices));
+        return std::make_shared<RHI_Mesh>(std::move(vertices), std::move(indices));
     }
 
-    std::shared_ptr<Mesh> Mesh::CreateCube(float halfExtent) {
-        std::vector<Vertex> vertices;
+    std::shared_ptr<RHI_Mesh> RHI_Mesh::CreateCube(float halfExtent) {
+        std::vector<Graphics::Vertex> vertices;
         std::vector<uint32_t>    indices;
 
         // 6 faces * 2 triangles * 3 vertices
@@ -118,7 +118,7 @@ namespace Nova::Core::Renderer::Graphics {
                 // Add one triangle (3 unique vertices)
                 uint32_t baseIndex = static_cast<uint32_t>(vertices.size());
 
-                Vertex v0, v1, v2;
+                Graphics::Vertex v0, v1, v2;
                 v0.m_Position = p0;
                 v1.m_Position = p1;
                 v2.m_Position = p2;
@@ -227,10 +227,10 @@ namespace Nova::Core::Renderer::Graphics {
             { 0.0f,-1.0f, 0.0f }
         );
 
-        return std::make_shared<Mesh>(std::move(vertices), std::move(indices));
+        return std::make_shared<RHI_Mesh>(std::move(vertices), std::move(indices));
     }
 
-    std::shared_ptr<Mesh> Mesh::CreateSphere(float radius, int latitudeSegments, int longitudeSegments) {
+    std::shared_ptr<RHI_Mesh> RHI_Mesh::CreateSphere(float radius, int latitudeSegments, int longitudeSegments) {
         // Clamp segments to avoid degenerate spheres
         if (latitudeSegments < 2)   latitudeSegments = 2;
         if (longitudeSegments < 3)  longitudeSegments = 3;
@@ -273,7 +273,7 @@ namespace Nova::Core::Renderer::Graphics {
         }
 
         // Final mesh data: each triangle has its own 3 vertices
-        std::vector<Vertex> vertices;
+        std::vector<Graphics::Vertex> vertices;
         std::vector<uint32_t>    indices;
 
         const glm::vec3 triColors[3] = {
@@ -286,7 +286,7 @@ namespace Nova::Core::Renderer::Graphics {
         indices.reserve(latitudeSegments * longitudeSegments * 6);
 
         auto makeVertex = [&](uint32_t gridIndex, const glm::vec3& color) {
-            Vertex v;
+            Graphics::Vertex v;
             v.m_Position = positions[gridIndex];
             v.m_Normal = normals[gridIndex];
             v.m_TexCoord = uvs[gridIndex];
@@ -332,8 +332,8 @@ namespace Nova::Core::Renderer::Graphics {
             }
         }
 
-        return std::make_shared<Mesh>(std::move(vertices), std::move(indices));
+        return std::make_shared<RHI_Mesh>(std::move(vertices), std::move(indices));
     }
 
 
-} // namespace Nova::Core::Renderer::Graphics
+} // namespace Nova::Core::Renderer::RHI

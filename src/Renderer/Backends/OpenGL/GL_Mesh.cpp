@@ -2,7 +2,7 @@
 
 namespace Nova::Core::Renderer::Backends::OpenGL {
 
-    GL_Mesh::GL_Mesh(const Renderer::Graphics::Mesh& mesh): Renderer::Graphics::Mesh(mesh.GetVertices(), mesh.GetIndices()) {}
+    GL_Mesh::GL_Mesh(const Renderer::RHI::RHI_Mesh& mesh): Renderer::RHI::RHI_Mesh(mesh.GetVertices(), mesh.GetIndices()) {}
 
     GL_Mesh::~GL_Mesh()
     {
@@ -17,7 +17,7 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         m_IndexCount = 0;
     }
 
-    void GL_Mesh::Upload(const Renderer::Graphics::Mesh& mesh) {
+    void GL_Mesh::Upload(const Renderer::RHI::RHI_Mesh& mesh) {
         Release();
 
         const auto& vertices = mesh.GetVertices();

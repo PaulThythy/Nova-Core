@@ -79,9 +79,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             VkDescriptorSet userSet = VK_NULL_HANDLE;
         };
         std::unordered_map<VkPipeline, FullscreenPipelineState> m_FullscreenPipelineState;
-        std::unordered_map<const Renderer::Graphics::Mesh*, std::shared_ptr<VK_Mesh>> m_MeshCache;
+        std::unordered_map<const Renderer::RHI::RHI_Mesh*, std::shared_ptr<VK_Mesh>> m_MeshCache;
 
-        std::shared_ptr<VK_Mesh> GetOrUploadMesh(const std::shared_ptr<Renderer::Graphics::Mesh>& cpuMesh);
+        std::shared_ptr<VK_Mesh> GetOrUploadMesh(const std::shared_ptr<Renderer::RHI::RHI_Mesh>& cpuMesh);
 
         bool m_FramebufferResized = false;
 

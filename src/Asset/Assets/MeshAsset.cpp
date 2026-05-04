@@ -3,7 +3,7 @@
 #include "Core/Application.h"
 #include "Core/Log.h"
 
-#include "Renderer/Graphics/Mesh.h"
+#include "Renderer/RHI/RHI_Mesh.h"
 #include "Renderer/Backends/OpenGL/GL_Mesh.h"
 #include "Renderer/Backends/Vulkan/VK_Mesh.h"
 
@@ -94,17 +94,17 @@ namespace Nova::Core::Asset::Assets {
     }
 
     bool MeshAsset::LoadPrimitive(MeshPrimitive primitive) {
-        using Nova::Core::Renderer::Graphics::Mesh;
+        using Nova::Core::Renderer::RHI::RHI_Mesh;
 
         switch (primitive) {
         case MeshPrimitive::Plane:
-            m_CPUMesh = Mesh::CreatePlane();
+            m_CPUMesh = RHI_Mesh::CreatePlane();
             break;
         case MeshPrimitive::Cube:
-            m_CPUMesh = Mesh::CreateCube(m_Desc.m_HalfExtent);
+            m_CPUMesh = RHI_Mesh::CreateCube(m_Desc.m_HalfExtent);
             break;
         case MeshPrimitive::Sphere:
-            m_CPUMesh = Mesh::CreateSphere(
+            m_CPUMesh = RHI_Mesh::CreateSphere(
                 m_Desc.m_Radius,
                 m_Desc.m_LatitudeSegments,
                 m_Desc.m_LongitudeSegments);

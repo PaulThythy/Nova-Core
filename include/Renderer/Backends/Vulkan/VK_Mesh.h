@@ -3,14 +3,14 @@
 
 #include <vulkan/vulkan.h>
 #include "Api.h"
-#include "Renderer/Graphics/Mesh.h"
+#include "Renderer/RHI/RHI_Mesh.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-	struct NV_API VK_Mesh : public Renderer::Graphics::Mesh {
+	struct NV_API VK_Mesh : public Renderer::RHI::RHI_Mesh {
 		
 		VK_Mesh() = default;
-		explicit VK_Mesh(const Renderer::Graphics::Mesh& mesh);
+		explicit VK_Mesh(const Renderer::RHI::RHI_Mesh& mesh);
 		~VK_Mesh() override;
 
 		bool Init(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue graphicsQueue) {
@@ -21,7 +21,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			return true;
 		}
 
-		void Upload(const Renderer::Graphics::Mesh& mesh) override;
+		void Upload(const Renderer::RHI::RHI_Mesh& mesh) override;
 		void Release() override;
 
 		void Bind()   const override;

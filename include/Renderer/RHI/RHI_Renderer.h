@@ -7,7 +7,7 @@
 
 #include "Api.h"
 #include "Core/GraphicsAPI.h"
-#include "Renderer/Graphics/Mesh.h"
+#include "Renderer/RHI/RHI_Mesh.h"
 #include "Renderer/RHI/RHI_ShaderCompiler.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 
@@ -25,7 +25,7 @@ namespace Nova::Core::Renderer::RHI {
     };
 
     struct NV_API RHI_DrawCommand {
-        std::shared_ptr<Renderer::Graphics::Mesh> m_Mesh;
+        std::shared_ptr<Renderer::RHI::RHI_Mesh> m_Mesh;
 
         RHI_PrimitiveTopology m_Topology = RHI_PrimitiveTopology::Triangles;
 
@@ -37,7 +37,7 @@ namespace Nova::Core::Renderer::RHI {
     };
 
     struct NV_API RHI_DrawIndexedCommand {
-        std::shared_ptr<Renderer::Graphics::Mesh> m_Mesh;
+        std::shared_ptr<Renderer::RHI::RHI_Mesh> m_Mesh;
 
         RHI_PrimitiveTopology m_Topology = RHI_PrimitiveTopology::Triangles;
         RHI_IndexType m_IndexType = RHI_IndexType::UInt32;

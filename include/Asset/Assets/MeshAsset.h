@@ -8,7 +8,7 @@
 #include "Api.h"
 #include "Asset/Asset.h"
 #include "Core/GraphicsAPI.h"
-#include "Renderer/Graphics/Mesh.h"
+#include "Renderer/RHI/RHI_Mesh.h"
 
 namespace Nova::Core::Asset::Assets {
 
@@ -55,8 +55,8 @@ namespace Nova::Core::Asset::Assets {
         MeshPrimitive GetPrimitive() const { return m_Primitive; }
         const MeshAssetDesc& GetDesc() const { return m_Desc; }
 
-        std::shared_ptr<Renderer::Graphics::Mesh> GetCPUMesh() const { return m_CPUMesh; }
-        std::shared_ptr<Renderer::Graphics::Mesh> GetGPUMesh() const { return m_GPUMesh; }
+        std::shared_ptr<Renderer::RHI::RHI_Mesh> GetCPUMesh() const { return m_CPUMesh; }
+        std::shared_ptr<Renderer::RHI::RHI_Mesh> GetGPUMesh() const { return m_GPUMesh; }
 
     private:
         bool LoadFromPath();
@@ -69,8 +69,8 @@ namespace Nova::Core::Asset::Assets {
         MeshAssetDesc m_Desc;
         MeshPrimitive m_Primitive = MeshPrimitive::Unknown;
 
-        std::shared_ptr<Renderer::Graphics::Mesh> m_CPUMesh;
-        std::shared_ptr<Renderer::Graphics::Mesh> m_GPUMesh;
+        std::shared_ptr<Renderer::RHI::RHI_Mesh> m_CPUMesh;
+        std::shared_ptr<Renderer::RHI::RHI_Mesh> m_GPUMesh;
         bool m_Loaded = false;
     };
 

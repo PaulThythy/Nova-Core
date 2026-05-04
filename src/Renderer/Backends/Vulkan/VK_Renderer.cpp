@@ -618,7 +618,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     std::shared_ptr<VK_Mesh> VK_Renderer::GetOrUploadMesh(
-        const std::shared_ptr<Renderer::Graphics::Mesh>& cpuMesh)
+        const std::shared_ptr<Renderer::RHI::RHI_Mesh>& cpuMesh)
     {
         NV_ASSERT_MSG(cpuMesh, "VK_Renderer::GetOrUploadMesh received a null mesh.");
         if (!cpuMesh)
