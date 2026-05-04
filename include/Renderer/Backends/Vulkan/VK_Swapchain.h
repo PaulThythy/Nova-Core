@@ -86,7 +86,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkBuffer GetBufInstances() const { return m_BufInstances; }
 		VkDeviceMemory GetBufInstancesMemory() const { return m_BufInstancesMemory; }
 		VkDeviceSize GetBufInstancesSize() const { return m_BufInstancesSize; }
-		VkDescriptorSet GetSceneDescriptorSet() const { return m_SceneDescriptorSet; }
+		VkDescriptorSet GetEngineDescriptorSet() const { return m_EngineDescriptorSet; }
 		VkDescriptorSet GetUserDescriptorSet() const { return m_UserDescriptorSet; }
 		const RHI::RHI_ProgramReflection& GetModelPipelineReflection() const { return m_ModelPipelineReflection; }
 
@@ -165,7 +165,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		// Pipeline
 		VkPipeline       m_ModelPipeline = VK_NULL_HANDLE;
 		VkPipelineLayout m_ModelPipelineLayout = VK_NULL_HANDLE;
-		VkDescriptorSetLayout m_SceneSetLayout = VK_NULL_HANDLE;
+		VkDescriptorSetLayout m_EngineSetLayout = VK_NULL_HANDLE;
 		VkDescriptorSetLayout m_UserSetLayout = VK_NULL_HANDLE;
 		VkBuffer         m_BufGlobals = VK_NULL_HANDLE;
 		VkDeviceMemory   m_BufGlobalsMemory = VK_NULL_HANDLE;
@@ -178,7 +178,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkBuffer         m_BufInstances = VK_NULL_HANDLE;
 		VkDeviceMemory   m_BufInstancesMemory = VK_NULL_HANDLE;
 		VkDeviceSize     m_BufInstancesSize = 0;
-		VkDescriptorSet  m_SceneDescriptorSet = VK_NULL_HANDLE;
+		VkDescriptorSet  m_EngineDescriptorSet = VK_NULL_HANDLE;
 		VkDescriptorSet  m_UserDescriptorSet = VK_NULL_HANDLE;
 		RHI::RHI_ProgramReflection m_ModelPipelineReflection{};
 

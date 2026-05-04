@@ -849,7 +849,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 			m_ModelPipelineReflection = reflForVk;
 
-			if (!CreateDescriptorSetLayoutFromReflection(m_Device, reflForVk, RHI::kEngineDescriptorSet, m_SceneSetLayout)) {
+			if (!CreateDescriptorSetLayoutFromReflection(m_Device, reflForVk, RHI::kEngineDescriptorSet, m_EngineSetLayout)) {
 				NV_LOG_WARN("CreateModelPipeline: failed to create engine set layout (reflection missing?)");
 				return;
 			}
@@ -981,8 +981,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		allocSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocSetInfo.descriptorPool = m_ImGuiDescriptorPool;
 		allocSetInfo.descriptorSetCount = 1;
-		allocSetInfo.pSetLayouts = &m_SceneSetLayout;
-		res = vkAllocateDescriptorSets(m_Device, &allocSetInfo, &m_SceneDescriptorSet);
+		allocSetInfo.pSetLayouts = &m_EngineSetLayout;
+		res = vkAllocateDescriptorSets(m_Device, &allocSetInfo, &m_EngineDescriptorSet);
 		CheckVkResult(res);
 		if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to allocate scene descriptor set"); DestroyModelPipeline(); return; }
 
@@ -1012,28 +1012,28 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		instanceBufInfo.range = instanceSize;
 		VkWriteDescriptorSet writes[4]{};
 		writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[0].dstSet = m_SceneDescriptorSet;
+		writes[0].dstSet = m_EngineDescriptorSet;
 		writes[0].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::FrameUniforms);
 		writes[0].dstArrayElement = 0;
 		writes[0].descriptorCount = 1;
 		writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		writes[0].pBufferInfo = &globalsBufInfo;
 		writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[1].dstSet = m_SceneDescriptorSet;
+		writes[1].dstSet = m_EngineDescriptorSet;
 		writes[1].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp);
 		writes[1].dstArrayElement = 0;
 		writes[1].descriptorCount = 1;
 		writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 		writes[1].pBufferInfo = &mvpBufInfo;
 		writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[2].dstSet = m_SceneDescriptorSet;
+		writes[2].dstSet = m_EngineDescriptorSet;
 		writes[2].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Instances);
 		writes[2].dstArrayElement = 0;
 		writes[2].descriptorCount = 1;
 		writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		writes[2].pBufferInfo = &instanceBufInfo;
 		writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[3].dstSet = m_SceneDescriptorSet;
+		writes[3].dstSet = m_EngineDescriptorSet;
 		writes[3].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material);
 		writes[3].dstArrayElement = 0;
 		writes[3].descriptorCount = 1;
@@ -1041,7 +1041,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		writes[3].pBufferInfo = &materialBufInfo;
 		vkUpdateDescriptorSets(m_Device, 4, writes, 0, nullptr);
 
-		VkDescriptorSetLayout setLayouts[2] = { m_SceneSetLayout, m_UserSetLayout };
+		VkDescriptorSetLayout setLayouts[2] = { m_EngineSetLayout, m_UserSetLayout };
 		const uint32_t setLayoutCount = (m_UserSetLayout != VK_NULL_HANDLE) ? 2u : 1u;
 
 		VkPipelineLayoutCreateInfo layoutInfo{};
@@ -1087,9 +1087,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			vkDestroyPipelineLayout(m_Device, m_ModelPipelineLayout, nullptr);
 			m_ModelPipelineLayout = VK_NULL_HANDLE;
 		}
-		if (m_SceneDescriptorSet != VK_NULL_HANDLE && m_ImGuiDescriptorPool != VK_NULL_HANDLE) {
-			vkFreeDescriptorSets(m_Device, m_ImGuiDescriptorPool, 1, &m_SceneDescriptorSet);
-			m_SceneDescriptorSet = VK_NULL_HANDLE;
+		if (m_EngineDescriptorSet != VK_NULL_HANDLE && m_ImGuiDescriptorPool != VK_NULL_HANDLE) {
+			vkFreeDescriptorSets(m_Device, m_ImGuiDescriptorPool, 1, &m_EngineDescriptorSet);
+			m_EngineDescriptorSet = VK_NULL_HANDLE;
 		}
 		if (m_UserDescriptorSet != VK_NULL_HANDLE && m_ImGuiDescriptorPool != VK_NULL_HANDLE) {
 			vkFreeDescriptorSets(m_Device, m_ImGuiDescriptorPool, 1, &m_UserDescriptorSet);
@@ -1104,9 +1104,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (m_BufMvpMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufMvpMemory, nullptr); m_BufMvpMemory = VK_NULL_HANDLE; }
 		if (m_BufGlobals != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufGlobals, nullptr); m_BufGlobals = VK_NULL_HANDLE; }
 		if (m_BufGlobalsMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufGlobalsMemory, nullptr); m_BufGlobalsMemory = VK_NULL_HANDLE; }
-		if (m_SceneSetLayout != VK_NULL_HANDLE) {
-			vkDestroyDescriptorSetLayout(m_Device, m_SceneSetLayout, nullptr);
-			m_SceneSetLayout = VK_NULL_HANDLE;
+		if (m_EngineSetLayout != VK_NULL_HANDLE) {
+			vkDestroyDescriptorSetLayout(m_Device, m_EngineSetLayout, nullptr);
+			m_EngineSetLayout = VK_NULL_HANDLE;
 		}
 		if (m_UserSetLayout != VK_NULL_HANDLE) {
 			vkDestroyDescriptorSetLayout(m_Device, m_UserSetLayout, nullptr);

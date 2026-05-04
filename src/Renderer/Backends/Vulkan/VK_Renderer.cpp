@@ -266,7 +266,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_VKSwapchain.GetBufInstances(),
             m_VKSwapchain.GetBufInstancesMemory(),
             m_VKSwapchain.GetBufInstancesSize(),
-            m_VKSwapchain.GetSceneDescriptorSet(),
+            m_VKSwapchain.GetEngineDescriptorSet(),
             m_VKSwapchain.GetUserDescriptorSet()
         );
         m_Shader->SetReflection(m_VKSwapchain.GetModelPipelineReflection());
@@ -1258,7 +1258,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_VKSwapchain.GetBufMaterials(),  m_VKSwapchain.GetBufMaterialsMemory(), m_VKSwapchain.GetMaterialDynamicStride(),
             m_VKSwapchain.GetBufInstances(),  m_VKSwapchain.GetBufInstancesMemory(),
             m_VKSwapchain.GetBufInstancesSize(),
-            m_VKSwapchain.GetSceneDescriptorSet(),
+            m_VKSwapchain.GetEngineDescriptorSet(),
             userSet);
         shader->SetReflection(reflForVk);
 
