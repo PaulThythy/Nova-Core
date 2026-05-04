@@ -154,10 +154,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
     }
 
-    void VK_Shaders::ApplyParameters(void* apiContext) {
-        if (!apiContext || m_PipelineLayout == VK_NULL_HANDLE) return;
-        VkCommandBuffer cmd = static_cast<VkCommandBuffer>(apiContext);
-
+    void VK_Shaders::UploadFrameUniforms() {
         RHI::FrameUniforms frameUniforms{};
         if (m_BufFrameUniforms != VK_NULL_HANDLE) {
             const auto& frameUniformsLayout = RHI::GetFrameUniformsLayout();
@@ -177,6 +174,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             }
         }
 
+        if (m_BufFrameUniformsMemory != VK_NULL_HANDLE) {
+            void* mapped = nullptr;
+            if (vkMapMemory(m_Device, m_BufFrameUniformsMemory, 0, sizeof(RHI::FrameUniforms), 0, &mapped) == VK_SUCCESS) {
+                std::memcpy(mapped, &frameUniforms, sizeof(RHI::FrameUniforms));
+                vkUnmapMemory(m_Device, m_BufFrameUniformsMemory);
+            }
+        }
+    }
+
+    void VK_Shaders::UploadMvpUniforms(VkDeviceSize& outDynamicOffsetThisDraw) {
+        outDynamicOffsetThisDraw = 0;
+
         RHI::MVP mvp{};
         if (m_BufMvp != VK_NULL_HANDLE) {
             auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj"), itVP = m_Parameters.find("viewProj"), itInvVP = m_Parameters.find("invViewProj");
@@ -186,6 +195,20 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             if (itVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itVP->second)) mvp.viewProj = std::get<glm::mat4>(itVP->second);
             if (itInvVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itInvVP->second)) mvp.invViewProj = std::get<glm::mat4>(itInvVP->second);
         }
+
+        if (m_BufMvpMemory != VK_NULL_HANDLE && m_MvpDynamicStride != 0) {
+            outDynamicOffsetThisDraw = m_MvpDynamicOffset;
+            void* mapped = nullptr;
+            if (vkMapMemory(m_Device, m_BufMvpMemory, outDynamicOffsetThisDraw, sizeof(RHI::MVP), 0, &mapped) == VK_SUCCESS) {
+                std::memcpy(mapped, &mvp, sizeof(RHI::MVP));
+                vkUnmapMemory(m_Device, m_BufMvpMemory);
+            }
+            m_MvpDynamicOffset += m_MvpDynamicStride;
+        }
+    }
+
+    void VK_Shaders::UploadMaterialUniforms(VkDeviceSize& outDynamicOffsetThisDraw) {
+        outDynamicOffsetThisDraw = 0;
 
         RHI::Material material{};
         if (m_BufMaterials != VK_NULL_HANDLE) {
@@ -206,45 +229,22 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             }
         }
 
-        // Upload frame data once per draw (cheap) via host-visible coherent memory.
-        // For per-draw data (MVP, Material), use *dynamic* uniform buffers and advance offsets
-        // so each draw sees its own snapshot.
-        if (m_BufFrameUniformsMemory != VK_NULL_HANDLE) {
-            void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_BufFrameUniformsMemory, 0, sizeof(RHI::FrameUniforms), 0, &mapped) == VK_SUCCESS) {
-                std::memcpy(mapped, &frameUniforms, sizeof(RHI::FrameUniforms));
-                vkUnmapMemory(m_Device, m_BufFrameUniformsMemory);
-            }
-        }
-
-        VkDeviceSize mvpOffsetThisDraw = 0;
-        if (m_BufMvpMemory != VK_NULL_HANDLE && m_MvpDynamicStride != 0) {
-            mvpOffsetThisDraw = m_MvpDynamicOffset;
-            void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_BufMvpMemory, mvpOffsetThisDraw, sizeof(RHI::MVP), 0, &mapped) == VK_SUCCESS) {
-                std::memcpy(mapped, &mvp, sizeof(RHI::MVP));
-                vkUnmapMemory(m_Device, m_BufMvpMemory);
-            }
-            m_MvpDynamicOffset += m_MvpDynamicStride;
-        }
-
-        VkDeviceSize materialOffsetThisDraw = 0;
         if (m_BufMaterialsMemory != VK_NULL_HANDLE && m_MaterialDynamicStride != 0) {
-            materialOffsetThisDraw = m_MaterialDynamicOffset;
+            outDynamicOffsetThisDraw = m_MaterialDynamicOffset;
             void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_BufMaterialsMemory, materialOffsetThisDraw, sizeof(RHI::Material), 0, &mapped) == VK_SUCCESS) {
+            if (vkMapMemory(m_Device, m_BufMaterialsMemory, outDynamicOffsetThisDraw, sizeof(RHI::Material), 0, &mapped) == VK_SUCCESS) {
                 std::memcpy(mapped, &material, sizeof(RHI::Material));
                 vkUnmapMemory(m_Device, m_BufMaterialsMemory);
             }
             m_MaterialDynamicOffset += m_MaterialDynamicStride;
         }
+    }
 
+    void VK_Shaders::BindDescriptorSets(VkCommandBuffer cmd, VkDeviceSize mvpDynamicOffset, VkDeviceSize materialDynamicOffset) {
         if (m_SceneDescriptorSet != VK_NULL_HANDLE) {
-            // Dynamic offsets must be provided in the order of dynamic bindings in the set layout.
-            // Here: MVP then Material.
             uint32_t dynOffsets[2] = {
-                static_cast<uint32_t>(mvpOffsetThisDraw),
-                static_cast<uint32_t>(materialOffsetThisDraw)
+                static_cast<uint32_t>(mvpDynamicOffset),
+                static_cast<uint32_t>(materialDynamicOffset)
             };
             const uint32_t dynCount =
                 (m_MvpDynamicStride != 0 && m_MaterialDynamicStride != 0) ? 2u :
@@ -254,7 +254,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
                     static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &m_SceneDescriptorSet, 2, dynOffsets);
             } else if (dynCount == 1) {
-                // If only one dynamic binding is enabled, choose the matching offset.
                 uint32_t one = (m_MvpDynamicStride != 0) ? dynOffsets[0] : dynOffsets[1];
                 vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
                     static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &m_SceneDescriptorSet, 1, &one);
@@ -264,15 +263,27 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             }
         }
 
-        // Bind user descriptor set (set 1) if present. Keep it separate so we don't have to
-        // compute a merged dynamic offset list yet (user set is typically non-dynamic).
         if (m_UserDescriptorSet != VK_NULL_HANDLE) {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
                 static_cast<uint32_t>(RHI::kUserDescriptorSet), 1, &m_UserDescriptorSet, 0, nullptr);
         }
     }
 
-    void VK_Shaders::SetInstanceData(const std::vector<RHI::Instance>& instances) {
+    void VK_Shaders::ApplyParameters(void* apiContext) {
+        if (!apiContext || m_PipelineLayout == VK_NULL_HANDLE) return;
+        VkCommandBuffer cmd = static_cast<VkCommandBuffer>(apiContext);
+
+        UploadFrameUniforms();
+
+        VkDeviceSize mvpOffsetThisDraw = 0;
+        VkDeviceSize materialOffsetThisDraw = 0;
+        UploadMvpUniforms(mvpOffsetThisDraw);
+        UploadMaterialUniforms(materialOffsetThisDraw);
+
+        BindDescriptorSets(cmd, mvpOffsetThisDraw, materialOffsetThisDraw);
+    }
+
+    void VK_Shaders::UploadInstanceBuffer(const std::vector<RHI::Instance>& instances) {
         if (m_Device == VK_NULL_HANDLE || m_BufInstancesMemory == VK_NULL_HANDLE || instances.empty())
             return;
 

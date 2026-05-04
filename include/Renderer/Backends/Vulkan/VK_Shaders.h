@@ -47,7 +47,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkShaderModule m_Module = VK_NULL_HANDLE;
     };
 
-    /** Vulkan pipeline + layout wrapper; derives from RHI_Shaders for SetParameter / ApplyParameters (push constants). */
+    /** Vulkan pipeline + layout wrapper; derives from RHI_Shaders for SetParameter / ApplyParameters. */
     class NV_API VK_Shaders final : public RHI::RHI_Shaders {
     public:
         VK_Shaders() = default;
@@ -56,7 +56,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         /** Set pipeline and layout (owned by swapchain/renderer). Call after pipeline creation. */
         void SetPipeline(VkPipeline pipeline, VkPipelineLayout layout);
 
-        /** Set scene buffers (frame uniforms / MVP / materials / instances) and descriptor set for ApplyParameters. */
+        /** Scene buffers and descriptor sets used by UploadFrameUniforms / UploadMvpUniforms / UploadMaterialUniforms. */
         void SetSceneBuffers(VkDevice device,
             VkBuffer bufFrameUniforms, VkDeviceMemory bufFrameUniformsMemory,
             VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride,
@@ -67,7 +67,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
-        void SetInstanceData(const std::vector<RHI::Instance>& instances) override;
         void* GetNativeHandle() const override;
 
         /** Reset per-draw dynamic UBO offsets at frame start. */
@@ -87,6 +86,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     private:
         bool ApplyResourceBinding(const RHI::RHI_BindingInfo& info, const RHI::RHI_ResourceBinding& value) override;
+
+        /** Fill and map host-visible frame uniform block from m_Parameters. */
+        void UploadFrameUniforms();
+        /** Fill and map dynamic MVP region from m_Parameters; advances m_MvpDynamicOffset when applicable. */
+        void UploadMvpUniforms(VkDeviceSize& outDynamicOffsetThisDraw);
+        /** Fill and map dynamic material region from m_Parameters; advances m_MaterialDynamicOffset when applicable. */
+        void UploadMaterialUniforms(VkDeviceSize& outDynamicOffsetThisDraw);
+        /** Bind engine (scene) and user descriptor sets with correct dynamic offsets. */
+        void BindDescriptorSets(VkCommandBuffer cmd, VkDeviceSize mvpDynamicOffset, VkDeviceSize materialDynamicOffset);
+        /** Copy instance array into the instance buffer. */
+        void UploadInstanceBuffer(const std::vector<RHI::Instance>& instances);
 
         VkPipeline m_Pipeline = VK_NULL_HANDLE;
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;

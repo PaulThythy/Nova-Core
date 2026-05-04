@@ -40,7 +40,6 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
 
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
-        void SetInstanceData(const std::vector<RHI::Instance>& instances) override;
         void* GetNativeHandle() const override;
 
         GLuint GetProgram() const { return m_Program; }
@@ -51,8 +50,19 @@ namespace Nova::Core::Renderer::Backends::OpenGL {
         bool ApplyResourceBinding(const RHI::RHI_BindingInfo& info, const RHI::RHI_ResourceBinding& value) override;
 
         GLint GetLocation(const std::string& name);
-        void UploadMaterialUBO();
-        void UploadFrameUniformsUBO();
+
+        /** Bind user UBO/SSBO/textures/samplers from the resource set (set/binding → unit). */
+        void BindUserResources();
+        /** Upload engine MVP block from m_Parameters. */
+        void UploadMvpUniforms();
+        /** Upload engine material block from m_Parameters. */
+        void UploadMaterialUniforms();
+        /** Upload engine per-frame block from m_Parameters. */
+        void UploadFrameUniforms();
+        /** Upload remaining parameters as standalone program uniforms. */
+        void UploadStandaloneUniforms();
+        /** Upload instance SSBO from the given array. */
+        void UploadInstanceBuffer(const std::vector<RHI::Instance>& instances);
 
         GLuint m_Program{ 0 };
         GLuint m_BufMvp{ 0 };
