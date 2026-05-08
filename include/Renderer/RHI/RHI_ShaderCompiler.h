@@ -14,6 +14,11 @@
 
 namespace Nova::Core::Renderer::RHI {
 
+    enum class RHI_ShaderBinaryFormat : uint8_t {
+        Unknown = 0,
+        Spirv,
+    };
+
     struct NV_API RHI_ShaderCompileInput {
         std::filesystem::path m_File;
         RHI_ShaderStage m_Stage = RHI_ShaderStage::Unknown;
@@ -36,7 +41,8 @@ namespace Nova::Core::Renderer::RHI {
         RHI_ShaderStage m_Stage = RHI_ShaderStage::Unknown;
         GraphicsAPI m_TargetApi = GraphicsAPI::Vulkan;
 
-        std::vector<uint32_t> m_Spirv;
+        RHI_ShaderBinaryFormat m_Format = RHI_ShaderBinaryFormat::Unknown;
+        std::vector<uint8_t> m_Binary;
         std::string m_Source;
         std::string m_Log;
 

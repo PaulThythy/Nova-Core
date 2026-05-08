@@ -748,8 +748,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (!fragAsset->Compile()) { NV_LOG_WARN(("FS compile failed:\n" + fragAsset->GetLastLog()).c_str()); return; }
 
 		VK_ShaderModule vertModule, fragModule;
-		if (!vertModule.Create(m_Device, vertAsset->GetSpirv()) ||
-			!fragModule.Create(m_Device, fragAsset->GetSpirv()))
+		if (!vertModule.Create(m_Device, vertAsset->GetBinary()) ||
+			!fragModule.Create(m_Device, fragAsset->GetBinary()))
 		{
 			NV_LOG_WARN("CreateModelPipeline: failed to create shader modules");
 			return;

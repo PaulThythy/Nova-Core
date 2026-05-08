@@ -29,7 +29,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return *this;
         }
 
-        bool Create(VkDevice device, const std::vector<uint32_t>& spirv);
+        bool Create(VkDevice device, const std::vector<uint8_t>& spirvBytes);
         void Destroy();
 
         VkShaderModule GetModule() const { return m_Module; }

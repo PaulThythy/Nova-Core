@@ -1,13 +1,13 @@
 // Engine uniform layout shared with C++ (see RHI_ShaderUniforms.h).
 //
-// All engine resources are grouped in one ParameterBlock: Slang assigns bindings
-// 0, 1, 2, … in field order inside descriptor set 0 — no [[vk::binding]] needed.
+// This global `ParameterBlock` uses Slang automatic layout only: no [[vk::binding]].
+// As the first (and usually only) top-level block in engine shaders, it maps to Vulkan
+// set 0; fields inside `NovaEngine` get bindings 0, 1, 2, … in field order.
 //
-// Custom shaders (e.g. in Nova-App): #include this file to get `nova`, then add
-// your own resources in a *second* descriptor set, e.g.:
+// Custom shaders: #include this file, then declare a second block *after* `nova`
+// (same file or later in link order) so it gets the next descriptor space (set 1), e.g.:
 //   struct MyData { Texture2D albedo; }
-//   [[vk::binding(0, 1)]] ParameterBlock<MyData> user;
-// Bind set 0 = engine (this file), set 1 = your ParameterBlock in your pipeline.
+//   ParameterBlock<MyData> user;
 //
 // Do not `import glsl` here: the GLSL module reserves descriptor set 0 for its own
 // resources, which would shift this ParameterBlock to set 1 and break Vulkan layouts
@@ -52,4 +52,4 @@ struct NovaEngine {
     ConstantBuffer<Material> material;
 };
 
-[[vk::binding(0, 0)]] ParameterBlock<NovaEngine> nova;
+ParameterBlock<NovaEngine> nova;

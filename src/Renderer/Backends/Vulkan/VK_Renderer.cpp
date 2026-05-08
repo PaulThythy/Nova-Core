@@ -1064,8 +1064,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkDevice device = m_VKDevice.GetDevice();
 
         VK_ShaderModule vertModule, fragModule;
-        if (!vertModule.Create(device, vertOut.m_Spirv) ||
-            !fragModule.Create(device, fragOut.m_Spirv))
+        if (!vertModule.Create(device, vertOut.m_Binary) ||
+            !fragModule.Create(device, fragOut.m_Binary))
         {
             NV_LOG_WARN("CreateFullscreenShader: failed to create shader modules");
             return nullptr;

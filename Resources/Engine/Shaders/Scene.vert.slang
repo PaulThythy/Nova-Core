@@ -1,19 +1,21 @@
 #include "NovaUniforms.slang"
 
+// Vertex locations and VS->FS varyings: Slang assigns SPIR-V locations in field order
+// (must match VkVertexInputAttributeDescription order in C++ and PSIn field order).
 struct VSIn {
-    [[vk::location(0)]] float3 a_Position;
-    [[vk::location(1)]] float3 a_Normal;
-    [[vk::location(2)]] float2 a_TexCoord;
-    [[vk::location(3)]] float3 a_Color;
-    [[vk::location(4)]] float3 a_Tangent;
-    [[vk::location(5)]] float3 a_Bitangent;
+    float3 a_Position;
+    float3 a_Normal;
+    float2 a_TexCoord;
+    float3 a_Color;
+    float3 a_Tangent;
+    float3 a_Bitangent;
 };
 
 struct VSOut {
     float4 sv_position : SV_Position;
-    [[vk::location(0)]] float3 v_Normal;
-    [[vk::location(1)]] float3 v_Pos;
-    [[vk::location(2)]] float4 v_Color;
+    float3 v_Normal;
+    float3 v_Pos;
+    float4 v_Color;
 };
 
 [shader("vertex")]

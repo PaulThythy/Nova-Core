@@ -1,9 +1,10 @@
 #include "NovaUniforms.slang"
 
+// Field order and types must match Scene.vert.slang VSOut (excluding SV_Position).
 struct PSIn {
-    [[vk::location(0)]] float3 v_Normal;
-    [[vk::location(1)]] float3 v_Pos;
-    [[vk::location(2)]] float4 v_Color;
+    float3 v_Normal;
+    float3 v_Pos;
+    float4 v_Color;
 };
 
 static const float3 lightPosition = float3(0.0, 4.0, 0.0);

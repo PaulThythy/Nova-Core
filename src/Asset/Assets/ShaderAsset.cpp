@@ -18,8 +18,12 @@ namespace Nova::Core::Asset::Assets {
         }
     }
 
-    const std::vector<uint32_t>& ShaderAsset::GetSpirv() const {
-        return GetSpirv(m_LastCompiledApi);
+    const std::vector<uint8_t>& ShaderAsset::GetBinary() const {
+        return GetBinary(m_LastCompiledApi);
+    }
+
+    RHI::RHI_ShaderBinaryFormat ShaderAsset::GetBinaryFormat() const {
+        return GetBinaryFormat(m_LastCompiledApi);
     }
 
     const std::string& ShaderAsset::GetSource() const {
@@ -30,9 +34,14 @@ namespace Nova::Core::Asset::Assets {
         return GetReflection(m_LastCompiledApi);
     }
 
-    const std::vector<uint32_t>& ShaderAsset::GetSpirv(GraphicsAPI api) const {
+    const std::vector<uint8_t>& ShaderAsset::GetBinary(GraphicsAPI api) const {
         (void)api;
-        return m_SpirvVulkan;
+        return m_BinaryVulkan;
+    }
+
+    RHI::RHI_ShaderBinaryFormat ShaderAsset::GetBinaryFormat(GraphicsAPI api) const {
+        (void)api;
+        return m_FormatVulkan;
     }
 
     const std::string& ShaderAsset::GetSource(GraphicsAPI api) const {
@@ -93,7 +102,8 @@ namespace Nova::Core::Asset::Assets {
             return false;
         }
 
-        m_SpirvVulkan = std::move(out.m_Spirv);
+        m_FormatVulkan = out.m_Format;
+        m_BinaryVulkan = std::move(out.m_Binary);
         m_SourceVulkan = std::move(out.m_Source);
         m_ReflectionVulkan = std::move(out.m_Reflection);
         m_CompiledVulkan = true;

@@ -511,7 +511,7 @@ namespace Nova::Core::Renderer::RHI {
     bool GetLinkedSpirv(
         slang::IComponentType* linked,
         std::string& log,
-        std::vector<uint32_t>& outSpirv,
+        std::vector<uint8_t>& outBinary,
         std::string& outFailureMessage) {
         Slang::ComPtr<ISlangBlob> codeBlob;
         Slang::ComPtr<ISlangBlob> diagBlob;
@@ -530,8 +530,8 @@ namespace Nova::Core::Renderer::RHI {
             return false;
         }
 
-        outSpirv.resize(byteSize / sizeof(uint32_t));
-        std::memcpy(outSpirv.data(), bytes, byteSize);
+        outBinary.resize(byteSize);
+        std::memcpy(outBinary.data(), bytes, byteSize);
         return true;
     }
 
@@ -644,10 +644,11 @@ namespace Nova::Core::Renderer::RHI {
         }
 
         std::string failMsg;
-        if (!GetLinkedSpirv(linked.get(), log, out.m_Spirv, failMsg)) {
+        if (!GetLinkedSpirv(linked.get(), log, out.m_Binary, failMsg)) {
             out.m_Log = std::move(failMsg);
             return false;
         }
+        out.m_Format = RHI_ShaderBinaryFormat::Spirv;
 
         // Reflection: best-effort (failure should not fail compilation).
         ExtractReflectionFromLinked(linked.get(), input.m_Stage, out.m_Reflection);
@@ -732,8 +733,9 @@ namespace Nova::Core::Renderer::RHI {
             return false;
         }
 
-        out.m_Spirv.resize(size / sizeof(uint32_t));
-        file.read(reinterpret_cast<char*>(out.m_Spirv.data()), static_cast<std::streamsize>(size));
+        out.m_Binary.resize(size);
+        file.read(reinterpret_cast<char*>(out.m_Binary.data()), static_cast<std::streamsize>(size));
+        out.m_Format = RHI_ShaderBinaryFormat::Spirv;
 
         // Reflection is optional, but try to load it.
         (void)LoadReflectionCache(dir, hash, out.m_Reflection);
@@ -749,9 +751,8 @@ namespace Nova::Core::Renderer::RHI {
         if (!file.is_open()) {
             return;
         }
-        file.write(
-            reinterpret_cast<const char*>(result.m_Spirv.data()),
-            static_cast<std::streamsize>(result.m_Spirv.size() * sizeof(uint32_t)));
+        file.write(reinterpret_cast<const char*>(result.m_Binary.data()),
+            static_cast<std::streamsize>(result.m_Binary.size()));
 
         SaveReflectionCache(dir, hash, result.m_Reflection);
     }

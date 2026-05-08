@@ -8,16 +8,16 @@
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
     // --- VK_ShaderModule ---
-    bool VK_ShaderModule::Create(VkDevice device, const std::vector<uint32_t>& spirv) {
+    bool VK_ShaderModule::Create(VkDevice device, const std::vector<uint8_t>& spirvBytes) {
         Destroy();
 
-        if (device == VK_NULL_HANDLE || spirv.empty())
+        if (device == VK_NULL_HANDLE || spirvBytes.empty() || (spirvBytes.size() % 4) != 0)
             return false;
 
         VkShaderModuleCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        createInfo.codeSize = spirv.size() * sizeof(uint32_t);
-        createInfo.pCode = spirv.data();
+        createInfo.codeSize = spirvBytes.size();
+        createInfo.pCode = reinterpret_cast<const uint32_t*>(spirvBytes.data());
 
         VkResult res = vkCreateShaderModule(device, &createInfo, nullptr, &m_Module);
         if (res != VK_SUCCESS) {
@@ -189,11 +189,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         RHI::MVP mvp{};
         if (m_BufMvp != VK_NULL_HANDLE) {
             auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj"), itVP = m_Parameters.find("viewProj"), itInvVP = m_Parameters.find("invViewProj");
-            if (itM != m_Parameters.end() && std::holds_alternative<glm::mat4>(itM->second)) mvp.model = std::get<glm::mat4>(itM->second);
-            if (itV != m_Parameters.end() && std::holds_alternative<glm::mat4>(itV->second)) mvp.view = std::get<glm::mat4>(itV->second);
-            if (itP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itP->second)) mvp.proj = std::get<glm::mat4>(itP->second);
-            if (itVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itVP->second)) mvp.viewProj = std::get<glm::mat4>(itVP->second);
-            if (itInvVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itInvVP->second)) mvp.invViewProj = std::get<glm::mat4>(itInvVP->second);
+            if (itM != m_Parameters.end() && std::holds_alternative<glm::mat4>(itM->second)) mvp.m_Model = std::get<glm::mat4>(itM->second);
+            if (itV != m_Parameters.end() && std::holds_alternative<glm::mat4>(itV->second)) mvp.m_View = std::get<glm::mat4>(itV->second);
+            if (itP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itP->second)) mvp.m_Proj = std::get<glm::mat4>(itP->second);
+            if (itVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itVP->second)) mvp.m_ViewProj = std::get<glm::mat4>(itVP->second);
+            if (itInvVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itInvVP->second)) mvp.m_InvViewProj = std::get<glm::mat4>(itInvVP->second);
         }
 
         if (m_BufMvpMemory != VK_NULL_HANDLE && m_MvpDynamicStride != 0) {
