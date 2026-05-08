@@ -67,7 +67,6 @@ namespace Nova::Core::Renderer::RHI {
 
         /**
          * Call after all draws targeting the editor viewport / offscreen target, before ImGui.
-         * OpenGL: binds the default framebuffer and sets glViewport to the window size so UI draws correctly.
          */
         virtual void PrepareForImGui() = 0;
 
@@ -80,7 +79,6 @@ namespace Nova::Core::Renderer::RHI {
 
         // Returns an API-specific ImGui texture identifier for the current viewport
         // render target, or nullptr if the renderer does not expose one.
-        // OpenGL: typically a GLuint cast to ImTextureID.
         // Vulkan: typically a VkDescriptorSet cast to ImTextureID.
         virtual void* GetViewportTextureID() const = 0;
 

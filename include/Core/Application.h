@@ -5,14 +5,6 @@
 #include <vector>
 #include <memory>
 
-#if defined(IMGUI_IMPL_OPENGL_ES2)
-//#include <SDL3/SDL_opengles2.h>
-#else
-//#include <SDL3/SDL_opengl.h>
-#endif
-
-#include <glad/gl.h>
-
 #include "Api.h"
 #include "Core/Assert.h"
 #include "Core/Window.h"

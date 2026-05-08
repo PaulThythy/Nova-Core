@@ -14,9 +14,6 @@ target_sources(Nova-Core PRIVATE ${SOURCES} ${HEADERS})
 # Match VS filters to directory structure on disk
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${SOURCES} ${HEADERS})
 
-# OpenGL
-find_package(OpenGL REQUIRED)
-
 # Vulkan
 find_package(Vulkan REQUIRED)
 target_include_directories(Nova-Core PUBLIC ${Vulkan_INCLUDE_DIRS})
@@ -51,7 +48,6 @@ set(IMGUI_SOURCES
 )
 set(IMGUI_BACKENDS_SOURCES
     ${IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
     ${IMGUI_DIR}/backends/imgui_impl_sdlrenderer3.cpp
     ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
 
@@ -73,10 +69,6 @@ target_include_directories(imguizmo PUBLIC
   ${IMGUIZMO_DIR}
 )
 target_link_libraries(imguizmo PUBLIC imgui)
-
-# glad 
-add_library(glad STATIC vendors/glad/src/gl.c)
-target_include_directories(glad PUBLIC vendors/glad/include)
 
 # entt
 set(ENTT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/entt)
@@ -129,13 +121,11 @@ endif()
 
 # linking
 target_link_libraries(Nova-Core PUBLIC
-    OpenGL::GL
     Vulkan::Vulkan
     SDL3::SDL3
     glm::glm
     imgui
     imguizmo
-    glad
     EnTT::EnTT
     slang
 )

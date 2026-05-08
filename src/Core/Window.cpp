@@ -5,7 +5,7 @@
 
 namespace Nova::Core {
 
-    Window::Window() : m_Desc{}, m_Window(nullptr), m_GLContext(nullptr), m_GLSLVersion(nullptr) {}
+    Window::Window() : m_Desc{}, m_Window(nullptr) {}
 
     bool Window::Create(const WindowDesc& desc) {
         m_Desc = desc;
@@ -15,49 +15,9 @@ namespace Nova::Core {
             NV_LOG_FATAL(std::string("SDL_Init failed: ") + SDL_GetError());
             return false;
         }
-            
-            // Decide GL+GLSL versions
-        #if defined(IMGUI_IMPL_OPENGL_ES2)
-            // GL ES 2.0 + GLSL 100 (WebGL 1.0)
-            m_GLSLVersion = "#version 100";
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-        #elif defined(IMGUI_IMPL_OPENGL_ES3)
-            // GL ES 3.0 + GLSL 300 es (WebGL 2.0)
-            m_GLSLVersion = "#version 300 es";
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-        #elif defined(__APPLE__)
-            // GL 3.2 Core + GLSL 150
-            m_GLSLVersion = "#version 150";
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-        #else
-            // GL 3.0 + GLSL 130
-            m_GLSLVersion = "#version 130";
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-        #endif
-            // other flags
-            SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-            SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-            SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-            SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
-
-            // If you want a forward-compatible context on macOS:
-            // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
 
         // Build window flags.
         Uint32 flags = 0;
-        if (m_Desc.m_GraphicsAPI == GraphicsAPI::OpenGL)  flags |= SDL_WINDOW_OPENGL;
         if (m_Desc.m_GraphicsAPI == GraphicsAPI::Vulkan)  flags |= SDL_WINDOW_VULKAN;
         if (m_Desc.m_Resizable) flags |= SDL_WINDOW_RESIZABLE;
         if (m_Desc.m_Maximized) flags |= SDL_WINDOW_MAXIMIZED;
@@ -70,24 +30,9 @@ namespace Nova::Core {
         }
         SDL_ShowWindow(m_Window);
 
-        if (m_Desc.m_GraphicsAPI == GraphicsAPI::OpenGL) {
-            m_GLContext = SDL_GL_CreateContext(m_Window);
-            if (!m_GLContext) {
-                NV_LOG_FATAL(std::string("SDL_GL_CreateContext failed: ") + SDL_GetError());
-                Destroy();
-                return false;
-            }
-            MakeCurrent();
 
-            if (!gladLoadGL((GLADloadfunc)SDL_GL_GetProcAddress)) {
-                NV_LOG_FATAL("Failed to initialize GLAD");
-                Destroy();
-                return false;
-            }
 
-            SetVSync(m_Desc.m_VSync);
-
-        } else if (m_Desc.m_GraphicsAPI == GraphicsAPI::SDLRenderer) {
+        if (m_Desc.m_GraphicsAPI == GraphicsAPI::SDLRenderer) {
             m_Renderer = SDL_CreateRenderer(m_Window, nullptr);
             if (!m_Renderer) {
                 NV_LOG_FATAL(std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
@@ -101,29 +46,17 @@ namespace Nova::Core {
     }
 
     void Window::Destroy() {
-        if (m_GLContext){ SDL_GL_DestroyContext(m_GLContext);}
         if (m_Window)   { SDL_DestroyWindow(m_Window); m_Window = nullptr; }
         if (m_Renderer) { SDL_DestroyRenderer(m_Renderer); m_Renderer = nullptr; }
 
         SDL_Quit();
     }
 
-    void Window::MakeCurrent() {
-        if (m_Window && m_GLContext) {
-            SDL_GL_MakeCurrent(m_Window, m_GLContext);
-        }
-    }
-
     void Window::SetVSync(bool enabled) {
-        if (!m_GLContext) return;
-        SDL_GL_SetSwapInterval(enabled ? 1 : 0);
-        m_Desc.m_VSync = enabled;
-    }
-
-    void Window::SwapBuffers() {
-        if (m_Window && m_GLContext) {
-            SDL_GL_SwapWindow(m_Window);
+        if (m_Renderer) {
+            SDL_SetRenderVSync(m_Renderer, enabled ? 1 : 0);
         }
+        m_Desc.m_VSync = enabled;
     }
 
     void Window::SetTitle(const char* title) {

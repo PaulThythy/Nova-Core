@@ -37,16 +37,12 @@ namespace Nova::Core::Asset::Assets {
         Nova::Core::Renderer::RHI::RHI_ShaderCompileInput m_Input;
 
         bool m_CompiledVulkan = false;
-        bool m_CompiledOpenGL = false;
 
         std::vector<uint32_t> m_SpirvVulkan;
-        std::vector<uint32_t> m_SpirvOpenGL;
 
         std::string m_SourceVulkan;
-        std::string m_SourceOpenGL;
 
         Nova::Core::Renderer::RHI::RHI_ProgramReflection m_ReflectionVulkan{};
-        Nova::Core::Renderer::RHI::RHI_ProgramReflection m_ReflectionOpenGL{};
 
         Nova::Core::GraphicsAPI m_LastCompiledApi = Nova::Core::GraphicsAPI::Vulkan;
         std::string m_LastLog;

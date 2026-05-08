@@ -4,7 +4,6 @@
 #include "Core/Log.h"
 
 #include "Renderer/RHI/RHI_Mesh.h"
-#include "Renderer/Backends/OpenGL/GL_Mesh.h"
 #include "Renderer/Backends/Vulkan/VK_Mesh.h"
 
 namespace Nova::Core::Asset::Assets {
@@ -126,12 +125,6 @@ namespace Nova::Core::Asset::Assets {
         if (!m_CPUMesh)
             return false;
 
-        if (api == GraphicsAPI::OpenGL) {
-            auto glMesh = std::make_shared<Renderer::Backends::OpenGL::GL_Mesh>(*m_CPUMesh);
-            glMesh->Upload(*m_CPUMesh);
-            m_GPUMesh = std::move(glMesh);
-            return true;
-        }
         if (api == GraphicsAPI::Vulkan) {
             auto vkMesh = std::make_shared<Renderer::Backends::Vulkan::VK_Mesh>(*m_CPUMesh);
             // vkMesh->Upload(*m_CPUMesh); deferred because Vulkan mesh upload requires a live device.

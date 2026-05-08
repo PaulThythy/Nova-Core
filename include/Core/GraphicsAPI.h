@@ -4,7 +4,6 @@
 namespace Nova::Core {
     enum class GraphicsAPI {
         None = 0, 
-        OpenGL, 
         Vulkan,
         SDLRenderer
     };

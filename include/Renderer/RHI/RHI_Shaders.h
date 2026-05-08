@@ -55,11 +55,11 @@ namespace Nova::Core::Renderer::RHI {
         /** Apply `Resources()` to the backend shader object. */
         bool CommitResources() { return m_Resources.Apply(this); }
 
-        /** Bind the shader for drawing (e.g. glUseProgram / vkCmdBindPipeline). apiContext: GL = nullptr, VK = VkCommandBuffer*. */
+        /** Bind the shader for drawing (e.g. vkCmdBindPipeline). apiContext: Vulkan = VkCommandBuffer*. */
         virtual void Bind(void* apiContext = nullptr) = 0;
         /**
          * Upload all shader parameters for the current draw (engine UBOs, user bindings, etc.).
-         * apiContext: OpenGL = nullptr, Vulkan = VkCommandBuffer*.
+         * apiContext: Vulkan = VkCommandBuffer*.
          */
         virtual void ApplyParameters(void* apiContext = nullptr) = 0;
         /** Backend-specific handle (e.g. GL program id, VkPipeline). */

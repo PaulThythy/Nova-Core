@@ -31,15 +31,18 @@ namespace Nova::Core::Asset::Assets {
     }
 
     const std::vector<uint32_t>& ShaderAsset::GetSpirv(GraphicsAPI api) const {
-        return (api == GraphicsAPI::OpenGL) ? m_SpirvOpenGL : m_SpirvVulkan;
+        (void)api;
+        return m_SpirvVulkan;
     }
 
     const std::string& ShaderAsset::GetSource(GraphicsAPI api) const {
-        return (api == GraphicsAPI::OpenGL) ? m_SourceOpenGL : m_SourceVulkan;
+        (void)api;
+        return m_SourceVulkan;
     }
 
     const RHI::RHI_ProgramReflection& ShaderAsset::GetReflection(GraphicsAPI api) const {
-        return (api == GraphicsAPI::OpenGL) ? m_ReflectionOpenGL : m_ReflectionVulkan;
+        (void)api;
+        return m_ReflectionVulkan;
     }
 
     bool ShaderAsset::Compile() {
@@ -53,11 +56,12 @@ namespace Nova::Core::Asset::Assets {
     }
 
     bool ShaderAsset::CompileInternal(GraphicsAPI api, bool force) {
-        if (api == GraphicsAPI::Vulkan && m_CompiledVulkan && !force) {
+        if (api != GraphicsAPI::Vulkan) {
+            m_LastLog = "ShaderAsset::CompileInternal: la compilation de shaders n'est supportée que pour Vulkan (OpenGL retiré).";
             m_LastCompiledApi = api;
-            return true;
+            return false;
         }
-        if (api == GraphicsAPI::OpenGL && m_CompiledOpenGL && !force) {
+        if (api == GraphicsAPI::Vulkan && m_CompiledVulkan && !force) {
             m_LastCompiledApi = api;
             return true;
         }
@@ -80,31 +84,19 @@ namespace Nova::Core::Asset::Assets {
         if (api == GraphicsAPI::Vulkan) {
             opts.m_Defines.emplace_back("NOVA_VULKAN", "1");
         }
-        else {
-            opts.m_Defines.emplace_back("NOVA_OPENGL", "1");
-        }
 
         RHI::RHI_ShaderCompileResult out = RHI::RHI_ShaderCompiler::Compile(opts);
 
         m_LastLog = out.m_Log;
         if (!out.m_Success) {
             if (api == GraphicsAPI::Vulkan) m_CompiledVulkan = false;
-            if (api == GraphicsAPI::OpenGL) m_CompiledOpenGL = false;
             return false;
         }
 
-        if (api == GraphicsAPI::Vulkan) {
-            m_SpirvVulkan = std::move(out.m_Spirv);
-            m_SourceVulkan = std::move(out.m_Source);
-            m_ReflectionVulkan = std::move(out.m_Reflection);
-            m_CompiledVulkan = true;
-        }
-        else {
-            m_SpirvOpenGL = std::move(out.m_Spirv);
-            m_SourceOpenGL = std::move(out.m_Source);
-            m_ReflectionOpenGL = std::move(out.m_Reflection);
-            m_CompiledOpenGL = true;
-        }
+        m_SpirvVulkan = std::move(out.m_Spirv);
+        m_SourceVulkan = std::move(out.m_Source);
+        m_ReflectionVulkan = std::move(out.m_Reflection);
+        m_CompiledVulkan = true;
 
         m_Input.m_Stage = out.m_Stage;
         m_LastCompiledApi = api;

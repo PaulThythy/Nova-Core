@@ -47,12 +47,6 @@ namespace Nova::Core {
 
         m_GraphicsAPI = api;
         switch(m_GraphicsAPI) {
-            case GraphicsAPI::OpenGL:
-                ImGui_ImplSDL3_InitForOpenGL(m_Window.GetSDLWindow(), m_Window.GetGLContext());
-                ImGui_ImplOpenGL3_Init(m_Window.GetGLSLVersion());
-                m_IsRendererInitialized = true;
-                NV_LOG_INFO("ImGui OpenGL3 backend initialized");
-                break;
             case GraphicsAPI::SDLRenderer:
                 ImGui_ImplSDL3_InitForSDLRenderer(m_Window.GetSDLWindow(), m_Window.GetSDLRenderer());
                 ImGui_ImplSDLRenderer3_Init(m_Window.GetSDLRenderer());
@@ -72,9 +66,6 @@ namespace Nova::Core {
     void ImGuiLayer::DestroyImGuiBackend(GraphicsAPI api) {
         if(m_IsRendererInitialized) {
             switch (api) {
-                case GraphicsAPI::OpenGL:
-                    ImGui_ImplOpenGL3_Shutdown();
-                    break;
                 case GraphicsAPI::SDLRenderer:
                     ImGui_ImplSDLRenderer3_Shutdown();
                     break;
@@ -131,9 +122,6 @@ namespace Nova::Core {
         }
 
         switch (m_GraphicsAPI) {
-            case GraphicsAPI::OpenGL:
-                ImGui_ImplOpenGL3_NewFrame();
-                break;
             case GraphicsAPI::SDLRenderer:
                 ImGui_ImplSDLRenderer3_NewFrame();
                 break;
@@ -163,19 +151,6 @@ namespace Nova::Core {
         ImGui::Render();
 
         switch (m_GraphicsAPI) {
-            case GraphicsAPI::OpenGL: {
-                ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-                if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-                    SDL_Window*   backup_window   = SDL_GL_GetCurrentWindow();
-                    SDL_GLContext backup_context  = SDL_GL_GetCurrentContext();
-                    ImGui::UpdatePlatformWindows();
-                    ImGui::RenderPlatformWindowsDefault();
-                    SDL_GL_MakeCurrent(backup_window, backup_context);
-                }
-                break;
-            }
-
             case GraphicsAPI::SDLRenderer: {
                 SDL_Renderer* renderer = m_Window.GetSDLRenderer();
                 SDL_SetRenderScale(renderer,

@@ -133,14 +133,7 @@ namespace Nova::Core {
             float dt = (float)((now - prev) / freq);
             prev = now;
 
-            if (m_Window->GetGLContext()) {
-                m_Window->MakeCurrent();
-                int w, h;
-                m_Window->GetWindowSize(w, h);
-                glViewport(0, 0, w, h);
-                glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            } else if (m_Window->GetSDLRenderer()) {
+            if (m_Window->GetSDLRenderer()) {
                 SDL_Renderer* r = m_Window->GetSDLRenderer();
                 SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
                 SDL_RenderClear(r);
@@ -171,9 +164,7 @@ namespace Nova::Core {
 
             m_LayerStack.ProcessPendingTransitions();
 
-            if (m_Window->GetGLContext()) {
-                m_Window->SwapBuffers();
-            } else if (m_Window->GetSDLRenderer()) {
+            if (m_Window->GetSDLRenderer()) {
                 m_Window->PresentRenderer();
             }
         }
