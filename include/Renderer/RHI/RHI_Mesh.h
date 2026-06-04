@@ -32,8 +32,8 @@ namespace Nova::Core::Renderer::RHI {
 		static std::shared_ptr<RHI_Mesh> CreateCube(float halfExtent = 0.5f);
 		static std::shared_ptr<RHI_Mesh> CreateSphere(float radius = 0.5f, int latitudeSegments = 16, int longitudeSegments = 32);
 		static std::shared_ptr<RHI_Mesh> CreateCylinder(float radius = 0.5f, float height = 1.0f, int radialSegments = 32, int heightSegments = 1);
-		static std::shared_ptr<RHI_Mesh> CreateCapsule(float radius = 0.5f, float cylinderHeight = 1.0f, int radialSegments = 32, int heightSegments = 1, int hemisphereRings = 8);
-		//static std::shared_ptr<RHI_Mesh> CreateTorus();
+		static std::shared_ptr<RHI_Mesh> CreateCapsule(float radius = 0.5f, float height = 1.0f, int radialSegments = 32, int heightSegments = 1, int hemisphereRings = 8);
+		static std::shared_ptr<RHI_Mesh> CreateTorus(float majorRadius = 0.5f, float minorRadius = 0.2f, int majorSegments = 32, int minorSegments = 16);
 
 		std::vector<Graphics::Vertex> m_Vertices;
 		std::vector<uint32_t>	m_Indices;

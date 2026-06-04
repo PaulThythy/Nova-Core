@@ -18,7 +18,8 @@ namespace Nova::Core::Asset::Assets {
         Cube,
         Sphere,
         Cylinder,
-        Capsule
+        Capsule,
+        Torus
     };
 
     struct NV_API MeshAssetDesc {
@@ -41,6 +42,12 @@ namespace Nova::Core::Asset::Assets {
 
         // Capsule
         int m_HemisphereRings = 8;
+
+        // Torus
+        float m_MinorRadius = 0.2f; // tube radius
+        float m_MajorRadius = 0.5f; // distance from center to tube center
+        int m_MajorSegments = 32; // segments around the major radius
+        int m_MinorSegments = 16; // segments around the minor radius
     };
 
     class NV_API MeshAsset final : public Asset {

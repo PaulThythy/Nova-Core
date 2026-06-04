@@ -74,6 +74,7 @@ namespace Nova::Core::Asset::Assets {
         if (name == "Sphere")  return MeshPrimitive::Sphere;
         if (name == "Cylinder")return MeshPrimitive::Cylinder;
         if (name == "Capsule") return MeshPrimitive::Capsule;
+        if (name == "Torus")   return MeshPrimitive::Torus;
         return MeshPrimitive::Unknown;
     }
 
@@ -109,11 +110,27 @@ namespace Nova::Core::Asset::Assets {
                 m_Desc.m_LongitudeSegments);
             break;
         case MeshPrimitive::Cylinder:
-            NV_LOG_WARN("MeshAsset: Cylinder primitive not implemented yet.");
+            m_CPUMesh = RHI_Mesh::CreateCylinder(
+                m_Desc.m_Radius,
+                m_Desc.m_Height,
+                m_Desc.m_RadialSegments,
+                m_Desc.m_HeightSegments);
             break;
         case MeshPrimitive::Capsule:
-            NV_LOG_WARN("MeshAsset: Capsule primitive not implemented yet.");
-            return false;
+            m_CPUMesh = RHI_Mesh::CreateCapsule(
+                m_Desc.m_Radius,
+                m_Desc.m_Height,
+                m_Desc.m_RadialSegments,
+                m_Desc.m_HeightSegments,
+                m_Desc.m_HemisphereRings);
+            break;
+        case MeshPrimitive::Torus:
+            m_CPUMesh = RHI_Mesh::CreateTorus(
+                m_Desc.m_MajorRadius,
+                m_Desc.m_MinorRadius,
+                m_Desc.m_MajorSegments,
+                m_Desc.m_MinorSegments);
+            break;
         default:
             return false;
         }
