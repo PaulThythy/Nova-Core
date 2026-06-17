@@ -33,7 +33,7 @@ VSOut main(VSIn input, uint instanceID : SV_InstanceID) {
 
     VSOut o;
     o.v_Normal = n;
-    o.v_Color = color;
+    o.v_Color = float4(input.a_Color, 1.0);
     float4 world = mul(model, float4(input.a_Position, 1.0));
     o.v_Pos = world.xyz;
     float4 viewPos = mul(nova.mvp.view, world);
