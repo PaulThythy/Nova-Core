@@ -74,9 +74,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         std::vector<VkPipeline> m_FullscreenPipelines;
         struct FullscreenPipelineState {
             VkPipelineLayout layout = VK_NULL_HANDLE;
-            VkDescriptorSetLayout set0Layout = VK_NULL_HANDLE;
-            VkDescriptorSetLayout set1Layout = VK_NULL_HANDLE;
-            VkDescriptorSet userSet = VK_NULL_HANDLE;
+            // One layout per reflection set (all owned by this pipeline).
+            std::vector<VkDescriptorSetLayout> setLayouts;
+            // Descriptor sets allocated for the non-engine (user) sets; the engine set is reused
+            // from the swapchain. Indexed identically; freed on destroy.
+            std::vector<VkDescriptorSet> ownedSets;
         };
         std::unordered_map<VkPipeline, FullscreenPipelineState> m_FullscreenPipelineState;
         std::unordered_map<const Renderer::RHI::RHI_Mesh*, std::shared_ptr<VK_Mesh>> m_MeshCache;

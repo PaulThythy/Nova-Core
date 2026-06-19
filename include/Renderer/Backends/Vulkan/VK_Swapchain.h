@@ -6,6 +6,8 @@
 #include <vector>
 #include <thread>
 #include <array>
+#include <utility>
+#include <cstdint>
 
 #include "Api.h"
 #include "Core/Application.h"
@@ -74,7 +76,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkPipeline& GetModelPipeline() { return m_ModelPipeline; }
 		VkPipelineLayout& GetModelPipelineLayout() { return m_ModelPipelineLayout; }
 
-		// Engine buffers + descriptor set kEngineDescriptorSet (see RHI_ShaderUniforms.h / NovaUniforms.slang)
+		// Engine buffers bound into the descriptor sets assigned by Slang reflection
+		// (see RHI_ShaderUniforms.h / NovaUniforms.slang).
 		VkBuffer GetBufGlobals() const { return m_BufGlobals; }
 		VkDeviceMemory GetBufGlobalsMemory() const { return m_BufGlobalsMemory; }
 		VkBuffer GetBufMvp() const { return m_BufMvp; }
@@ -86,8 +89,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkBuffer GetBufInstances() const { return m_BufInstances; }
 		VkDeviceMemory GetBufInstancesMemory() const { return m_BufInstancesMemory; }
 		VkDeviceSize GetBufInstancesSize() const { return m_BufInstancesSize; }
-		VkDescriptorSet GetEngineDescriptorSet() const { return m_EngineDescriptorSet; }
-		VkDescriptorSet GetUserDescriptorSet() const { return m_UserDescriptorSet; }
+		// All descriptor sets allocated for the model pipeline, as (reflection set index, set) pairs.
+		const std::vector<std::pair<uint32_t, VkDescriptorSet>>& GetDescriptorSets() const { return m_DescriptorSets; }
 		const RHI::RHI_ProgramReflection& GetModelPipelineReflection() const { return m_ModelPipelineReflection; }
 
 		// Viewport offscreen: render pass only (same pipeline as main window = model pipeline)
@@ -165,8 +168,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		// Pipeline
 		VkPipeline       m_ModelPipeline = VK_NULL_HANDLE;
 		VkPipelineLayout m_ModelPipelineLayout = VK_NULL_HANDLE;
-		VkDescriptorSetLayout m_EngineSetLayout = VK_NULL_HANDLE;
-		VkDescriptorSetLayout m_UserSetLayout = VK_NULL_HANDLE;
+		// One descriptor set layout per reflection set, as (set index, layout) pairs (sorted by set index).
+		std::vector<std::pair<uint32_t, VkDescriptorSetLayout>> m_SetLayouts;
 		VkBuffer         m_BufGlobals = VK_NULL_HANDLE;
 		VkDeviceMemory   m_BufGlobalsMemory = VK_NULL_HANDLE;
 		VkBuffer         m_BufMvp = VK_NULL_HANDLE;
@@ -178,8 +181,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkBuffer         m_BufInstances = VK_NULL_HANDLE;
 		VkDeviceMemory   m_BufInstancesMemory = VK_NULL_HANDLE;
 		VkDeviceSize     m_BufInstancesSize = 0;
-		VkDescriptorSet  m_EngineDescriptorSet = VK_NULL_HANDLE;
-		VkDescriptorSet  m_UserDescriptorSet = VK_NULL_HANDLE;
+		// One descriptor set per reflection set, as (set index, set) pairs (sorted by set index).
+		std::vector<std::pair<uint32_t, VkDescriptorSet>> m_DescriptorSets;
 		RHI::RHI_ProgramReflection m_ModelPipelineReflection{};
 
 		// Viewport offscreen render pass only (color finalLayout = SHADER_READ_ONLY for ImGui)

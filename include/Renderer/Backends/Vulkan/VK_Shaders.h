@@ -3,6 +3,8 @@
 
 #include <vulkan/vulkan.h>
 #include <vector>
+#include <utility>
+#include <cstdint>
 #include <glm/glm.hpp>
 
 #include "Api.h"
@@ -56,14 +58,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         /** Set pipeline and layout (owned by swapchain/renderer). Call after pipeline creation. */
         void SetPipeline(VkPipeline pipeline, VkPipelineLayout layout);
 
-        /** Scene buffers and descriptor sets used by UploadFrameUniforms / UploadMvpUniforms / UploadMaterialUniforms. */
+        /**
+         * Engine uniform buffers (frame, MVP, material, instances) + the descriptor sets to bind.
+         * `descriptorSets` lists every descriptor set allocated for the pipeline as (set index, set)
+         * pairs; the set indices and bindings come from Slang reflection.
+         */
         void SetSceneBuffers(VkDevice device,
             VkBuffer bufFrameUniforms, VkDeviceMemory bufFrameUniformsMemory,
             VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride,
             VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory, VkDeviceSize materialDynamicStride,
             VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
-            VkDescriptorSet sceneDescriptorSet,
-            VkDescriptorSet userDescriptorSet = VK_NULL_HANDLE);
+            std::vector<std::pair<uint32_t, VkDescriptorSet>> descriptorSets);
 
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
@@ -73,10 +78,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void ResetDynamicUBOs();
 
         /**
-         * Update a single binding in the user descriptor set (set 1).
-         * This is a low-level helper used by RHI_ShaderResourceSet.
+         * Update a single (set, binding) in one of the pipeline's descriptor sets.
+         * This is a low-level helper used by RHI_ShaderResourceSet; the (set, binding) is whatever
+         * Slang reflection assigned to the resource.
          */
-        void WriteUserDescriptor(uint32_t binding, VkDescriptorType type,
+        void WriteDescriptor(uint32_t set, uint32_t binding, VkDescriptorType type,
             const VkDescriptorBufferInfo* bufferInfo,
             const VkDescriptorImageInfo* imageInfo);
 
@@ -87,16 +93,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     private:
         bool ApplyResourceBinding(const RHI::RHI_BindingInfo& info, const RHI::RHI_ResourceBinding& value) override;
 
-        /** Fill and map host-visible frame uniform block from m_Parameters. */
-        void UploadFrameUniforms();
-        /** Fill and map dynamic MVP region from m_Parameters; advances m_MvpDynamicOffset when applicable. */
-        void UploadMvpUniforms(VkDeviceSize& outDynamicOffsetThisDraw);
-        /** Fill and map dynamic material region from m_Parameters; advances m_MaterialDynamicOffset when applicable. */
-        void UploadMaterialUniforms(VkDeviceSize& outDynamicOffsetThisDraw);
-        /** Bind engine (scene) and user descriptor sets with correct dynamic offsets. */
+        /** Map a host-visible region and copy `size` bytes from `src` into it. */
+        void MapAndCopy(VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, const void* src);
+        /**
+         * Copy `src` into a dynamic uniform buffer at the current per-draw cursor, advance the cursor
+         * by `stride`, and return the offset used for this draw (0 when the buffer isn't dynamic).
+         */
+        VkDeviceSize UploadDynamic(VkDeviceMemory memory, VkDeviceSize size, const void* src,
+            VkDeviceSize stride, VkDeviceSize& offsetCursor);
+        /** Bind all descriptor sets, supplying dynamic offsets in reflection (set, binding) order. */
         void BindDescriptorSets(VkCommandBuffer cmd, VkDeviceSize mvpDynamicOffset, VkDeviceSize materialDynamicOffset);
-        /** Copy instance array into the instance buffer. */
-        void UploadInstanceBuffer(const std::vector<RHI::Instance>& instances);
+        /** Resolve the descriptor set allocated for a given reflection set index (VK_NULL_HANDLE if none). */
+        VkDescriptorSet FindDescriptorSet(uint32_t set) const;
 
         VkPipeline m_Pipeline = VK_NULL_HANDLE;
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
@@ -115,9 +123,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkBuffer m_BufInstances = VK_NULL_HANDLE;
         VkDeviceMemory m_BufInstancesMemory = VK_NULL_HANDLE;
         VkDeviceSize m_BufInstancesSize = 0;
-        
-        VkDescriptorSet m_SceneDescriptorSet = VK_NULL_HANDLE;
-        VkDescriptorSet m_UserDescriptorSet = VK_NULL_HANDLE;
+        // All descriptor sets allocated for this pipeline, as (reflection set index, set) pairs.
+        std::vector<std::pair<uint32_t, VkDescriptorSet>> m_DescriptorSets;
     };
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

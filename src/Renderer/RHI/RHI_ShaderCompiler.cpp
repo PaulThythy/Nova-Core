@@ -290,12 +290,38 @@ namespace Nova::Core::Renderer::RHI {
         }
     }
 
+    // For a ParameterBlock variable, the descriptor set/space it occupies is reported by Slang
+    // reflection through the register-space categories. Returns false when Slang does not expose
+    // a concrete space (e.g. unresolved generics), letting the caller assign one sequentially.
+    static bool TryGetParameterBlockSpace(slang::VariableLayoutReflection* field, uint32_t& outSpace) {
+        if (!field) return false;
+
+        const slang::ParameterCategory spaceCats[] = {
+            slang::ParameterCategory::SubElementRegisterSpace,
+            slang::ParameterCategory::RegisterSpace,
+        };
+        for (auto cat : spaceCats) {
+            const size_t off = field->getOffset(cat);
+            if (off != SLANG_UNKNOWN_SIZE && off != SLANG_UNBOUNDED_SIZE) {
+                outSpace = static_cast<uint32_t>(off);
+                return true;
+            }
+            const size_t space = field->getBindingSpace(cat);
+            if (space != SLANG_UNKNOWN_SIZE && space != SLANG_UNBOUNDED_SIZE && space != 0) {
+                outSpace = static_cast<uint32_t>(space);
+                return true;
+            }
+        }
+        return false;
+    }
+
     static void ExtractBindingsFromTypeLayout(
         slang::TypeLayoutReflection* typeLayout,
         const std::string& prefix,
         RHI_ShaderStageMask stageMask,
         RHI_ProgramReflection& out,
-        const std::optional<uint32_t>& setOverride)
+        const std::optional<uint32_t>& setOverride,
+        uint32_t& nextAutoSpace)
     {
         if (!typeLayout) return;
 
@@ -365,16 +391,6 @@ namespace Nova::Core::Renderer::RHI {
             uint32_t set = 0;
             bool bindingKnown = tryGetBindingForField(field, set, binding);
 
-            // Convention fallback: global engine/user ParameterBlocks.
-            // This keeps the system stable even when Slang reflection doesn't expose the space cleanly.
-            if (!bindingKnown && prefix.empty() && fieldType &&
-                fieldType->getKind() == slang::TypeReflection::Kind::ParameterBlock)
-            {
-                binding = 0;
-                if (name == "nova") { set = 0; bindingKnown = true; }
-                else if (name == "user") { set = 1; bindingKnown = true; }
-            }
-
             // When extracting fields *inside* a ParameterBlock element type, always force the set.
             // Slang may report binding space=0 for nested fields, but the descriptor set comes from the block.
             if (setOverride) {
@@ -400,19 +416,26 @@ namespace Nova::Core::Renderer::RHI {
                 }
             }
 
-            // ParameterBlock is a container: binding/set applies to the block, while the *element* fields
-            // provide binding indices. We must descend into the element layout and force its set.
+            // ParameterBlock is a container: it occupies its own descriptor set/space, while the
+            // *element* fields provide binding indices within that set. The set/space is assigned by
+            // Slang reflection; when reflection cannot expose it, fall back to sequential allocation.
             if (fieldType && fieldType->getKind() == slang::TypeReflection::Kind::ParameterBlock) {
+                uint32_t blockSpace = 0;
+                if (!TryGetParameterBlockSpace(field, blockSpace)) {
+                    blockSpace = nextAutoSpace;
+                }
+                if (blockSpace + 1 > nextAutoSpace) nextAutoSpace = blockSpace + 1;
+
                 if (fieldTypeLayout) {
                     if (auto* elem = fieldTypeLayout->getElementTypeLayout()) {
-                        ExtractBindingsFromTypeLayout(elem, fullName, stageMask, out, set);
+                        ExtractBindingsFromTypeLayout(elem, fullName, stageMask, out, blockSpace, nextAutoSpace);
                     }
                 }
                 continue;
             }
 
             if (!hasAnyBinding && fieldTypeLayout && fieldTypeLayout->getFieldCount() > 0) {
-                ExtractBindingsFromTypeLayout(fieldTypeLayout, fullName, stageMask, out, setOverride);
+                ExtractBindingsFromTypeLayout(fieldTypeLayout, fullName, stageMask, out, setOverride, nextAutoSpace);
                 continue;
             }
 
@@ -505,7 +528,8 @@ namespace Nova::Core::Renderer::RHI {
         if (!globalsType) return;
 
         const RHI_ShaderStageMask stageMask = ToStageMask(stage);
-        ExtractBindingsFromTypeLayout(globalsType, "", stageMask, out, std::nullopt);
+        uint32_t nextAutoSpace = 0;
+        ExtractBindingsFromTypeLayout(globalsType, "", stageMask, out, std::nullopt, nextAutoSpace);
     }
 
     bool GetLinkedSpirv(

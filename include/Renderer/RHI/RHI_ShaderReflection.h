@@ -62,6 +62,11 @@ namespace Nova::Core::Renderer::RHI {
 
         const RHI_DescriptorSetLayoutInfo* FindSet(uint32_t setIndex) const;
         const RHI_BindingInfo* FindBinding(uint32_t setIndex, uint32_t binding) const;
+
+        // Resolve a reflection name (e.g. "nova.frame") to its (set, binding) as assigned by Slang.
+        const RHI_BindingKey* FindBindingKeyByName(const std::string& name) const;
+        // Convenience: resolve a reflection name directly to its binding info.
+        const RHI_BindingInfo* FindBindingByName(const std::string& name) const;
     };
 
     /** Merge multiple stage reflections (e.g. VS+FS) into a single program reflection. */

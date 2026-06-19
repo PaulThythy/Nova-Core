@@ -45,6 +45,24 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		}
 	}
 
+	// Flag the engine MVP and Material constant buffers (resolved by reflection name) as dynamic
+	// uniform buffers, wherever Slang reflection placed them.
+	static void MarkEngineDynamicBuffers(RHI::RHI_ProgramReflection& refl) {
+		const char* dynamicNames[] = { RHI::EngineResourceName::Mvp, RHI::EngineResourceName::Material };
+		for (const char* name : dynamicNames) {
+			const RHI::RHI_BindingKey* key = refl.FindBindingKeyByName(name);
+			if (!key) continue;
+			if (auto* set = const_cast<RHI::RHI_DescriptorSetLayoutInfo*>(refl.FindSet(key->m_Set))) {
+				for (auto& b : set->m_Bindings) {
+					if (b.m_Key.m_Binding == key->m_Binding && b.m_Kind == RHI::RHI_ResourceKind::ConstantBuffer)
+						b.m_IsDynamicUniformBuffer = true;
+				}
+			}
+		}
+	}
+
+	// Build a Vulkan descriptor set layout for a single reflection set. The set index and all
+	// bindings/descriptor types come straight from Slang reflection; nothing is hardcoded.
 	static bool CreateDescriptorSetLayoutFromReflection(
 		VkDevice device,
 		const RHI::RHI_ProgramReflection& refl,
@@ -53,39 +71,20 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 	{
 		outLayout = VK_NULL_HANDLE;
 		const auto* set = refl.FindSet(setIndex);
-		if ((!set || set->m_Bindings.empty()) && setIndex != RHI::kUserDescriptorSet) {
-			return false;
-		}
+		if (!set || set->m_Bindings.empty()) return false;
 
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
-		if (set) {
-			bindings.reserve(set->m_Bindings.size());
-			for (const auto& b : set->m_Bindings) {
-				VkDescriptorType type = ToVkDescriptorType(b);
-				if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM) continue;
+		bindings.reserve(set->m_Bindings.size());
+		for (const auto& b : set->m_Bindings) {
+			VkDescriptorType type = ToVkDescriptorType(b);
+			if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM) continue;
 
-				VkDescriptorSetLayoutBinding vkB{};
-				vkB.binding = b.m_Key.m_Binding;
-				vkB.descriptorType = type;
-				vkB.descriptorCount = (b.m_ArrayCount == 0) ? 1u : b.m_ArrayCount;
-				vkB.stageFlags = ToVkStageFlags(b.m_Stages);
-				bindings.push_back(vkB);
-			}
-		}
-
-		// Safety net: ensure (set,binding) pairs referenced by nameToBinding exist in the set layout.
-		if (setIndex == RHI::kUserDescriptorSet) {
-			// Conservative default: ensure binding 0 exists for user set.
-			const bool has0 = std::any_of(bindings.begin(), bindings.end(),
-				[](const VkDescriptorSetLayoutBinding& b) { return b.binding == 0; });
-			if (!has0) {
-				VkDescriptorSetLayoutBinding vkB{};
-				vkB.binding = 0;
-				vkB.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-				vkB.descriptorCount = 1;
-				vkB.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-				bindings.push_back(vkB);
-			}
+			VkDescriptorSetLayoutBinding vkB{};
+			vkB.binding = b.m_Key.m_Binding;
+			vkB.descriptorType = type;
+			vkB.descriptorCount = (b.m_ArrayCount == 0) ? 1u : b.m_ArrayCount;
+			vkB.stageFlags = ToVkStageFlags(b.m_Stages);
+			bindings.push_back(vkB);
 		}
 
 		if (bindings.empty()) return false;
@@ -831,31 +830,31 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		dynamic.dynamicStateCount = 2;
 		dynamic.pDynamicStates = dynamicStates;
 
-		// Descriptor set layouts (set 0 = engine, set 1 = user) generated from Slang reflection.
-		// Engine semantics: MVP + Material use dynamic uniform buffers.
+		// Descriptor set layouts generated entirely from Slang reflection: one layout per set that
+		// the shaders declare, with set/binding indices assigned by reflection.
+		// Engine semantics: the MVP and Material constant buffers use dynamic uniform buffers.
 		{
 			RHI::RHI_ProgramReflection reflForVk =
 				RHI::MergeProgramReflections({ vertAsset->GetReflection(), fragAsset->GetReflection() });
 
-			if (auto* set0 = const_cast<RHI::RHI_DescriptorSetLayoutInfo*>(reflForVk.FindSet(RHI::kEngineDescriptorSet))) {
-				for (auto& b : set0->m_Bindings) {
-					if (b.m_Key.m_Binding == static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp) ||
-						b.m_Key.m_Binding == static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material))
-					{
-						if (b.m_Kind == RHI::RHI_ResourceKind::ConstantBuffer) b.m_IsDynamicUniformBuffer = true;
-					}
-				}
-			}
+			MarkEngineDynamicBuffers(reflForVk);
 
 			m_ModelPipelineReflection = reflForVk;
 
-			if (!CreateDescriptorSetLayoutFromReflection(m_Device, reflForVk, RHI::kEngineDescriptorSet, m_EngineSetLayout)) {
-				NV_LOG_WARN("CreateModelPipeline: failed to create engine set layout (reflection missing?)");
+			m_SetLayouts.clear();
+			for (const auto& setInfo : reflForVk.m_Sets) {
+				VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+				if (CreateDescriptorSetLayoutFromReflection(m_Device, reflForVk, setInfo.m_Set, layout)) {
+					m_SetLayouts.emplace_back(setInfo.m_Set, layout);
+				}
+			}
+			std::sort(m_SetLayouts.begin(), m_SetLayouts.end(),
+				[](const auto& a, const auto& b) { return a.first < b.first; });
+
+			if (m_SetLayouts.empty()) {
+				NV_LOG_WARN("CreateModelPipeline: reflection produced no descriptor sets");
 				return;
 			}
-
-			// User set is optional.
-			(void)CreateDescriptorSetLayoutFromReflection(m_Device, reflForVk, RHI::kUserDescriptorSet, m_UserSetLayout);
 		}
 
 		// ---- Globals buffer ----
@@ -976,78 +975,60 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		vkBindBufferMemory(m_Device, m_BufInstances, m_BufInstancesMemory, 0);
 		m_BufInstancesSize = instanceSize;
 
-		// ---- Allocate descriptor set (from ImGui pool) ----
-		VkDescriptorSetAllocateInfo allocSetInfo{};
-		allocSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocSetInfo.descriptorPool = m_ImGuiDescriptorPool;
-		allocSetInfo.descriptorSetCount = 1;
-		allocSetInfo.pSetLayouts = &m_EngineSetLayout;
-		res = vkAllocateDescriptorSets(m_Device, &allocSetInfo, &m_EngineDescriptorSet);
-		CheckVkResult(res);
-		if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to allocate scene descriptor set"); DestroyModelPipeline(); return; }
-
-		// Optional user descriptor set (set 1)
-		if (m_UserSetLayout != VK_NULL_HANDLE) {
-			allocSetInfo.pSetLayouts = &m_UserSetLayout;
-			res = vkAllocateDescriptorSets(m_Device, &allocSetInfo, &m_UserDescriptorSet);
+		// ---- Allocate one descriptor set per reflection set (from ImGui pool) ----
+		m_DescriptorSets.clear();
+		for (const auto& [setIndex, layout] : m_SetLayouts) {
+			VkDescriptorSetAllocateInfo allocSetInfo{};
+			allocSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			allocSetInfo.descriptorPool = m_ImGuiDescriptorPool;
+			allocSetInfo.descriptorSetCount = 1;
+			allocSetInfo.pSetLayouts = &layout;
+			VkDescriptorSet ds = VK_NULL_HANDLE;
+			res = vkAllocateDescriptorSets(m_Device, &allocSetInfo, &ds);
 			CheckVkResult(res);
-			if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to allocate user descriptor set"); DestroyModelPipeline(); return; }
+			if (res != VK_SUCCESS) { NV_LOG_WARN("CreateModelPipeline: failed to allocate descriptor set"); DestroyModelPipeline(); return; }
+			m_DescriptorSets.emplace_back(setIndex, ds);
 		}
 
-		VkDescriptorBufferInfo globalsBufInfo{};
-		globalsBufInfo.buffer = m_BufGlobals;
-		globalsBufInfo.offset = 0;
-		globalsBufInfo.range = globalsSize;
-		VkDescriptorBufferInfo mvpBufInfo{};
-		mvpBufInfo.buffer = m_BufMvp;
-		mvpBufInfo.offset = 0;
-		mvpBufInfo.range = mvpSize;
-		VkDescriptorBufferInfo materialBufInfo{};
-		materialBufInfo.buffer = m_BufMaterials;
-		materialBufInfo.offset = 0;
-		materialBufInfo.range = materialSize;
-		VkDescriptorBufferInfo instanceBufInfo{};
-		instanceBufInfo.buffer = m_BufInstances;
-		instanceBufInfo.offset = 0;
-		instanceBufInfo.range = instanceSize;
-		VkWriteDescriptorSet writes[4]{};
-		writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[0].dstSet = m_EngineDescriptorSet;
-		writes[0].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::FrameUniforms);
-		writes[0].dstArrayElement = 0;
-		writes[0].descriptorCount = 1;
-		writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		writes[0].pBufferInfo = &globalsBufInfo;
-		writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[1].dstSet = m_EngineDescriptorSet;
-		writes[1].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Mvp);
-		writes[1].dstArrayElement = 0;
-		writes[1].descriptorCount = 1;
-		writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-		writes[1].pBufferInfo = &mvpBufInfo;
-		writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[2].dstSet = m_EngineDescriptorSet;
-		writes[2].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Instances);
-		writes[2].dstArrayElement = 0;
-		writes[2].descriptorCount = 1;
-		writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		writes[2].pBufferInfo = &instanceBufInfo;
-		writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[3].dstSet = m_EngineDescriptorSet;
-		writes[3].dstBinding = static_cast<uint32_t>(Renderer::RHI::EngineResourceSlot::Material);
-		writes[3].dstArrayElement = 0;
-		writes[3].descriptorCount = 1;
-		writes[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-		writes[3].pBufferInfo = &materialBufInfo;
-		vkUpdateDescriptorSets(m_Device, 4, writes, 0, nullptr);
+		// Write the engine buffers into whatever (set, binding) Slang reflection assigned to each.
+		auto findDescriptorSet = [&](uint32_t set) -> VkDescriptorSet {
+			for (const auto& [idx, ds] : m_DescriptorSets) if (idx == set) return ds;
+			return VK_NULL_HANDLE;
+		};
+		auto writeEngineBuffer = [&](const char* name, VkBuffer buffer, VkDeviceSize range) {
+			const RHI::RHI_BindingInfo* info = m_ModelPipelineReflection.FindBindingByName(name);
+			if (!info || buffer == VK_NULL_HANDLE) return;
+			VkDescriptorSet ds = findDescriptorSet(info->m_Key.m_Set);
+			if (ds == VK_NULL_HANDLE) return;
 
-		VkDescriptorSetLayout setLayouts[2] = { m_EngineSetLayout, m_UserSetLayout };
-		const uint32_t setLayoutCount = (m_UserSetLayout != VK_NULL_HANDLE) ? 2u : 1u;
+			VkDescriptorBufferInfo bufInfo{};
+			bufInfo.buffer = buffer;
+			bufInfo.offset = 0;
+			bufInfo.range = range;
+
+			VkWriteDescriptorSet write{};
+			write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			write.dstSet = ds;
+			write.dstBinding = info->m_Key.m_Binding;
+			write.dstArrayElement = 0;
+			write.descriptorCount = 1;
+			write.descriptorType = ToVkDescriptorType(*info);
+			write.pBufferInfo = &bufInfo;
+			vkUpdateDescriptorSets(m_Device, 1, &write, 0, nullptr);
+		};
+		writeEngineBuffer(RHI::EngineResourceName::Frame,     m_BufGlobals,   globalsSize);
+		writeEngineBuffer(RHI::EngineResourceName::Mvp,       m_BufMvp,       mvpSize);
+		writeEngineBuffer(RHI::EngineResourceName::Instances, m_BufInstances, instanceSize);
+		writeEngineBuffer(RHI::EngineResourceName::Material,  m_BufMaterials, materialSize);
+
+		std::vector<VkDescriptorSetLayout> setLayouts;
+		setLayouts.reserve(m_SetLayouts.size());
+		for (const auto& [setIndex, layout] : m_SetLayouts) setLayouts.push_back(layout);
 
 		VkPipelineLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		layoutInfo.setLayoutCount = setLayoutCount;
-		layoutInfo.pSetLayouts = setLayouts;
+		layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+		layoutInfo.pSetLayouts = setLayouts.data();
 		layoutInfo.pushConstantRangeCount = 0;
 		layoutInfo.pPushConstantRanges = nullptr;
 
@@ -1087,14 +1068,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			vkDestroyPipelineLayout(m_Device, m_ModelPipelineLayout, nullptr);
 			m_ModelPipelineLayout = VK_NULL_HANDLE;
 		}
-		if (m_EngineDescriptorSet != VK_NULL_HANDLE && m_ImGuiDescriptorPool != VK_NULL_HANDLE) {
-			vkFreeDescriptorSets(m_Device, m_ImGuiDescriptorPool, 1, &m_EngineDescriptorSet);
-			m_EngineDescriptorSet = VK_NULL_HANDLE;
+		if (m_ImGuiDescriptorPool != VK_NULL_HANDLE) {
+			for (auto& [setIndex, ds] : m_DescriptorSets) {
+				if (ds != VK_NULL_HANDLE) vkFreeDescriptorSets(m_Device, m_ImGuiDescriptorPool, 1, &ds);
+			}
 		}
-		if (m_UserDescriptorSet != VK_NULL_HANDLE && m_ImGuiDescriptorPool != VK_NULL_HANDLE) {
-			vkFreeDescriptorSets(m_Device, m_ImGuiDescriptorPool, 1, &m_UserDescriptorSet);
-			m_UserDescriptorSet = VK_NULL_HANDLE;
-		}
+		m_DescriptorSets.clear();
 		if (m_BufInstances != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufInstances, nullptr); m_BufInstances = VK_NULL_HANDLE; }
 		if (m_BufInstancesMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufInstancesMemory, nullptr); m_BufInstancesMemory = VK_NULL_HANDLE; }
 		m_BufInstancesSize = 0;
@@ -1104,14 +1083,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (m_BufMvpMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufMvpMemory, nullptr); m_BufMvpMemory = VK_NULL_HANDLE; }
 		if (m_BufGlobals != VK_NULL_HANDLE) { vkDestroyBuffer(m_Device, m_BufGlobals, nullptr); m_BufGlobals = VK_NULL_HANDLE; }
 		if (m_BufGlobalsMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Device, m_BufGlobalsMemory, nullptr); m_BufGlobalsMemory = VK_NULL_HANDLE; }
-		if (m_EngineSetLayout != VK_NULL_HANDLE) {
-			vkDestroyDescriptorSetLayout(m_Device, m_EngineSetLayout, nullptr);
-			m_EngineSetLayout = VK_NULL_HANDLE;
+		for (auto& [setIndex, layout] : m_SetLayouts) {
+			if (layout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(m_Device, layout, nullptr);
 		}
-		if (m_UserSetLayout != VK_NULL_HANDLE) {
-			vkDestroyDescriptorSetLayout(m_Device, m_UserSetLayout, nullptr);
-			m_UserSetLayout = VK_NULL_HANDLE;
-		}
+		m_SetLayouts.clear();
 	}
 
 	bool VK_Swapchain::CreateDepthResources() {

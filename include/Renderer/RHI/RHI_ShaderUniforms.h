@@ -5,14 +5,9 @@
  * CPU mirrors of engine shader types (NovaUniforms.slang).
  *
  * Shaders declare `ParameterBlock<NovaEngine> nova;` with no [[vk::binding]]: Slang
- * assigns the block to a descriptor space/set (set 0 when it is the first top-level
- * ParameterBlock) and bindings 0..N-1 in `NovaEngine` field order.
- *
- * Vulkan descriptor set index for this block:
- *   kEngineDescriptorSet = 0
- *
- * App / custom shaders: put your own ParameterBlock in register(space1) and
- * use pipeline layout set 1 — no clash with engine bindings.
+ * reflection assigns the descriptor set/space and the per-resource bindings. The engine
+ * never hardcodes set/binding indices; it resolves them at runtime from the reflection
+ * (RHI_ProgramReflection) using the stable reflection names below.
  */
 
 #include <glm/glm.hpp>
@@ -25,17 +20,15 @@
 
 namespace Nova::Core::Renderer::RHI {
 
-    inline constexpr uint32_t kEngineDescriptorSet = 0;
-    inline constexpr uint32_t kUserDescriptorSet = 1;
-
-    // Matches NovaEngine field order in NovaUniforms.slang (bindings 0..Count-1 in set 0).
-    enum class EngineResourceSlot : uint32_t {
-        FrameUniforms = 0,
-        Mvp = 1,
-        Instances = 2,
-        Material = 3,
-        Count = 4
-    };
+    // Stable reflection names for the engine resources declared in NovaUniforms.slang
+    // (`ParameterBlock<NovaEngine> nova;`). The descriptor set and binding for each are
+    // assigned by Slang reflection and looked up by these names at runtime.
+    namespace EngineResourceName {
+        inline constexpr const char* Frame     = "nova.frame";
+        inline constexpr const char* Mvp       = "nova.mvp";
+        inline constexpr const char* Instances = "nova.instances";
+        inline constexpr const char* Material  = "nova.material";
+    }
 
     struct NV_API FrameUniforms {
         alignas(16) glm::vec3 m_IResolution{ 0.0f, 0.0f, 0.0f };
@@ -103,7 +96,9 @@ namespace Nova::Core::Renderer::RHI {
         alignas(8)  glm::uvec2  m_PadCbufferAlign{ 0u, 0u };
     };
 
-    inline const std::unordered_map<std::string, size_t>& GetMaterialParameterLayout() {
+    // name -> byte offset maps describing how SetParameter() values are packed into the engine
+    // CPU mirror structs above. Padding fields are intentionally absent: they are never set.
+    inline const std::unordered_map<std::string, size_t>& GetMaterialLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
             { "base",                 offsetof(Material, m_Base) },
             { "baseColor",            offsetof(Material, m_BaseColor) },
@@ -139,24 +134,40 @@ namespace Nova::Core::Renderer::RHI {
             { "opacity",              offsetof(Material, m_Opacity) },
             { "thinWalled",           offsetof(Material, m_ThinWalled) },
             { "isOpaque",             offsetof(Material, m_IsOpaque) },
-            { "_padCbufferAlign",     offsetof(Material, m_PadCbufferAlign) },
         };
         return kLayout;
     }
 
-    inline const std::unordered_map<std::string, size_t>& GetFrameUniformsLayout() {
+    inline const std::unordered_map<std::string, size_t>& GetFrameLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
             { "iResolution",     offsetof(FrameUniforms, m_IResolution) },
-            { "_padAfterRes",    offsetof(FrameUniforms, m_PadAfterRes) },
             { "iTime",           offsetof(FrameUniforms, m_ITime) },
             { "iTimeDelta",      offsetof(FrameUniforms, m_ITimeDelta) },
             { "iFrameRate",      offsetof(FrameUniforms, m_IFrameRate) },
             { "iFrame",          offsetof(FrameUniforms, m_IFrame) },
             { "u_UseInstancing", offsetof(FrameUniforms, m_UUseInstancing) },
             { "u_CameraPos",     offsetof(FrameUniforms, m_UCameraPos) },
-            { "_padAfterCameraPos", offsetof(FrameUniforms, m_PadAfterCameraPos) },
             { "iMouse",          offsetof(FrameUniforms, m_IMouse) },
             { "iDate",           offsetof(FrameUniforms, m_IDate) },
+        };
+        return kLayout;
+    }
+
+    inline const std::unordered_map<std::string, size_t>& GetMvpLayout() {
+        static const std::unordered_map<std::string, size_t> kLayout = {
+            { "model",       offsetof(MVP, m_Model) },
+            { "view",        offsetof(MVP, m_View) },
+            { "proj",        offsetof(MVP, m_Proj) },
+            { "viewProj",    offsetof(MVP, m_ViewProj) },
+            { "invViewProj", offsetof(MVP, m_InvViewProj) },
+        };
+        return kLayout;
+    }
+
+    inline const std::unordered_map<std::string, size_t>& GetInstancesLayout() {
+        static const std::unordered_map<std::string, size_t> kLayout = {
+            { "model", offsetof(Instance, m_Model) },
+            { "color", offsetof(Instance, m_Color) },
         };
         return kLayout;
     }
