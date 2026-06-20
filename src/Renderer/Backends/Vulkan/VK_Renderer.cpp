@@ -182,96 +182,46 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return (res == VK_SUCCESS);
     }
 
-    bool VK_Renderer::Create() {
-        NV_LOG_INFO("Creating Vulkan renderer (minimal mode)...");
+    bool VK_Renderer::Create(const RHI::RHI_SwapchainDesc& desc) {
+        m_SwapchainDesc = desc;
+        NV_LOG_INFO("Creating Vulkan renderer (instance, device, swapchain)...");
 
         const std::vector<const char*> deviceExtensions = {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME
         };
 
-        // Instance
-        if (!m_VKInstance.Create()) {
+        if (!m_VKInstance.Create(desc.m_CreateSurface)) {
             NV_LOG_ERROR("VK_Instance::Create failed");
             return false;
         }
 
-        // Device
-        if (!m_VKDevice.Create(m_VKInstance.GetInstance(), m_VKInstance.GetSurface(), deviceExtensions)) {
+        if (!m_VKDevice.Create(
+                m_VKInstance.GetInstance(),
+                m_VKInstance.GetSurface(),
+                deviceExtensions)) {
             NV_LOG_ERROR("VK_Device::Create failed");
             return false;
         }
 
-        // Swapchain
-        if (!m_VKSwapchain.Create(
-                m_VKDevice.GetPhysicalDevice(),
-                m_VKDevice.GetDevice(),
-                m_VKInstance.GetSurface(),
-                m_VKDevice.GetGraphicsQueue(),
-                m_VKDevice.GetPresentQueue(),
-                m_VKDevice.GetGraphicsQueueFamily(),
-                m_VKDevice.GetPresentQueueFamily()
-            )) {
-            NV_LOG_ERROR("Failed to create swapchain");
-            return false;
+        if (desc.m_EnableSwapchain && m_VKInstance.GetSurface() != VK_NULL_HANDLE) {
+            if (!m_VKSwapchain.Create(
+                    m_VKDevice.GetPhysicalDevice(),
+                    m_VKDevice.GetDevice(),
+                    m_VKInstance.GetSurface(),
+                    m_VKDevice.GetGraphicsQueue(),
+                    m_VKDevice.GetPresentQueue(),
+                    m_VKDevice.GetGraphicsQueueFamily(),
+                    m_VKDevice.GetPresentQueueFamily(),
+                    desc)) {
+                NV_LOG_ERROR("Failed to create swapchain");
+                return false;
+            }
+        } else if (desc.m_EnableSwapchain) {
+            NV_LOG_WARN("Swapchain requested but no surface is available; skipping swapchain creation.");
         }
-        
-        ImGui_ImplVulkan_InitInfo initInfo{};
-        initInfo.ApiVersion = VK_API_VERSION_1_3;
-        initInfo.Instance = m_VKInstance.GetInstance();
-        initInfo.PhysicalDevice = m_VKDevice.GetPhysicalDevice();
-        initInfo.Device = m_VKDevice.GetDevice();
-        initInfo.QueueFamily = m_VKDevice.GetGraphicsQueueFamily();
-        initInfo.Queue = m_VKDevice.GetGraphicsQueue();
-        initInfo.DescriptorPool = m_VKSwapchain.GetImGuiDescriptorPool();
-        initInfo.DescriptorPoolSize = 0;
-        initInfo.MinImageCount = m_VKSwapchain.GetFrames().size();
-        initInfo.ImageCount = m_VKSwapchain.GetFrames().size();
-        initInfo.PipelineCache = VK_NULL_HANDLE;
-
-        initInfo.PipelineInfoMain.RenderPass = m_VKSwapchain.GetBackBufferRenderPass();
-        initInfo.PipelineInfoMain.Subpass = 0;
-        initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-
-        initInfo.PipelineInfoForViewports = initInfo.PipelineInfoMain;
-
-        initInfo.UseDynamicRendering = false;
-
-        initInfo.Allocator = nullptr;
-        initInfo.CheckVkResultFn = CheckVkResult;
-        initInfo.MinAllocationSize = 0;
-
-        // Some imgui backends want RenderPass in their init info; your ImGuiLayer wraps this.
-        auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
-        imguiLayer.SetVulkanInitInfo(initInfo);
-
-        // Start with "no command buffer" until BeginFrame successfully starts recording.
-        imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
-        imguiLayer.SetVulkanBeforeRenderCallback({});
 
         m_FrameActive = false;
-
-        m_Shader = std::make_unique<VK_Shaders>();
-        m_Shader->SetPipeline(m_VKSwapchain.GetModelPipeline(), m_VKSwapchain.GetModelPipelineLayout());
-        m_Shader->SetSceneBuffers(
-            m_VKDevice.GetDevice(),
-            m_VKSwapchain.GetBufGlobals(),
-            m_VKSwapchain.GetBufGlobalsMemory(),
-            m_VKSwapchain.GetBufMvp(),
-            m_VKSwapchain.GetBufMvpMemory(),
-            m_VKSwapchain.GetMvpDynamicStride(),
-            m_VKSwapchain.GetBufMaterials(),
-            m_VKSwapchain.GetBufMaterialsMemory(),
-            m_VKSwapchain.GetMaterialDynamicStride(),
-            m_VKSwapchain.GetBufInstances(),
-            m_VKSwapchain.GetBufInstancesMemory(),
-            m_VKSwapchain.GetBufInstancesSize(),
-            m_VKSwapchain.GetDescriptorSets()
-        );
-        m_Shader->SetReflection(m_VKSwapchain.GetModelPipelineReflection());
-
-        CreateFullscreenQuadBuffer();
-
-        NV_LOG_INFO("Vulkan renderer created successfully (minimal mode).");
+        NV_LOG_INFO("Vulkan renderer core created (render resources deferred until first frame).");
         return true;
     }
 
@@ -285,22 +235,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // Viewport framebuffer first: frees its descriptor set from the ImGui pool.
         DestroyViewportFramebuffer();
 
-        DestroyFullscreenQuadBuffer();
-
         // Shutdown ImGui's Vulkan backend before the descriptor pool and device are destroyed.
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
         imguiLayer.DestroyImGuiBackend(GraphicsAPI::Vulkan);
-
-        m_Shader.reset();
 
         for (VkPipeline p : m_FullscreenPipelines)
             vkDestroyPipeline(m_VKDevice.GetDevice(), p, nullptr);
         m_FullscreenPipelines.clear();
 
-        // Ensure any dynamically-created pipeline layouts / set layouts / descriptor sets are destroyed
-        // before the device is torn down, even if individual DestroyFullscreenShader() calls were skipped.
         if (m_VKDevice.GetDevice() != VK_NULL_HANDLE) {
-            VkDescriptorPool pool = m_VKSwapchain.GetImGuiDescriptorPool();
+            VkDescriptorPool pool = m_ImGuiDescriptorPool;
             for (auto& [pipeline, state] : m_FullscreenPipelineState) {
                 for (VkDescriptorSet ds : state.ownedSets) {
                     if (ds != VK_NULL_HANDLE && pool != VK_NULL_HANDLE)
@@ -320,6 +264,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         }
         m_MeshCache.clear();
 
+        DestroyRenderResources();
         m_VKSwapchain.Destroy();
         m_VKDevice.Destroy();
         m_VKInstance.Destroy();
@@ -353,21 +298,24 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_FrameActive = false;
         m_ImGuiSwapchainPassBegun = false;
 
-        // Safe ImGui default: never let ImGui write into an invalid command buffer.
         {
             auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
             imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
             imguiLayer.SetVulkanBeforeRenderCallback({});
         }
 
+        if (!InitRenderResources())
+            return;
+
         SDL_Window* window = Nova::Core::Application::Get().GetWindow().GetSDLWindow();
         if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED)
             return;
 
-        // Recreate the swapchain if requested before acquiring an image.
         if (m_FramebufferResized) {
             m_FramebufferResized = false;
             if (!m_VKSwapchain.RecreateSwapchain())
+                return;
+            if (!RecreateSwapchainRenderTargets())
                 return;
         }
 
@@ -449,7 +397,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             // Render scene to offscreen viewport for ImGui panel
             VkRenderPassBeginInfo rpBegin{};
             rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            rpBegin.renderPass = m_VKSwapchain.GetViewportRenderPass();
+            rpBegin.renderPass = m_ViewportRenderPass;
             rpBegin.framebuffer = m_ViewportFramebuffer;
             rpBegin.renderArea = { {0, 0}, { static_cast<uint32_t>(m_ViewportWidth), static_cast<uint32_t>(m_ViewportHeight) } };
             rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -471,16 +419,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             scissor.extent = { static_cast<uint32_t>(m_ViewportWidth), static_cast<uint32_t>(m_ViewportHeight) };
             vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-            if (m_VKSwapchain.GetModelPipeline() != VK_NULL_HANDLE)
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VKSwapchain.GetModelPipeline());
+            if (m_ModelPipeline != VK_NULL_HANDLE)
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ModelPipeline);
 
             m_RenderedToViewportThisFrame = true;
         } else {
             // Render directly to swapchain
             VkRenderPassBeginInfo rpBegin{};
             rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            rpBegin.renderPass = m_VKSwapchain.GetBackBufferRenderPass();
-            rpBegin.framebuffer = m_VKSwapchain.GetFrames()[imageIndex].m_Framebuffer;
+            rpBegin.renderPass = m_BackBufferRenderPass;
+            rpBegin.framebuffer = m_SwapchainFramebuffers[imageIndex];
             rpBegin.renderArea = { {0,0}, m_VKSwapchain.GetExtent() };
             rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
             rpBegin.pClearValues = clearValues.data();
@@ -649,8 +597,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkDevice device = m_VKDevice.GetDevice();
         VkPhysicalDevice physicalDevice = m_VKDevice.GetPhysicalDevice();
-        VkFormat colorFormat = m_VKSwapchain.GetSwapchainImageFormat();
-        VkFormat depthFormat = m_VKSwapchain.GetDepthFormat();
+        VkFormat colorFormat = m_VKSwapchain.GetImageFormat();
+        VkFormat depthFormat = m_DepthFormat;
 
         // Color image (attachment + sampled by ImGui)
         VkImageCreateInfo imageInfo{};
@@ -754,7 +702,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         std::array<VkImageView, 2> attachments = { m_ViewportImageView, m_ViewportDepthImageView };
         VkFramebufferCreateInfo fbInfo{};
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbInfo.renderPass = m_VKSwapchain.GetViewportRenderPass();
+        fbInfo.renderPass = m_ViewportRenderPass;
         fbInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
         fbInfo.pAttachments = attachments.data();
         fbInfo.width = static_cast<uint32_t>(w);
@@ -801,7 +749,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // Free descriptor set directly: at shutdown ImGui may already be destroyed, so do not
         // call ImGui_ImplVulkan_RemoveTexture() which would use freed backend data.
         if (m_ViewportDescriptorSet != VK_NULL_HANDLE) {
-            VkDescriptorPool pool = m_VKSwapchain.GetImGuiDescriptorPool();
+            VkDescriptorPool pool = m_ImGuiDescriptorPool;
             if (pool != VK_NULL_HANDLE)
                 vkFreeDescriptorSets(device, pool, 1, &m_ViewportDescriptorSet);
             m_ViewportDescriptorSet = VK_NULL_HANDLE;
@@ -858,8 +806,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkRenderPassBeginInfo rpBegin{};
         rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rpBegin.renderPass = m_VKSwapchain.GetBackBufferRenderPass();
-        rpBegin.framebuffer = m_VKSwapchain.GetFrames()[imageIndex].m_Framebuffer;
+        rpBegin.renderPass = m_BackBufferRenderPass;
+        rpBegin.framebuffer = m_SwapchainFramebuffers[imageIndex];
         rpBegin.renderArea = { {0, 0}, m_VKSwapchain.GetExtent() };
         rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
         rpBegin.pClearValues = clearValues.data();
@@ -1219,7 +1167,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         pipe.pColorBlendState    = &blend;
         pipe.pDynamicState       = &dynamic;
         pipe.layout              = layout;
-        pipe.renderPass          = m_VKSwapchain.GetBackBufferRenderPass();
+        pipe.renderPass          = m_BackBufferRenderPass;
         pipe.subpass             = 0;
 
         VkPipeline pipeline = VK_NULL_HANDLE;
@@ -1239,7 +1187,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         // Build the descriptor set list for the shader: reuse the swapchain's engine descriptor set
         // for the engine set, and allocate a fresh descriptor set for every other (user) set.
-        const auto& swapchainSets = m_VKSwapchain.GetDescriptorSets();
+        const auto& swapchainSets = m_DescriptorSets;
         auto findSwapchainSet = [&](uint32_t setIndex) -> VkDescriptorSet {
             for (const auto& [idx, ds] : swapchainSets) if (idx == setIndex) return ds;
             return VK_NULL_HANDLE;
@@ -1255,7 +1203,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             }
             VkDescriptorSetAllocateInfo allocInfo{};
             allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocInfo.descriptorPool = m_VKSwapchain.GetImGuiDescriptorPool();
+            allocInfo.descriptorPool = m_ImGuiDescriptorPool;
             allocInfo.descriptorSetCount = 1;
             allocInfo.pSetLayouts = &setLayout;
             VkDescriptorSet ds = VK_NULL_HANDLE;
@@ -1268,7 +1216,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         if (allocFailed) {
             NV_LOG_WARN("CreateFullscreenShader: failed to allocate descriptor set");
-            VkDescriptorPool pool = m_VKSwapchain.GetImGuiDescriptorPool();
+            VkDescriptorPool pool = m_ImGuiDescriptorPool;
             for (VkDescriptorSet ds : ownedSets)
                 if (ds != VK_NULL_HANDLE && pool != VK_NULL_HANDLE) vkFreeDescriptorSets(device, pool, 1, &ds);
             m_FullscreenPipelines.pop_back();
@@ -1283,11 +1231,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         auto* shader = new VK_Shaders();
         shader->SetPipeline(pipeline, layout);
         shader->SetSceneBuffers(device,
-            m_VKSwapchain.GetBufGlobals(),    m_VKSwapchain.GetBufGlobalsMemory(),
-            m_VKSwapchain.GetBufMvp(),        m_VKSwapchain.GetBufMvpMemory(), m_VKSwapchain.GetMvpDynamicStride(),
-            m_VKSwapchain.GetBufMaterials(),  m_VKSwapchain.GetBufMaterialsMemory(), m_VKSwapchain.GetMaterialDynamicStride(),
-            m_VKSwapchain.GetBufInstances(),  m_VKSwapchain.GetBufInstancesMemory(),
-            m_VKSwapchain.GetBufInstancesSize(),
+            m_BufGlobals,    m_BufGlobalsMemory,
+            m_BufMvp,        m_BufMvpMemory, m_MvpDynamicStride,
+            m_BufMaterials,  m_BufMaterialsMemory, m_MaterialDynamicStride,
+            m_BufInstances,  m_BufInstancesMemory,
+            m_BufInstancesSize,
             std::move(shaderSets));
         shader->SetReflection(reflForVk);
 
@@ -1308,7 +1256,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
             if (auto itState = m_FullscreenPipelineState.find(pipeline); itState != m_FullscreenPipelineState.end()) {
                 const auto state = itState->second;
-                VkDescriptorPool pool = m_VKSwapchain.GetImGuiDescriptorPool();
+                VkDescriptorPool pool = m_ImGuiDescriptorPool;
                 for (VkDescriptorSet ds : state.ownedSets) {
                     if (ds != VK_NULL_HANDLE && pool != VK_NULL_HANDLE)
                         vkFreeDescriptorSets(m_VKDevice.GetDevice(), pool, 1, &ds);

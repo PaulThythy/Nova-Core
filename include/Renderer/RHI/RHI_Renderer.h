@@ -10,6 +10,7 @@
 #include "Renderer/RHI/RHI_Mesh.h"
 #include "Renderer/RHI/RHI_ShaderCompiler.h"
 #include "Renderer/RHI/RHI_Shaders.h"
+#include "Renderer/RHI/RHI_SwapchainDesc.h"
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -53,9 +54,11 @@ namespace Nova::Core::Renderer::RHI {
     class NV_API IRenderer {
     public:
         virtual ~IRenderer() = default;
-        static std::unique_ptr<IRenderer> Create(Core::GraphicsAPI api);
+        static std::unique_ptr<IRenderer> Create(
+            Core::GraphicsAPI api,
+            const RHI_SwapchainDesc& desc = RHI_SwapchainDesc{});
 
-        virtual bool Create() = 0;
+        virtual bool Create(const RHI_SwapchainDesc& desc) = 0;
         virtual void Destroy() = 0;
 
         virtual bool Resize(int w, int h) = 0;

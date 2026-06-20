@@ -4,14 +4,11 @@
 #include <vulkan/vulkan.h>
 
 #include <vector>
-#include <thread>
 #include <array>
-#include <utility>
 #include <cstdint>
 
 #include "Api.h"
-#include "Core/Application.h"
-#include "Renderer/RHI/RHI_ShaderReflection.h"
+#include "Renderer/RHI/RHI_SwapchainDesc.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -20,18 +17,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VK_Swapchain() = default;
 		~VK_Swapchain() = default;
 
-		static constexpr uint32_t FRAMES_IN_FLIGHT = 3;
-		static constexpr uint32_t MAX_MODEL_INSTANCES = 1024;
-		static constexpr uint32_t MAX_MODEL_DRAWS = 4096;
-
-		// Create() should receive every dependency required by the swapchain.
+		// Creates the swapchain, image views, sync objects, and per-image command buffers.
 		bool Create(VkPhysicalDevice physicalDevice,
 			VkDevice device,
 			VkSurfaceKHR surface,
 			VkQueue graphicsQueue,
 			VkQueue presentQueue,
 			uint32_t graphicsQueueFamily,
-			uint32_t presentQueueFamily);
+			uint32_t presentQueueFamily,
+			const RHI::RHI_SwapchainDesc& desc);
 
 		void Destroy();
 
@@ -40,10 +34,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			VkFence     m_InFlightFence = VK_NULL_HANDLE;
 		};
 
-		struct NV_API VK_Frame {
-			VkImage       m_Image = VK_NULL_HANDLE;
-			VkImageView   m_ImageView = VK_NULL_HANDLE;
-			VkFramebuffer m_Framebuffer = VK_NULL_HANDLE;
+		struct NV_API VK_SwapchainImage {
+			VkImage     m_Image = VK_NULL_HANDLE;
+			VkImageView m_ImageView = VK_NULL_HANDLE;
 		};
 
 		struct NV_API VK_SwapchainSupportDetails {
@@ -52,51 +45,28 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			std::vector<VkPresentModeKHR>   m_PresentModes;
 		};
 
-		VkSwapchainKHR& GetSwapchain() { return m_Swapchain; }
-		VkExtent2D& GetExtent() { return m_SwapchainExtent; }
+		VkSwapchainKHR GetSwapchain() const { return m_Swapchain; }
+		const VkExtent2D& GetExtent() const { return m_SwapchainExtent; }
+		VkFormat GetImageFormat() const { return m_SwapchainImageFormat; }
+		VkPresentModeKHR GetPresentMode() const { return m_PresentMode; }
 
-		VkRenderPass& GetBackBufferRenderPass() { return m_BackBufferRenderPass; }
+		uint32_t GetFramesInFlight() const { return m_FramesInFlight; }
+		uint32_t GetImageCount() const { return static_cast<uint32_t>(m_Images.size()); }
 
-		VkDescriptorPool& GetImGuiDescriptorPool() { return m_ImGuiDescriptorPool; }
-
-		VkCommandPool GetCommandPool() { return m_CommandPool; }
-
-		std::vector<VK_Frame>& GetFrames() { return m_Frames; }
+		VkCommandPool GetCommandPool() const { return m_CommandPool; }
+		const std::vector<VK_SwapchainImage>& GetImages() const { return m_Images; }
+		std::vector<VK_SwapchainImage>& GetImages() { return m_Images; }
+		const std::vector<VkFence>& GetImagesInFlight() const { return m_ImagesInFlight; }
 		std::vector<VkFence>& GetImagesInFlight() { return m_ImagesInFlight; }
-		std::array<VK_FrameSync, FRAMES_IN_FLIGHT>& GetFrameSync() { return m_FrameSync; }
+		const std::vector<VK_FrameSync>& GetFrameSync() const { return m_FrameSync; }
+		std::vector<VK_FrameSync>& GetFrameSync() { return m_FrameSync; }
 
 		void SetCurrentFrame(uint32_t frameIndex) { m_CurrentFrame = frameIndex; }
-		uint32_t GetCurrentFrame() { return m_CurrentFrame; }
-		void AdvanceFrame() { m_CurrentFrame = (m_CurrentFrame + 1) % FRAMES_IN_FLIGHT; }
+		uint32_t GetCurrentFrame() const { return m_CurrentFrame; }
+		void AdvanceFrame() { m_CurrentFrame = (m_CurrentFrame + 1) % m_FramesInFlight; }
 
-		// Currently acquired swapchain image
-		void SetAcquiredImageIndex(uint32_t idx) { m_AquiredImage = idx; }
-		uint32_t GetAcquiredImageIndex() const { return m_AquiredImage; }
-
-		VkPipeline& GetModelPipeline() { return m_ModelPipeline; }
-		VkPipelineLayout& GetModelPipelineLayout() { return m_ModelPipelineLayout; }
-
-		// Engine buffers bound into the descriptor sets assigned by Slang reflection
-		// (see RHI_ShaderUniforms.h / NovaUniforms.slang).
-		VkBuffer GetBufGlobals() const { return m_BufGlobals; }
-		VkDeviceMemory GetBufGlobalsMemory() const { return m_BufGlobalsMemory; }
-		VkBuffer GetBufMvp() const { return m_BufMvp; }
-		VkDeviceMemory GetBufMvpMemory() const { return m_BufMvpMemory; }
-		VkDeviceSize GetMvpDynamicStride() const { return m_MvpDynamicStride; }
-		VkBuffer GetBufMaterials() const { return m_BufMaterials; }
-		VkDeviceMemory GetBufMaterialsMemory() const { return m_BufMaterialsMemory; }
-		VkDeviceSize GetMaterialDynamicStride() const { return m_MaterialDynamicStride; }
-		VkBuffer GetBufInstances() const { return m_BufInstances; }
-		VkDeviceMemory GetBufInstancesMemory() const { return m_BufInstancesMemory; }
-		VkDeviceSize GetBufInstancesSize() const { return m_BufInstancesSize; }
-		// All descriptor sets allocated for the model pipeline, as (reflection set index, set) pairs.
-		const std::vector<std::pair<uint32_t, VkDescriptorSet>>& GetDescriptorSets() const { return m_DescriptorSets; }
-		const RHI::RHI_ProgramReflection& GetModelPipelineReflection() const { return m_ModelPipelineReflection; }
-
-		// Viewport offscreen: render pass only (same pipeline as main window = model pipeline)
-		VkRenderPass GetViewportRenderPass() const { return m_ViewportRenderPass; }
-		VkFormat GetSwapchainImageFormat() const { return m_SwapchainImageFormat; }
-		VkFormat GetDepthFormat() const { return m_DepthFormat; }
+		void SetAcquiredImageIndex(uint32_t idx) { m_AcquiredImage = idx; }
+		uint32_t GetAcquiredImageIndex() const { return m_AcquiredImage; }
 
 		std::vector<VkCommandBuffer>& GetCommandBuffers() { return m_CommandBuffers; }
 
@@ -109,39 +79,23 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		bool RecreateSwapchain();
 
 	private:
-
 		bool CreateSwapchain();
 		void DestroySwapchain();
 
 		bool CreateImageViews();
-		bool CreateBackBufferRenderPass();
-		bool CreateFramebuffers();
-
-		// Commands & sync
 		bool CreateCommandPoolAndBuffers();
 		bool RecreateCommandBuffers();
 
 		bool CreateSyncObjects();
 		void DestroySyncObjects();
 
-		// Minimal pipeline
-		void CreateModelPipeline();
-		void DestroyModelPipeline();
-		bool CreateViewportRenderPass();
-		void DestroyViewportRenderPass();
-		bool CreateDepthResources();
-		void DestroyDepthResources();
+		void LogSwapchainConfiguration(uint32_t swapchainImageCount) const;
 
-		// ImGui
-		bool CreateImGuiDescriptorPool();
-		void DestroyImGuiDescriptorPool();
+		VK_SwapchainSupportDetails QuerySwapChainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) const;
+		VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) const;
+		VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) const;
+		VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) const;
 
-		VK_SwapchainSupportDetails QuerySwapChainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
-		VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
-		VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
-		VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-
-		// Required Vulkan handles
 		VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
 		VkDevice         m_Device = VK_NULL_HANDLE;
 		VkSurfaceKHR     m_Surface = VK_NULL_HANDLE;
@@ -152,67 +106,25 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		uint32_t         m_GraphicsQueueFamily = UINT32_MAX;
 		uint32_t         m_PresentQueueFamily = UINT32_MAX;
 
-		VkExtent2D       m_WindowExtent{ 0, 0 };
+		RHI::RHI_SwapchainDesc m_Desc{};
 
-		// Swapchain state
 		VkSwapchainKHR   m_Swapchain = VK_NULL_HANDLE;
 		VkFormat         m_SwapchainImageFormat{};
 		VkExtent2D       m_SwapchainExtent{};
-		uint32_t         m_MinImageCount = 0;
+		VkPresentModeKHR m_PresentMode = VK_PRESENT_MODE_FIFO_KHR;
+		uint32_t         m_FramesInFlight = 3;
 
-		std::vector<VK_Frame> m_Frames;
+		std::vector<VK_SwapchainImage> m_Images;
 
-		// Render pass
-		VkRenderPass m_BackBufferRenderPass = VK_NULL_HANDLE;
-
-		// Pipeline
-		VkPipeline       m_ModelPipeline = VK_NULL_HANDLE;
-		VkPipelineLayout m_ModelPipelineLayout = VK_NULL_HANDLE;
-		// One descriptor set layout per reflection set, as (set index, layout) pairs (sorted by set index).
-		std::vector<std::pair<uint32_t, VkDescriptorSetLayout>> m_SetLayouts;
-		VkBuffer         m_BufGlobals = VK_NULL_HANDLE;
-		VkDeviceMemory   m_BufGlobalsMemory = VK_NULL_HANDLE;
-		VkBuffer         m_BufMvp = VK_NULL_HANDLE;
-		VkDeviceMemory   m_BufMvpMemory = VK_NULL_HANDLE;
-		VkDeviceSize     m_MvpDynamicStride = 0;
-		VkBuffer         m_BufMaterials = VK_NULL_HANDLE;
-		VkDeviceMemory   m_BufMaterialsMemory = VK_NULL_HANDLE;
-		VkDeviceSize     m_MaterialDynamicStride = 0;
-		VkBuffer         m_BufInstances = VK_NULL_HANDLE;
-		VkDeviceMemory   m_BufInstancesMemory = VK_NULL_HANDLE;
-		VkDeviceSize     m_BufInstancesSize = 0;
-		// One descriptor set per reflection set, as (set index, set) pairs (sorted by set index).
-		std::vector<std::pair<uint32_t, VkDescriptorSet>> m_DescriptorSets;
-		RHI::RHI_ProgramReflection m_ModelPipelineReflection{};
-
-		// Viewport offscreen render pass only (color finalLayout = SHADER_READ_ONLY for ImGui)
-		VkRenderPass m_ViewportRenderPass = VK_NULL_HANDLE;
-
-		// Depth buffer
-		VkImage        m_DepthImage = VK_NULL_HANDLE;
-		VkDeviceMemory m_DepthImageMemory = VK_NULL_HANDLE;
-		VkImageView    m_DepthImageView = VK_NULL_HANDLE;
-		VkFormat       m_DepthFormat = VK_FORMAT_D32_SFLOAT;
-
-		// Commands (single primary command buffer)
 		VkCommandPool   m_CommandPool = VK_NULL_HANDLE;
-		std::vector<VkCommandBuffer>  m_CommandBuffers;
+		std::vector<VkCommandBuffer> m_CommandBuffers;
 
-		// Frames in flight: 3
-		std::array<VK_FrameSync, FRAMES_IN_FLIGHT> m_FrameSync{};
+		std::vector<VK_FrameSync> m_FrameSync;
+		std::vector<VkSemaphore>  m_RenderFinishedSemaphores;
+		std::vector<VkFence>      m_ImagesInFlight;
 
-		// Render finished semaphore per swapchain image (indexed by acquired image)
-		std::vector<VkSemaphore> m_RenderFinishedSemaphores;
-
-		std::vector<VkFence> m_ImagesInFlight;
-
-		// ImGui resources
-		VkDescriptorPool m_ImGuiDescriptorPool = VK_NULL_HANDLE;
-
-		// Per-frame state
 		uint32_t m_CurrentFrame = 0;
-		uint32_t m_AquiredImage = 0;
-		bool     m_FramebufferResized = false;
+		uint32_t m_AcquiredImage = 0;
 	};
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan
