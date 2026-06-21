@@ -8,7 +8,7 @@
 #include <cstdint>
 
 #include "Api.h"
-#include "Renderer/RHI/RHI_SwapchainDesc.h"
+#include "Renderer/RHI/RHI_Renderer.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
