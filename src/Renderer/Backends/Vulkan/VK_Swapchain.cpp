@@ -285,7 +285,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		m_ImagesInFlight.assign(m_Images.size(), VK_NULL_HANDLE);
 
-		LogSwapchainConfiguration(actualImageCount);
+		//LogSwapchainConfiguration(actualImageCount);
 		return true;
 	}
 
