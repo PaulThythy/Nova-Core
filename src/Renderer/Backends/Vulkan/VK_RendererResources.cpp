@@ -19,85 +19,81 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-	namespace {
+	VkShaderStageFlags ToVkStageFlags(RHI::RHI_ShaderStageMask mask) {
+		VkShaderStageFlags out = 0;
+		const uint32_t m = static_cast<uint32_t>(mask);
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Vertex)) out |= VK_SHADER_STAGE_VERTEX_BIT;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Fragment)) out |= VK_SHADER_STAGE_FRAGMENT_BIT;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Geometry)) out |= VK_SHADER_STAGE_GEOMETRY_BIT;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessCtrl)) out |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessEval)) out |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Compute)) out |= VK_SHADER_STAGE_COMPUTE_BIT;
+		return out;
+	}
 
-		VkShaderStageFlags ToVkStageFlags(RHI::RHI_ShaderStageMask mask) {
-			VkShaderStageFlags out = 0;
-			const uint32_t m = static_cast<uint32_t>(mask);
-			if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Vertex)) out |= VK_SHADER_STAGE_VERTEX_BIT;
-			if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Fragment)) out |= VK_SHADER_STAGE_FRAGMENT_BIT;
-			if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Geometry)) out |= VK_SHADER_STAGE_GEOMETRY_BIT;
-			if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessCtrl)) out |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-			if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessEval)) out |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-			if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Compute)) out |= VK_SHADER_STAGE_COMPUTE_BIT;
-			return out;
+	VkDescriptorType ToVkDescriptorType(const RHI::RHI_BindingInfo& b) {
+		using RK = RHI::RHI_ResourceKind;
+		switch (b.m_Kind) {
+			case RK::ConstantBuffer: return b.m_IsDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			case RK::StorageBuffer:  return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			case RK::Texture:        return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+			case RK::Sampler:        return VK_DESCRIPTOR_TYPE_SAMPLER;
+			case RK::CombinedTextureSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			case RK::RWTexture:      return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+			case RK::RWBuffer:       return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			default:                 return VK_DESCRIPTOR_TYPE_MAX_ENUM;
 		}
+	}
 
-		VkDescriptorType ToVkDescriptorType(const RHI::RHI_BindingInfo& b) {
-			using RK = RHI::RHI_ResourceKind;
-			switch (b.m_Kind) {
-				case RK::ConstantBuffer: return b.m_IsDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-				case RK::StorageBuffer:  return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-				case RK::Texture:        return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-				case RK::Sampler:        return VK_DESCRIPTOR_TYPE_SAMPLER;
-				case RK::CombinedTextureSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-				case RK::RWTexture:      return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-				case RK::RWBuffer:       return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-				default:                 return VK_DESCRIPTOR_TYPE_MAX_ENUM;
-			}
-		}
-
-		void MarkEngineDynamicBuffers(RHI::RHI_ProgramReflection& refl) {
-			const char* dynamicNames[] = { RHI::EngineResourceName::Mvp, RHI::EngineResourceName::Material };
-			for (const char* name : dynamicNames) {
-				const RHI::RHI_BindingKey* key = refl.FindBindingKeyByName(name);
-				if (!key) continue;
-				if (auto* set = const_cast<RHI::RHI_DescriptorSetLayoutInfo*>(refl.FindSet(key->m_Set))) {
-					for (auto& b : set->m_Bindings) {
-						if (b.m_Key.m_Binding == key->m_Binding && b.m_Kind == RHI::RHI_ResourceKind::ConstantBuffer)
-							b.m_IsDynamicUniformBuffer = true;
-					}
+	void MarkEngineDynamicBuffers(RHI::RHI_ProgramReflection& refl) {
+		const char* dynamicNames[] = { RHI::EngineResourceName::Mvp, RHI::EngineResourceName::Material };
+		for (const char* name : dynamicNames) {
+			const RHI::RHI_BindingKey* key = refl.FindBindingKeyByName(name);
+			if (!key) continue;
+			if (auto* set = const_cast<RHI::RHI_DescriptorSetLayoutInfo*>(refl.FindSet(key->m_Set))) {
+				for (auto& b : set->m_Bindings) {
+					if (b.m_Key.m_Binding == key->m_Binding && b.m_Kind == RHI::RHI_ResourceKind::ConstantBuffer)
+						b.m_IsDynamicUniformBuffer = true;
 				}
 			}
 		}
+	}
 
-		bool CreateDescriptorSetLayoutFromReflection(
-			VkDevice device,
-			const RHI::RHI_ProgramReflection& refl,
-			uint32_t setIndex,
-			VkDescriptorSetLayout& outLayout)
-		{
-			outLayout = VK_NULL_HANDLE;
-			const auto* set = refl.FindSet(setIndex);
-			if (!set || set->m_Bindings.empty()) return false;
+	bool CreateDescriptorSetLayoutFromReflection(
+		VkDevice device,
+		const RHI::RHI_ProgramReflection& refl,
+		uint32_t setIndex,
+		VkDescriptorSetLayout& outLayout)
+	{
+		outLayout = VK_NULL_HANDLE;
+		const auto* set = refl.FindSet(setIndex);
+		if (!set || set->m_Bindings.empty()) return false;
 
-			std::vector<VkDescriptorSetLayoutBinding> bindings;
-			bindings.reserve(set->m_Bindings.size());
-			for (const auto& b : set->m_Bindings) {
-				VkDescriptorType type = ToVkDescriptorType(b);
-				if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM) continue;
+		std::vector<VkDescriptorSetLayoutBinding> bindings;
+		bindings.reserve(set->m_Bindings.size());
+		for (const auto& b : set->m_Bindings) {
+			VkDescriptorType type = ToVkDescriptorType(b);
+			if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM) continue;
 
-				VkDescriptorSetLayoutBinding vkB{};
-				vkB.binding = b.m_Key.m_Binding;
-				vkB.descriptorType = type;
-				vkB.descriptorCount = (b.m_ArrayCount == 0) ? 1u : b.m_ArrayCount;
-				vkB.stageFlags = ToVkStageFlags(b.m_Stages);
-				bindings.push_back(vkB);
-			}
-
-			if (bindings.empty()) return false;
-
-			VkDescriptorSetLayoutCreateInfo info{};
-			info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-			info.bindingCount = static_cast<uint32_t>(bindings.size());
-			info.pBindings = bindings.data();
-
-			const VkResult res = vkCreateDescriptorSetLayout(device, &info, nullptr, &outLayout);
-			CheckVkResult(res);
-			return (res == VK_SUCCESS);
+			VkDescriptorSetLayoutBinding vkB{};
+			vkB.binding = b.m_Key.m_Binding;
+			vkB.descriptorType = type;
+			vkB.descriptorCount = (b.m_ArrayCount == 0) ? 1u : b.m_ArrayCount;
+			vkB.stageFlags = ToVkStageFlags(b.m_Stages);
+			bindings.push_back(vkB);
 		}
 
-	} // namespace
+		if (bindings.empty()) return false;
+
+		VkDescriptorSetLayoutCreateInfo info{};
+		info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		info.bindingCount = static_cast<uint32_t>(bindings.size());
+		info.pBindings = bindings.data();
+
+		const VkResult res = vkCreateDescriptorSetLayout(device, &info, nullptr, &outLayout);
+		CheckVkResult(res);
+		return (res == VK_SUCCESS);
+	}
 
 	bool VK_Renderer::InitRenderResources() {
 		if (m_RenderResourcesInitialized)
