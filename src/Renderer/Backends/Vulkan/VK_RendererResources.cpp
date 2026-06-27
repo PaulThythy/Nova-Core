@@ -28,6 +28,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessCtrl)) out |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
 		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessEval)) out |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
 		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Compute)) out |= VK_SHADER_STAGE_COMPUTE_BIT;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::RayGen)) out |= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::RayMiss)) out |= VK_SHADER_STAGE_MISS_BIT_KHR;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::RayCHit)) out |= VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::RayAHit)) out |= VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::RayISect)) out |= VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+		if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::RayCall)) out |= VK_SHADER_STAGE_CALLABLE_BIT_KHR;
 		return out;
 	}
 
