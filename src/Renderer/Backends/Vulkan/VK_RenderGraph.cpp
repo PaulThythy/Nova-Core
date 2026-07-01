@@ -58,12 +58,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         }
     }
 
-    bool CreateDescriptorSetLayoutFromReflection(
-        VkDevice device,
-        const RHI::RHI_ProgramReflection& refl,
-        uint32_t setIndex,
-        VkDescriptorSetLayout& outLayout)
-    {
+    bool CreateDescriptorSetLayoutFromReflection(VkDevice device, const RHI::RHI_ProgramReflection& refl, uint32_t setIndex, VkDescriptorSetLayout& outLayout) {
         outLayout = VK_NULL_HANDLE;
         const auto* set = refl.FindSet(setIndex);
         if (!set || set->m_Bindings.empty()) return false;
@@ -96,9 +91,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     VkAttachmentLoadOp ToVkLoadOp(RHI::RHI_LoadOp op) {
         switch (op) {
-        case RHI::RHI_LoadOp::Clear:   return VK_ATTACHMENT_LOAD_OP_CLEAR;
-        case RHI::RHI_LoadOp::Load:    return VK_ATTACHMENT_LOAD_OP_LOAD;
-        case RHI::RHI_LoadOp::DontCare: return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            case RHI::RHI_LoadOp::Clear:   return VK_ATTACHMENT_LOAD_OP_CLEAR;
+            case RHI::RHI_LoadOp::Load:    return VK_ATTACHMENT_LOAD_OP_LOAD;
+            case RHI::RHI_LoadOp::DontCare: return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         }
         return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     }
@@ -108,11 +103,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return std::filesystem::last_write_time(path, ec);
     }
 
-    bool CompileGraphicsShaders(
-        const RHI::RHI_GraphicsShaderDesc& desc,
-        RHI::RHI_ShaderCompileResult& vertOut,
-        RHI::RHI_ShaderCompileResult& fragOut)
-    {
+    bool CompileGraphicsShaders(const RHI::RHI_GraphicsShaderDesc& desc, RHI::RHI_ShaderCompileResult& vertOut, RHI::RHI_ShaderCompileResult& fragOut) {
         auto buildInput = [&](const std::filesystem::path& file, RHI::RHI_ShaderStage stage) {
             RHI::RHI_ShaderCompileInput in{};
             in.m_File = file;
@@ -120,8 +111,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             in.m_EntryPoint = desc.m_EntryPoint;
             in.m_IncludeDirs = desc.m_IncludeDirs;
 
-            const std::filesystem::path engineRoot =
-                std::filesystem::current_path() / "Nova-Core" / "Resources" / "Engine" / "Shaders";
+            const std::filesystem::path engineRoot = std::filesystem::current_path() / "Nova-Core" / "Resources" / "Engine" / "Shaders";
 
             auto addInclude = [&](const std::filesystem::path& dir) {
                 if (dir.empty()) return;
@@ -150,8 +140,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return true;
     }
 
-    VK_RenderGraph::VK_RenderGraph(std::vector<RHI::RHI_RenderPassDesc> passes)
-        : IRenderGraph(std::move(passes)) {}
+    VK_RenderGraph::VK_RenderGraph(std::vector<RHI::RHI_RenderPassDesc> passes) : IRenderGraph(std::move(passes)) {}
 
     bool VK_RenderGraph::Create(VK_Renderer& renderer) {
         Destroy();
@@ -644,12 +633,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_GeometryPassActive = false;
     }
 
-    VkRenderPass VK_RenderGraph::CreateColorDepthRenderPass(
-        VkAttachmentLoadOp colorLoad,
-        VkAttachmentLoadOp depthLoad,
-        VkImageLayout finalColorLayout,
-        VkImageLayout colorInitialLayout) const
-    {
+    VkRenderPass VK_RenderGraph::CreateColorDepthRenderPass(VkAttachmentLoadOp colorLoad, VkAttachmentLoadOp depthLoad, VkImageLayout finalColorLayout, VkImageLayout colorInitialLayout) const {
         if (!m_Renderer) return VK_NULL_HANDLE;
 
         VkAttachmentDescription colorAttachment{};
