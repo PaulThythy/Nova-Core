@@ -65,10 +65,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
          */
         void SetSceneBuffers(VkDevice device,
             VkBuffer bufFrameUniforms, VkDeviceMemory bufFrameUniformsMemory,
-            VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride,
-            VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory, VkDeviceSize materialDynamicStride,
+            VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride, VkDeviceSize mvpBufferSize,
+            VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory, VkDeviceSize materialDynamicStride, VkDeviceSize materialBufferSize,
             VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
-            std::vector<std::pair<uint32_t, VkDescriptorSet>> descriptorSets);
+            VkDeviceSize* mvpDynamicOffset, VkDeviceSize* materialDynamicOffset,
+            const std::vector<std::pair<uint32_t, VkDescriptorSet>>& descriptorSets);
 
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
@@ -100,7 +101,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
          * by `stride`, and return the offset used for this draw (0 when the buffer isn't dynamic).
          */
         VkDeviceSize UploadDynamic(VkDeviceMemory memory, VkDeviceSize size, const void* src,
-            VkDeviceSize stride, VkDeviceSize& offsetCursor);
+            VkDeviceSize stride, VkDeviceSize& offsetCursor, VkDeviceSize bufferSize);
         /** Bind all descriptor sets, supplying dynamic offsets in reflection (set, binding) order. */
         void BindDescriptorSets(VkCommandBuffer cmd, VkDeviceSize mvpDynamicOffset, VkDeviceSize materialDynamicOffset);
         /** Resolve the descriptor set allocated for a given reflection set index (VK_NULL_HANDLE if none). */
@@ -115,11 +116,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkBuffer m_BufMvp = VK_NULL_HANDLE;
         VkDeviceMemory m_BufMvpMemory = VK_NULL_HANDLE;
         VkDeviceSize m_MvpDynamicStride = 0;
-        VkDeviceSize m_MvpDynamicOffset = 0;
+        VkDeviceSize m_MvpBufferSize = 0;
+        VkDeviceSize* m_MvpDynamicOffset = nullptr;
         VkBuffer m_BufMaterials = VK_NULL_HANDLE;
         VkDeviceMemory m_BufMaterialsMemory = VK_NULL_HANDLE;
         VkDeviceSize m_MaterialDynamicStride = 0;
-        VkDeviceSize m_MaterialDynamicOffset = 0;
+        VkDeviceSize m_MaterialBufferSize = 0;
+        VkDeviceSize* m_MaterialDynamicOffset = nullptr;
         VkBuffer m_BufInstances = VK_NULL_HANDLE;
         VkDeviceMemory m_BufInstancesMemory = VK_NULL_HANDLE;
         VkDeviceSize m_BufInstancesSize = 0;

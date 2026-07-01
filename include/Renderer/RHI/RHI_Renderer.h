@@ -10,6 +10,7 @@
 #include "Renderer/RHI/RHI_Mesh.h"
 #include "Renderer/RHI/RHI_ShaderCompiler.h"
 #include "Renderer/RHI/RHI_Shaders.h"
+#include "Renderer/RHI/RHI_RenderGraph.h"
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -97,9 +98,11 @@ namespace Nova::Core::Renderer::RHI {
         virtual void EndFrame() = 0;
 
         /**
-         * Call after all draws targeting the editor viewport / offscreen target, before ImGui.
+         * Bind a render graph that defines the ordered render passes for this renderer.
+         * The backend compiles pipelines and creates API-specific resources.
          */
-        virtual void PrepareForImGui() = 0;
+        virtual void SetPipeline(std::unique_ptr<IRenderGraph> graph) = 0;
+        virtual IRenderGraph* GetPipeline() const = 0;
 
         // Scene state is configured separately from raw draw commands.
         virtual void BeginScene(const glm::mat4& view, const glm::mat4& proj) = 0;
@@ -112,30 +115,6 @@ namespace Nova::Core::Renderer::RHI {
         // render target, or nullptr if the renderer does not expose one.
         // Vulkan: typically a VkDescriptorSet cast to ImTextureID.
         virtual void* GetViewportTextureID() const = 0;
-
-        /** Returns the current/default shader (e.g. model shader). Ownership stays with the renderer. */
-        virtual RHI_Shaders* GetShader() = 0;
-
-        /**
-         * Create a fullscreen pass shader from shader sources (Slang inputs).
-         * Each backend compiles for its graphics API; callers do not pass SPIR-V or other IR.
-         * Vertex stage expects position (location 0) and UV (location 1), stride 16 bytes (2× float2).
-         * The pipeline uses alpha blending and depth test/write like the editor grid pass.
-         * Uses the same engine descriptor set (NovaUniforms) as the model shader.
-         * Caller owns the returned pointer and must call DestroyFullscreenShader() to free it.
-         */
-        virtual RHI_Shaders* CreateFullscreenShader(
-            const RHI_ShaderCompileInput& vertIn,
-            const RHI_ShaderCompileInput& fragIn) = 0;
-
-        /** Destroy a shader created by CreateFullscreenShader(). */
-        virtual void DestroyFullscreenShader(RHI_Shaders* shader) = 0;
-
-        /**
-         * Draw a fullscreen quad (two triangles, 6 vertices) with baked NDC positions and UVs.
-         * Flushes the current scene parameters (view, proj, globals) before drawing.
-         */
-        virtual void DrawFullscreen(RHI_Shaders* shader) = 0;
     };
 
 } // namespace Nova::Core::Renderer::RHI

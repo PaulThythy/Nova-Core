@@ -2,33 +2,28 @@
 #define VK_RENDERER_H
 
 #include <cstdint>
-#include <utility>
-#include <vector>
-
-#include <vulkan/vulkan.h>
+#include <memory>
 #include <unordered_map>
 
-#include "Renderer/RHI/RHI_Renderer.h"
-#include "Renderer/RHI/RHI_ShaderReflection.h"
+#include <vulkan/vulkan.h>
 
-#include "Renderer/Backends/Vulkan/VK_Extensions.h"
-#include "Renderer/Backends/Vulkan/VK_ValidationLayers.h"
-#include "Renderer/Backends/Vulkan/VK_Common.h"
+#include "Renderer/RHI/RHI_Renderer.h"
+#include "Renderer/RHI/RHI_RenderGraph.h"
+
 #include "Renderer/Backends/Vulkan/VK_Instance.h"
 #include "Renderer/Backends/Vulkan/VK_Device.h"
 #include "Renderer/Backends/Vulkan/VK_Swapchain.h"
-#include "Renderer/Backends/Vulkan/VK_Shaders.h"
 #include "Renderer/Backends/Vulkan/VK_Mesh.h"
+#include "Renderer/Backends/Vulkan/VK_RenderGraph.h"
 
 #include "Api.h"
-#include <memory>
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-	class NV_API VK_Renderer final : public RHI::IRenderer {
+    class NV_API VK_Renderer final : public RHI::IRenderer {
     public:
         VK_Renderer() = default;
-        ~VK_Renderer() = default;
+        ~VK_Renderer() override = default;
 
         bool Create(const RHI::RHI_SwapchainDesc& desc) override;
         void Destroy() override;
@@ -38,7 +33,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         void BeginFrame() override;
         void EndFrame() override;
-        void PrepareForImGui() override;
+
+        void SetPipeline(std::unique_ptr<RHI::IRenderGraph> graph) override;
+        RHI::IRenderGraph* GetPipeline() const override { return m_RenderGraph.get(); }
+
+        VK_RenderGraph* GetVKRenderGraph() const;
 
         void BeginScene(const glm::mat4& view, const glm::mat4& proj) override;
         void SetModelMatrix(const glm::mat4& model) override;
@@ -48,87 +47,47 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         void* GetViewportTextureID() const override;
 
-        RHI::RHI_Shaders* GetShader() override { return m_Shader.get(); }
+        // Used by VK_RenderGraph during frame execution.
+        bool IsFrameActive() const { return m_FrameActive; }
+        VkCommandBuffer GetCurrentCommandBuffer();
+        std::shared_ptr<VK_Mesh> GetOrUploadMesh(const std::shared_ptr<Renderer::RHI::RHI_Mesh>& cpuMesh);
 
-        RHI::RHI_Shaders* CreateFullscreenShader(
-            const RHI::RHI_ShaderCompileInput& vertIn,
-            const RHI::RHI_ShaderCompileInput& fragIn) override;
-        void DestroyFullscreenShader(RHI::RHI_Shaders* shader) override;
-        void DrawFullscreen(RHI::RHI_Shaders* shader) override;
+        // Accessors used by VK_RenderGraph
+        VkInstance GetVkInstance() const { return m_VKInstance.GetInstance(); }
+        VkDevice GetDevice() const { return m_VKDevice.GetDevice(); }
+        VkPhysicalDevice GetPhysicalDevice() const { return m_VKDevice.GetPhysicalDevice(); }
+        VkQueue GetGraphicsQueue() const { return m_VKDevice.GetGraphicsQueue(); }
+        uint32_t GetGraphicsQueueFamily() const { return m_VKDevice.GetGraphicsQueueFamily(); }
+        const VkPhysicalDeviceMemoryProperties& GetMemoryProperties() const { return m_VKDevice.GetMemoryProperties(); }
+
+        uint32_t GetSwapchainWidth() const { return m_VKSwapchain.GetExtent().width; }
+        uint32_t GetSwapchainHeight() const { return m_VKSwapchain.GetExtent().height; }
+        uint32_t GetSwapchainImageCount() const { return m_VKSwapchain.GetImageCount(); }
+        VkFormat GetSwapchainImageFormat() const { return m_VKSwapchain.GetImageFormat(); }
+        const std::vector<VkImageView>& GetSwapchainImageViews() const;
+        VkFramebuffer GetSwapchainFramebuffer(uint32_t imageIndex) const;
+        uint32_t GetAcquiredImageIndex() const { return m_VKSwapchain.GetAcquiredImageIndex(); }
+
+        bool HasViewportFramebuffer() const { return m_ViewportFramebuffer != VK_NULL_HANDLE; }
+        VkImage GetViewportImage() const { return m_ViewportImage; }
+        uint32_t GetViewportWidth() const { return static_cast<uint32_t>(m_ViewportWidth); }
+        uint32_t GetViewportHeight() const { return static_cast<uint32_t>(m_ViewportHeight); }
+        VkFramebuffer GetViewportFramebuffer() const { return m_ViewportFramebuffer; }
 
     private:
-        static constexpr uint32_t MAX_MODEL_INSTANCES = 1024;
-        static constexpr uint32_t MAX_MODEL_DRAWS = 4096;
+        void WarnIfNoPipeline(const char* operation) const;
 
-        bool InitRenderResources();
-        void DestroyRenderResources();
-        bool RecreateSwapchainRenderTargets();
-
-        bool CreateBackBufferRenderPass();
-        void DestroyBackBufferRenderPass();
-        bool CreateViewportRenderPass();
-        void DestroyViewportRenderPass();
-        bool CreateDepthResources();
-        void DestroyDepthResources();
-        bool CreateSwapchainFramebuffers();
-        void DestroySwapchainFramebuffers();
-        bool CreateImGuiDescriptorPool();
-        void DestroyImGuiDescriptorPool();
-        void CreateModelPipeline();
-        void DestroyModelPipeline();
-
-        void BeginImGuiRenderPass();
-        bool TransitionViewportImageToShaderRead();
         void CreateViewportFramebuffer(int w, int h);
         void DestroyViewportFramebuffer();
 
-        void CreateFullscreenQuadBuffer();
-        void DestroyFullscreenQuadBuffer();
-
-        std::shared_ptr<VK_Mesh> GetOrUploadMesh(const std::shared_ptr<Renderer::RHI::RHI_Mesh>& cpuMesh);
-
     private:
-        VK_Instance  m_VKInstance;
-        VK_Device    m_VKDevice;
+        VK_Instance    m_VKInstance;
+        VK_Device      m_VKDevice;
         VK_Swapchain   m_VKSwapchain;
         RHI::RHI_SwapchainDesc m_SwapchainDesc{};
-        bool m_RenderResourcesInitialized = false;
 
-        VkRenderPass m_BackBufferRenderPass = VK_NULL_HANDLE;
-        VkRenderPass m_ViewportRenderPass = VK_NULL_HANDLE;
-        std::vector<VkFramebuffer> m_SwapchainFramebuffers;
+        std::unique_ptr<RHI::IRenderGraph> m_RenderGraph;
 
-        VkImage        m_DepthImage = VK_NULL_HANDLE;
-        VkDeviceMemory m_DepthImageMemory = VK_NULL_HANDLE;
-        VkImageView    m_DepthImageView = VK_NULL_HANDLE;
-        VkFormat       m_DepthFormat = VK_FORMAT_D32_SFLOAT;
-
-        VkPipeline       m_ModelPipeline = VK_NULL_HANDLE;
-        VkPipelineLayout m_ModelPipelineLayout = VK_NULL_HANDLE;
-        std::vector<std::pair<uint32_t, VkDescriptorSetLayout>> m_SetLayouts;
-        VkBuffer         m_BufGlobals = VK_NULL_HANDLE;
-        VkDeviceMemory   m_BufGlobalsMemory = VK_NULL_HANDLE;
-        VkBuffer         m_BufMvp = VK_NULL_HANDLE;
-        VkDeviceMemory   m_BufMvpMemory = VK_NULL_HANDLE;
-        VkDeviceSize     m_MvpDynamicStride = 0;
-        VkBuffer         m_BufMaterials = VK_NULL_HANDLE;
-        VkDeviceMemory   m_BufMaterialsMemory = VK_NULL_HANDLE;
-        VkDeviceSize     m_MaterialDynamicStride = 0;
-        VkBuffer         m_BufInstances = VK_NULL_HANDLE;
-        VkDeviceMemory   m_BufInstancesMemory = VK_NULL_HANDLE;
-        VkDeviceSize     m_BufInstancesSize = 0;
-        std::vector<std::pair<uint32_t, VkDescriptorSet>> m_DescriptorSets;
-        RHI::RHI_ProgramReflection m_ModelPipelineReflection{};
-        VkDescriptorPool m_ImGuiDescriptorPool = VK_NULL_HANDLE;
-
-        std::unique_ptr<VK_Shaders> m_Shader;
-        std::vector<VkPipeline> m_FullscreenPipelines;
-        struct FullscreenPipelineState {
-            VkPipelineLayout layout = VK_NULL_HANDLE;
-            std::vector<VkDescriptorSetLayout> setLayouts;
-            std::vector<VkDescriptorSet> ownedSets;
-        };
-        std::unordered_map<VkPipeline, FullscreenPipelineState> m_FullscreenPipelineState;
         std::unordered_map<const Renderer::RHI::RHI_Mesh*, std::shared_ptr<VK_Mesh>> m_MeshCache;
 
         bool m_FramebufferResized = false;
@@ -144,13 +103,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkFramebuffer m_ViewportFramebuffer = VK_NULL_HANDLE;
         VkSampler m_ViewportSampler = VK_NULL_HANDLE;
         VkDescriptorSet m_ViewportDescriptorSet = VK_NULL_HANDLE;
-        bool m_RenderedToViewportThisFrame = false;
-        bool m_ViewportImageFirstUse = true;
         bool m_FrameActive = false;
-        bool m_ImGuiSwapchainPassBegun = false;
-
-        VkBuffer       m_FullscreenQuadBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory m_FullscreenQuadMemory = VK_NULL_HANDLE;
 	};
 } // namespace Nova::Core::Renderer::Backends::Vulkan
 

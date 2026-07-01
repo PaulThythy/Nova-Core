@@ -1,5 +1,6 @@
 #include "Renderer/Backends/Vulkan/VK_Shaders.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
+#include "Core/Log.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -48,10 +49,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_Shaders::SetSceneBuffers(VkDevice device,
         VkBuffer bufFrameUniforms, VkDeviceMemory bufFrameUniformsMemory,
-        VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride,
-        VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory, VkDeviceSize materialDynamicStride,
+        VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride, VkDeviceSize mvpBufferSize,
+        VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory, VkDeviceSize materialDynamicStride, VkDeviceSize materialBufferSize,
         VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
-        std::vector<std::pair<uint32_t, VkDescriptorSet>> descriptorSets)
+        VkDeviceSize* mvpDynamicOffset, VkDeviceSize* materialDynamicOffset,
+        const std::vector<std::pair<uint32_t, VkDescriptorSet>>& descriptorSets)
     {
         m_Device = device;
         m_BufFrameUniforms = bufFrameUniforms;
@@ -59,22 +61,24 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_BufMvp = bufMvp;
         m_BufMvpMemory = bufMvpMemory;
         m_MvpDynamicStride = mvpDynamicStride;
-        m_MvpDynamicOffset = 0;
+        m_MvpBufferSize = mvpBufferSize;
+        m_MvpDynamicOffset = mvpDynamicOffset;
         m_BufMaterials = bufMaterials;
         m_BufMaterialsMemory = bufMaterialsMemory;
         m_MaterialDynamicStride = materialDynamicStride;
-        m_MaterialDynamicOffset = 0;
+        m_MaterialBufferSize = materialBufferSize;
+        m_MaterialDynamicOffset = materialDynamicOffset;
         m_BufInstances = bufInstances;
         m_BufInstancesMemory = bufInstancesMemory;
         m_BufInstancesSize = bufInstancesSize;
-        m_DescriptorSets = std::move(descriptorSets);
+        m_DescriptorSets = descriptorSets;
         std::sort(m_DescriptorSets.begin(), m_DescriptorSets.end(),
             [](const auto& a, const auto& b) { return a.first < b.first; });
     }
 
     void VK_Shaders::ResetDynamicUBOs() {
-        m_MvpDynamicOffset = 0;
-        m_MaterialDynamicOffset = 0;
+        if (m_MvpDynamicOffset) *m_MvpDynamicOffset = 0;
+        if (m_MaterialDynamicOffset) *m_MaterialDynamicOffset = 0;
     }
 
     VkDescriptorSet VK_Shaders::FindDescriptorSet(uint32_t set) const {
@@ -193,8 +197,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         }
     }
 
-    VkDeviceSize VK_Shaders::UploadDynamic(VkDeviceMemory memory, VkDeviceSize size, const void* src, VkDeviceSize stride, VkDeviceSize& offsetCursor) {
+    VkDeviceSize VK_Shaders::UploadDynamic(VkDeviceMemory memory, VkDeviceSize size, const void* src,
+        VkDeviceSize stride, VkDeviceSize& offsetCursor, VkDeviceSize bufferSize)
+    {
         if (memory == VK_NULL_HANDLE || stride == 0) return 0;
+        if (bufferSize > 0 && offsetCursor + size > bufferSize) {
+            NV_LOG_WARN("VK_Shaders::UploadDynamic - dynamic UBO ring buffer overflow");
+            return 0;
+        }
         const VkDeviceSize offsetThisDraw = offsetCursor;
         MapAndCopy(memory, offsetThisDraw, size, src);
         offsetCursor += stride;
@@ -243,13 +253,19 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         RHI::MVP mvp{};
         CopyParametersIntoStruct(m_Parameters, RHI::GetMvpLayout(), &mvp);
-        const VkDeviceSize mvpOffsetThisDraw =
-            UploadDynamic(m_BufMvpMemory, sizeof mvp, &mvp, m_MvpDynamicStride, m_MvpDynamicOffset);
+        VkDeviceSize mvpOffsetThisDraw = 0;
+        if (m_MvpDynamicOffset) {
+            mvpOffsetThisDraw = UploadDynamic(
+                m_BufMvpMemory, sizeof mvp, &mvp, m_MvpDynamicStride, *m_MvpDynamicOffset, m_MvpBufferSize);
+        }
 
         RHI::Material material{};
         CopyParametersIntoStruct(m_Parameters, RHI::GetMaterialLayout(), &material);
-        const VkDeviceSize materialOffsetThisDraw =
-            UploadDynamic(m_BufMaterialsMemory, sizeof material, &material, m_MaterialDynamicStride, m_MaterialDynamicOffset);
+        VkDeviceSize materialOffsetThisDraw = 0;
+        if (m_MaterialDynamicOffset) {
+            materialOffsetThisDraw = UploadDynamic(
+                m_BufMaterialsMemory, sizeof material, &material, m_MaterialDynamicStride, *m_MaterialDynamicOffset, m_MaterialBufferSize);
+        }
 
         // Per-instance data for GPU instancing (read by the shader as `nova.instances[instanceID]`
         // when `u_UseInstancing != 0`). Clamp to the buffer capacity and upload at offset 0.
