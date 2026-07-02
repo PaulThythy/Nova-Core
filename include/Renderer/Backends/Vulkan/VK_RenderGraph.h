@@ -31,8 +31,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         void OnBeginFrame() override;
         void OnEndFrame() override;
-        void OnBeginScene(const glm::mat4& view, const glm::mat4& proj) override;
-        void OnSetModelMatrix(const glm::mat4& model) override;
         void OnDraw(const RHI::RHI_DrawCommand& cmd) override;
         void OnDrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;
         void OnTransitionToImGuiPass() override;

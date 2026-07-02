@@ -93,8 +93,6 @@ namespace Nova::Core::Renderer::RHI {
 
         virtual void OnBeginFrame() = 0;
         virtual void OnEndFrame() = 0;
-        virtual void OnBeginScene(const glm::mat4& view, const glm::mat4& proj) = 0;
-        virtual void OnSetModelMatrix(const glm::mat4& model) = 0;
         virtual void OnDraw(const RHI_DrawCommand& cmd) = 0;
         virtual void OnDrawIndexed(const RHI_DrawIndexedCommand& cmd) = 0;
         virtual void OnTransitionToImGuiPass() = 0;

@@ -104,10 +104,6 @@ namespace Nova::Core::Renderer::RHI {
         virtual void SetPipeline(std::unique_ptr<IRenderGraph> graph) = 0;
         virtual IRenderGraph* GetPipeline() const = 0;
 
-        // Scene state is configured separately from raw draw commands.
-        virtual void BeginScene(const glm::mat4& view, const glm::mat4& proj) = 0;
-        virtual void SetModelMatrix(const glm::mat4& model) = 0;
-
         virtual void Draw(const RHI_DrawCommand& cmd) = 0;
         virtual void DrawIndexed(const RHI_DrawIndexedCommand& cmd) = 0;
 

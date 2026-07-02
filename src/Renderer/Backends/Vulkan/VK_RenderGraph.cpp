@@ -465,29 +465,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_ImGuiPassBegun = false;
     }
 
-    void VK_RenderGraph::OnBeginScene(const glm::mat4& view, const glm::mat4& proj) {
-        const glm::mat4 viewProj = proj * view;
-        const glm::mat4 invViewProj = glm::inverse(viewProj);
-
-        for (size_t i = 0; i < GetPassCount(); ++i) {
-            const auto& pass = m_Passes[i];
-            if (pass.m_Type == RHI::RHI_RenderPassType::ImGui)
-                continue;
-
-            if (auto* shader = GetPassShader(i)) {
-                shader->SetParameter("view", view);
-                shader->SetParameter("proj", proj);
-                shader->SetParameter("viewProj", viewProj);
-                shader->SetParameter("invViewProj", invViewProj);
-            }
-        }
-    }
-
-    void VK_RenderGraph::OnSetModelMatrix(const glm::mat4& model) {
-        if (auto* shader = GetGeometryPassShader())
-            shader->SetParameter("model", model);
-    }
-
     void VK_RenderGraph::OnDraw(const RHI::RHI_DrawCommand& cmd) {
         if (!m_Renderer || !m_Renderer->IsFrameActive() || !cmd.m_Mesh) return;
 

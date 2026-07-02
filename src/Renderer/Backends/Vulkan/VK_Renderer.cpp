@@ -234,16 +234,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_RenderGraph->OnBeginFrame();
     }
 
-    void VK_Renderer::BeginScene(const glm::mat4& view, const glm::mat4& proj) {
-        if (m_RenderGraph)
-            m_RenderGraph->OnBeginScene(view, proj);
-    }
-
-    void VK_Renderer::SetModelMatrix(const glm::mat4& model) {
-        if (m_RenderGraph)
-            m_RenderGraph->OnSetModelMatrix(model);
-    }
-
     void VK_Renderer::Draw(const RHI::RHI_DrawCommand& cmd) {
         if (!m_FrameActive) return;
         if (!m_RenderGraph) { WarnIfNoPipeline("Draw ignored"); return; }
