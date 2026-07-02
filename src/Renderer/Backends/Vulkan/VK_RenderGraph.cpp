@@ -1190,8 +1190,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const auto& images = m_Renderer->GetSwapchainImageViews();
         m_SwapchainFramebuffers.assign(images.size(), VK_NULL_HANDLE);
 
+        if (m_SwapchainDepthImages.size() != images.size()) {
+            NV_LOG_ERROR("VK_RenderGraph::CreateSwapchainFramebuffers - depth image count mismatch");
+            return false;
+        }
+
         for (size_t i = 0; i < images.size(); ++i) {
-            std::array<VkImageView, 2> attachments = { images[i], m_DepthImageView };
+            std::array<VkImageView, 2> attachments = { images[i], m_SwapchainDepthImages[i].m_View };
 
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -1288,6 +1293,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         }
         if (m_DepthFormat == VK_FORMAT_UNDEFINED) return false;
 
+        const uint32_t imageCount = m_Renderer->GetSwapchainImageCount();
+        if (imageCount == 0) return false;
+
+        m_SwapchainDepthImages.clear();
+        m_SwapchainDepthImages.resize(imageCount);
+
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -1301,46 +1312,58 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
         VkDevice device = m_Renderer->GetDevice();
-        if (vkCreateImage(device, &imageInfo, nullptr, &m_DepthImage) != VK_SUCCESS) return false;
-
-        VkMemoryRequirements memReq{};
-        vkGetImageMemoryRequirements(device, m_DepthImage, &memReq);
         const auto& memProps = m_Renderer->GetMemoryProperties();
-        uint32_t memTypeIndex = UINT32_MAX;
-        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-            if ((memReq.memoryTypeBits & (1u << i)) &&
-                (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-                memTypeIndex = i;
-                break;
+
+        for (uint32_t i = 0; i < imageCount; ++i) {
+            auto& depth = m_SwapchainDepthImages[i];
+            if (vkCreateImage(device, &imageInfo, nullptr, &depth.m_Image) != VK_SUCCESS)
+                return false;
+
+            VkMemoryRequirements memReq{};
+            vkGetImageMemoryRequirements(device, depth.m_Image, &memReq);
+            uint32_t memTypeIndex = UINT32_MAX;
+            for (uint32_t j = 0; j < memProps.memoryTypeCount; ++j) {
+                if ((memReq.memoryTypeBits & (1u << j)) &&
+                    (memProps.memoryTypes[j].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+                    memTypeIndex = j;
+                    break;
+                }
             }
+            if (memTypeIndex == UINT32_MAX) return false;
+
+            VkMemoryAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            allocInfo.allocationSize = memReq.size;
+            allocInfo.memoryTypeIndex = memTypeIndex;
+            if (vkAllocateMemory(device, &allocInfo, nullptr, &depth.m_Memory) != VK_SUCCESS)
+                return false;
+            vkBindImageMemory(device, depth.m_Image, depth.m_Memory, 0);
+
+            VkImageViewCreateInfo viewInfo{};
+            viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            viewInfo.image = depth.m_Image;
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            viewInfo.format = m_DepthFormat;
+            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            viewInfo.subresourceRange.levelCount = 1;
+            viewInfo.subresourceRange.layerCount = 1;
+
+            if (vkCreateImageView(device, &viewInfo, nullptr, &depth.m_View) != VK_SUCCESS)
+                return false;
         }
-        if (memTypeIndex == UINT32_MAX) return false;
 
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memReq.size;
-        allocInfo.memoryTypeIndex = memTypeIndex;
-        if (vkAllocateMemory(device, &allocInfo, nullptr, &m_DepthImageMemory) != VK_SUCCESS) return false;
-        vkBindImageMemory(device, m_DepthImage, m_DepthImageMemory, 0);
-
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = m_DepthImage;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = m_DepthFormat;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        return vkCreateImageView(device, &viewInfo, nullptr, &m_DepthImageView) == VK_SUCCESS;
+        return true;
     }
 
     void VK_RenderGraph::DestroyDepthResources() {
         if (!m_Renderer) return;
         VkDevice device = m_Renderer->GetDevice();
-        if (m_DepthImageView != VK_NULL_HANDLE) { vkDestroyImageView(device, m_DepthImageView, nullptr); m_DepthImageView = VK_NULL_HANDLE; }
-        if (m_DepthImage != VK_NULL_HANDLE) { vkDestroyImage(device, m_DepthImage, nullptr); m_DepthImage = VK_NULL_HANDLE; }
-        if (m_DepthImageMemory != VK_NULL_HANDLE) { vkFreeMemory(device, m_DepthImageMemory, nullptr); m_DepthImageMemory = VK_NULL_HANDLE; }
+        for (auto& depth : m_SwapchainDepthImages) {
+            if (depth.m_View != VK_NULL_HANDLE) { vkDestroyImageView(device, depth.m_View, nullptr); depth.m_View = VK_NULL_HANDLE; }
+            if (depth.m_Image != VK_NULL_HANDLE) { vkDestroyImage(device, depth.m_Image, nullptr); depth.m_Image = VK_NULL_HANDLE; }
+            if (depth.m_Memory != VK_NULL_HANDLE) { vkFreeMemory(device, depth.m_Memory, nullptr); depth.m_Memory = VK_NULL_HANDLE; }
+        }
+        m_SwapchainDepthImages.clear();
     }
 
     void VK_RenderGraph::CreateFullscreenQuadBuffer() {

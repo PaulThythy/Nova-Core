@@ -140,9 +140,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkRenderPass m_ViewportColorLoadDepthClearPass = VK_NULL_HANDLE;
         std::vector<VkFramebuffer> m_SwapchainFramebuffers;
 
-        VkImage        m_DepthImage = VK_NULL_HANDLE;
-        VkDeviceMemory m_DepthImageMemory = VK_NULL_HANDLE;
-        VkImageView    m_DepthImageView = VK_NULL_HANDLE;
+        struct SwapchainDepthImage {
+            VkImage        m_Image = VK_NULL_HANDLE;
+            VkDeviceMemory m_Memory = VK_NULL_HANDLE;
+            VkImageView    m_View = VK_NULL_HANDLE;
+        };
+
+        // One depth attachment per swapchain image so concurrent in-flight frames
+        // (MAILBOX / triple buffering) do not corrupt each other's depth tests.
+        std::vector<SwapchainDepthImage> m_SwapchainDepthImages;
         VkFormat       m_DepthFormat = VK_FORMAT_D32_SFLOAT;
 
         VkDescriptorPool m_ImGuiDescriptorPool = VK_NULL_HANDLE;
