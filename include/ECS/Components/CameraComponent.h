@@ -6,7 +6,7 @@
 #include "Api.h"
 #include "Renderer/Graphics/Camera.h"
 
-namespace Nova::Core::Scene::ECS::Components {
+namespace Nova::Core::ECS::Components {
 
     struct NV_API CameraComponent {
         std::shared_ptr<Renderer::Graphics::Camera> m_Camera;
@@ -20,6 +20,6 @@ namespace Nova::Core::Scene::ECS::Components {
         {}
     };
 
-} // namespace Nova::Core::Scene::ECS::Components
+} // namespace Nova::Core::ECS::Components
 
 #endif // CAMERACOMPONENT_H

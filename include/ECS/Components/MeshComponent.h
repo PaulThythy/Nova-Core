@@ -4,7 +4,7 @@
 #include "Api.h"
 #include "Asset/Assets/MeshAsset.h"
 
-namespace Nova::Core::Scene::ECS::Components {
+namespace Nova::Core::ECS::Components {
 
 	struct NV_API MeshComponent {
 		std::shared_ptr<Asset::Assets::MeshAsset> m_MeshAsset;
@@ -14,6 +14,6 @@ namespace Nova::Core::Scene::ECS::Components {
 			: m_MeshAsset(meshAsset) {}
 	};
 
-} // namespace Nova::Core::Scene::ECS::Components
+} // namespace Nova::Core::ECS::Components
 
 #endif // MESHCOMPONENT_H

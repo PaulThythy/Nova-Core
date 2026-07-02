@@ -4,7 +4,7 @@
 #include "Api.h"
 #include "Core/UUID.h"
 
-namespace Nova::Core::Scene::ECS::Components {
+namespace Nova::Core::ECS::Components {
 
 	struct NV_API IDComponent {
 		UUID m_ID = 0;
@@ -12,6 +12,6 @@ namespace Nova::Core::Scene::ECS::Components {
 		IDComponent() = default;
 		IDComponent(UUID id) : m_ID(id) {}
 	};
-} // namespace Nova::Core::Scene::ECS::Components
+} // namespace Nova::Core::ECS::Components
 
 #endif // IDCOMPONENT_H

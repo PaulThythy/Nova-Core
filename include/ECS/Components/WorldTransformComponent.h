@@ -5,12 +5,12 @@
 
 #include "Api.h"
 
-namespace Nova::Core::Scene::ECS::Components {
+namespace Nova::Core::ECS::Components {
 
 	struct NV_API WorldTransformComponent {
 		glm::mat4 m_World{ 1.0f };
 	};
 
-} // namespace Nova::Core::Scene::ECS::Components
+} // namespace Nova::Core::ECS::Components
 
 #endif // WORLDTRANSFORMCOMPONENT_H

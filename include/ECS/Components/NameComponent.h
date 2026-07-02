@@ -5,7 +5,7 @@
 
 #include "Api.h"
 
-namespace Nova::Core::Scene::ECS::Components {
+namespace Nova::Core::ECS::Components {
 
 	struct NV_API NameComponent {
 		std::string m_Name;
@@ -13,6 +13,6 @@ namespace Nova::Core::Scene::ECS::Components {
 		NameComponent() = default;
 		NameComponent(const std::string& name) : m_Name(name) {}
 	};
-} // namespace Nova::Core::Scene::ECS::Components
+} // namespace Nova::Core::ECS::Components
 
 #endif // NAMECOMPONENT_H

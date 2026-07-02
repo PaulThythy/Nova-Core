@@ -1,8 +1,8 @@
 #include "Scene/Scene.h"
 
-#include "Scene/ECS/Components/IDComponent.h"
-#include "Scene/ECS/Components/NameComponent.h"
-#include "Scene/ECS/Components/WorldTransformComponent.h"
+#include "ECS/Components/IDComponent.h"
+#include "ECS/Components/NameComponent.h"
+#include "ECS/Components/WorldTransformComponent.h"
 
 namespace Nova::Core::Scene {
 
