@@ -80,6 +80,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         bool CreateImGuiDescriptorPool();
         void DestroyImGuiDescriptorPool();
+        void DestroyEngineBuffers();
         bool CreateDepthResources();
         void DestroyDepthResources();
         bool CreateBackBufferRenderPass();
@@ -151,19 +152,29 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkDescriptorPool m_ImGuiDescriptorPool = VK_NULL_HANDLE;
 
+        // Number of frames-in-flight; each engine buffer is partitioned into this many regions so
+        // concurrent in-flight frames never share (and race on) the same uniform memory.
+        uint32_t       m_FramesInFlight = 1;
+
         VkBuffer       m_BufGlobals = VK_NULL_HANDLE;
         VkDeviceMemory m_BufGlobalsMemory = VK_NULL_HANDLE;
+        VkDeviceSize   m_FrameUniformStride = 0;   // aligned size of one FrameUniforms region
+        VkDeviceSize   m_FrameUniformOffset = 0;   // current frame's region base (dynamic offset)
         VkBuffer       m_BufMvp = VK_NULL_HANDLE;
         VkDeviceMemory m_BufMvpMemory = VK_NULL_HANDLE;
         VkDeviceSize   m_MvpDynamicStride = 0;
+        VkDeviceSize   m_MvpFrameRegionStride = 0; // bytes reserved per frame (MAX_MODEL_DRAWS entries)
         VkDeviceSize   m_MvpDynamicOffset = 0;
         VkBuffer       m_BufMaterials = VK_NULL_HANDLE;
         VkDeviceMemory m_BufMaterialsMemory = VK_NULL_HANDLE;
         VkDeviceSize   m_MaterialDynamicStride = 0;
+        VkDeviceSize   m_MaterialFrameRegionStride = 0;
         VkDeviceSize   m_MaterialDynamicOffset = 0;
         VkBuffer       m_BufInstances = VK_NULL_HANDLE;
         VkDeviceMemory m_BufInstancesMemory = VK_NULL_HANDLE;
-        VkDeviceSize   m_BufInstancesSize = 0;
+        VkDeviceSize   m_BufInstancesSize = 0;      // usable instance bytes per frame region
+        VkDeviceSize   m_InstanceRegionStride = 0;  // aligned size of one instance region
+        VkDeviceSize   m_InstanceOffset = 0;        // current frame's region base (dynamic offset)
 
         std::vector<PassPipeline> m_PassPipelines;
 

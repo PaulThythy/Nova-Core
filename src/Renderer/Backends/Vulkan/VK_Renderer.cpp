@@ -1,4 +1,5 @@
 #include "Renderer/Backends/Vulkan/VK_Renderer.h"
+#include "Renderer/Backends/Vulkan/VK_Common.h"
 
 #include "Core/Application.h"
 #include "Core/Assert.h"
@@ -17,10 +18,11 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    const std::vector<VkImageView>& VK_Renderer::GetSwapchainImageViews() const {
-        static thread_local std::vector<VkImageView> views;
-        views.clear();
-        for (const auto& img : m_VKSwapchain.GetImages())
+    std::vector<VkImageView> VK_Renderer::GetSwapchainImageViews() const {
+        std::vector<VkImageView> views;
+        const auto& images = m_VKSwapchain.GetImages();
+        views.reserve(images.size());
+        for (const auto& img : images)
             views.push_back(img.m_ImageView);
         return views;
     }
@@ -353,14 +355,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         vkGetImageMemoryRequirements(device, m_ViewportImage, &memReq);
         VkPhysicalDeviceMemoryProperties memProps{};
         vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProps);
-        uint32_t memTypeIndex = UINT32_MAX;
-        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-            if ((memReq.memoryTypeBits & (1u << i)) &&
-                (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-                memTypeIndex = i;
-                break;
-            }
-        }
+        uint32_t memTypeIndex = FindMemoryTypeIndex(memProps, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         if (memTypeIndex == UINT32_MAX) {
             vkDestroyImage(device, m_ViewportImage, nullptr);
             m_ViewportImage = VK_NULL_HANDLE;
@@ -390,14 +385,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         CheckVkResult(vkCreateImage(device, &depthImageInfo, nullptr, &m_ViewportDepthImage));
 
         vkGetImageMemoryRequirements(device, m_ViewportDepthImage, &memReq);
-        memTypeIndex = UINT32_MAX;
-        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-            if ((memReq.memoryTypeBits & (1u << i)) &&
-                (memProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-                memTypeIndex = i;
-                break;
-            }
-        }
+        memTypeIndex = FindMemoryTypeIndex(memProps, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         if (memTypeIndex == UINT32_MAX) {
             DestroyViewportFramebuffer();
             return;

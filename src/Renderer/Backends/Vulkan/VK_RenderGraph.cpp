@@ -34,7 +34,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         using RK = RHI::RHI_ResourceKind;
         switch (b.m_Kind) {
             case RK::ConstantBuffer: return b.m_IsDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            case RK::StorageBuffer:  return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            case RK::StorageBuffer:  return b.m_IsDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             case RK::Texture:        return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
             case RK::Sampler:        return VK_DESCRIPTOR_TYPE_SAMPLER;
             case RK::CombinedTextureSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -45,13 +45,22 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void MarkEngineDynamicBuffers(RHI::RHI_ProgramReflection& refl) {
-        const char* dynamicNames[] = { RHI::EngineResourceName::Mvp, RHI::EngineResourceName::Material };
+        // All engine uniform/storage buffers are dynamic: each frame-in-flight owns a distinct
+        // region within the shared buffer, selected at bind time via the dynamic offset. This
+        // prevents the CPU from overwriting data the GPU of a still-in-flight frame is reading.
+        const char* dynamicNames[] = {
+            RHI::EngineResourceName::Frame,
+            RHI::EngineResourceName::Mvp,
+            RHI::EngineResourceName::Material,
+            RHI::EngineResourceName::Instances,
+        };
         for (const char* name : dynamicNames) {
             const RHI::RHI_BindingKey* key = refl.FindBindingKeyByName(name);
             if (!key) continue;
             if (auto* set = const_cast<RHI::RHI_DescriptorSetLayoutInfo*>(refl.FindSet(key->m_Set))) {
                 for (auto& b : set->m_Bindings) {
-                    if (b.m_Key.m_Binding == key->m_Binding && b.m_Kind == RHI::RHI_ResourceKind::ConstantBuffer)
+                    if (b.m_Key.m_Binding == key->m_Binding &&
+                        (b.m_Kind == RHI::RHI_ResourceKind::ConstantBuffer || b.m_Kind == RHI::RHI_ResourceKind::StorageBuffer))
                         b.m_IsDynamicUniformBuffer = true;
                 }
             }
@@ -145,6 +154,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     bool VK_RenderGraph::Create(VK_Renderer& renderer) {
         Destroy();
         m_Renderer = &renderer;
+        m_FramesInFlight = std::max(1u, renderer.GetFramesInFlight());
 
         if (m_Passes.empty()) {
             NV_LOG_ERROR("VK_RenderGraph::Create - empty render graph");
@@ -893,98 +903,68 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         }
 
         if (m_BufGlobals == VK_NULL_HANDLE) {
-            const VkDeviceSize globalsSize = sizeof(Renderer::RHI::FrameUniforms);
-            VkBufferCreateInfo bufInfo{};
-            bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            bufInfo.size = globalsSize;
-            bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-            bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            if (vkCreateBuffer(device, &bufInfo, nullptr, &m_BufGlobals) != VK_SUCCESS) return false;
-
-            VkMemoryRequirements memReq{};
-            vkGetBufferMemoryRequirements(device, m_BufGlobals, &memReq);
             const auto& memProps = m_Renderer->GetMemoryProperties();
-            uint32_t memTypeIndex = UINT32_MAX;
-            for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-                if ((memReq.memoryTypeBits & (1u << i)) &&
-                    (memProps.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))) {
-                    memTypeIndex = i;
-                    break;
-                }
-            }
-            if (memTypeIndex == UINT32_MAX) return false;
-
-            VkMemoryAllocateInfo allocInfo{};
-            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            allocInfo.allocationSize = memReq.size;
-            allocInfo.memoryTypeIndex = memTypeIndex;
-            if (vkAllocateMemory(device, &allocInfo, nullptr, &m_BufGlobalsMemory) != VK_SUCCESS) return false;
-            vkBindBufferMemory(device, m_BufGlobals, m_BufGlobalsMemory, 0);
+            const VkDeviceSize framesInFlight = static_cast<VkDeviceSize>(std::max(1u, m_FramesInFlight));
 
             VkPhysicalDeviceProperties physProps{};
             vkGetPhysicalDeviceProperties(m_Renderer->GetPhysicalDevice(), &physProps);
             auto alignUp = [](VkDeviceSize v, VkDeviceSize a) -> VkDeviceSize {
                 return (a > 0) ? ((v + a - 1) / a) * a : v;
             };
+            const VkDeviceSize uboAlign = physProps.limits.minUniformBufferOffsetAlignment;
+            const VkDeviceSize ssboAlign = physProps.limits.minStorageBufferOffsetAlignment;
 
-            const VkDeviceSize mvpSize = sizeof(Renderer::RHI::MVP);
-            m_MvpDynamicStride = alignUp(mvpSize, physProps.limits.minUniformBufferOffsetAlignment);
-            bufInfo.size = m_MvpDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
-            bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-            if (vkCreateBuffer(device, &bufInfo, nullptr, &m_BufMvp) != VK_SUCCESS) return false;
-            vkGetBufferMemoryRequirements(device, m_BufMvp, &memReq);
-            memTypeIndex = UINT32_MAX;
-            for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-                if ((memReq.memoryTypeBits & (1u << i)) &&
-                    (memProps.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))) {
-                    memTypeIndex = i;
-                    break;
-                }
-            }
-            if (memTypeIndex == UINT32_MAX) return false;
-            allocInfo.allocationSize = memReq.size;
-            allocInfo.memoryTypeIndex = memTypeIndex;
-            if (vkAllocateMemory(device, &allocInfo, nullptr, &m_BufMvpMemory) != VK_SUCCESS) return false;
-            vkBindBufferMemory(device, m_BufMvp, m_BufMvpMemory, 0);
+            auto createHostBuffer = [&](VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& outBuf, VkDeviceMemory& outMem) -> bool {
+                VkBufferCreateInfo bufInfo{};
+                bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+                bufInfo.size = size;
+                bufInfo.usage = usage;
+                bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+                if (vkCreateBuffer(device, &bufInfo, nullptr, &outBuf) != VK_SUCCESS) return false;
 
-            const VkDeviceSize materialSize = sizeof(Renderer::RHI::Material);
-            m_MaterialDynamicStride = alignUp(materialSize, physProps.limits.minUniformBufferOffsetAlignment);
-            bufInfo.size = m_MaterialDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
-            if (vkCreateBuffer(device, &bufInfo, nullptr, &m_BufMaterials) != VK_SUCCESS) return false;
-            vkGetBufferMemoryRequirements(device, m_BufMaterials, &memReq);
-            memTypeIndex = UINT32_MAX;
-            for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-                if ((memReq.memoryTypeBits & (1u << i)) &&
-                    (memProps.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))) {
-                    memTypeIndex = i;
-                    break;
-                }
-            }
-            if (memTypeIndex == UINT32_MAX) return false;
-            allocInfo.allocationSize = memReq.size;
-            allocInfo.memoryTypeIndex = memTypeIndex;
-            if (vkAllocateMemory(device, &allocInfo, nullptr, &m_BufMaterialsMemory) != VK_SUCCESS) return false;
-            vkBindBufferMemory(device, m_BufMaterials, m_BufMaterialsMemory, 0);
+                VkMemoryRequirements memReq{};
+                vkGetBufferMemoryRequirements(device, outBuf, &memReq);
+                const uint32_t memTypeIndex = FindMemoryTypeIndex(memProps, memReq.memoryTypeBits,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+                if (memTypeIndex == UINT32_MAX) return false;
 
-            const VkDeviceSize instanceSize = sizeof(Renderer::RHI::Instance) * MAX_MODEL_INSTANCES;
-            bufInfo.size = instanceSize;
-            bufInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-            if (vkCreateBuffer(device, &bufInfo, nullptr, &m_BufInstances) != VK_SUCCESS) return false;
-            vkGetBufferMemoryRequirements(device, m_BufInstances, &memReq);
-            memTypeIndex = UINT32_MAX;
-            for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-                if ((memReq.memoryTypeBits & (1u << i)) &&
-                    (memProps.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))) {
-                    memTypeIndex = i;
-                    break;
-                }
-            }
-            if (memTypeIndex == UINT32_MAX) return false;
-            allocInfo.allocationSize = memReq.size;
-            allocInfo.memoryTypeIndex = memTypeIndex;
-            if (vkAllocateMemory(device, &allocInfo, nullptr, &m_BufInstancesMemory) != VK_SUCCESS) return false;
-            vkBindBufferMemory(device, m_BufInstances, m_BufInstancesMemory, 0);
-            m_BufInstancesSize = instanceSize;
+                VkMemoryAllocateInfo allocInfo{};
+                allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                allocInfo.allocationSize = memReq.size;
+                allocInfo.memoryTypeIndex = memTypeIndex;
+                if (vkAllocateMemory(device, &allocInfo, nullptr, &outMem) != VK_SUCCESS) return false;
+                vkBindBufferMemory(device, outBuf, outMem, 0);
+                return true;
+            };
+
+            // FrameUniforms: one aligned region per frame-in-flight (dynamic UBO).
+            m_FrameUniformStride = alignUp(sizeof(Renderer::RHI::FrameUniforms), uboAlign);
+            if (!createHostBuffer(m_FrameUniformStride * framesInFlight,
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    m_BufGlobals, m_BufGlobalsMemory))
+                return false;
+
+            // MVP: MAX_MODEL_DRAWS entries per frame-in-flight (dynamic UBO).
+            m_MvpDynamicStride = alignUp(sizeof(Renderer::RHI::MVP), uboAlign);
+            m_MvpFrameRegionStride = m_MvpDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
+            if (!createHostBuffer(m_MvpFrameRegionStride * framesInFlight,
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, m_BufMvp, m_BufMvpMemory))
+                return false;
+
+            // Material: MAX_MODEL_DRAWS entries per frame-in-flight (dynamic UBO).
+            m_MaterialDynamicStride = alignUp(sizeof(Renderer::RHI::Material), uboAlign);
+            m_MaterialFrameRegionStride = m_MaterialDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
+            if (!createHostBuffer(m_MaterialFrameRegionStride * framesInFlight,
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, m_BufMaterials, m_BufMaterialsMemory))
+                return false;
+
+            // Instances: one region per frame-in-flight (dynamic storage buffer).
+            const VkDeviceSize instanceUsable = sizeof(Renderer::RHI::Instance) * MAX_MODEL_INSTANCES;
+            m_InstanceRegionStride = alignUp(instanceUsable, ssboAlign);
+            m_BufInstancesSize = instanceUsable;
+            if (!createHostBuffer(m_InstanceRegionStride * framesInFlight,
+                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, m_BufInstances, m_BufInstancesMemory))
+                return false;
         }
 
         if (pass.descriptorSets.empty() && m_ImGuiDescriptorPool != VK_NULL_HANDLE) {
@@ -1077,13 +1057,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         pass.shader = std::make_unique<VK_Shaders>();
         pass.shader->SetPipeline(pass.pipeline, pass.pipelineLayout);
-        const VkDeviceSize mvpBufferSize = m_MvpDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
-        const VkDeviceSize materialBufferSize = m_MaterialDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
+        const VkDeviceSize framesInFlight = static_cast<VkDeviceSize>(std::max(1u, m_FramesInFlight));
+        const VkDeviceSize mvpBufferSize = m_MvpFrameRegionStride * framesInFlight;
+        const VkDeviceSize materialBufferSize = m_MaterialFrameRegionStride * framesInFlight;
         pass.shader->SetSceneBuffers(device,
-            m_BufGlobals, m_BufGlobalsMemory,
+            m_BufGlobals, m_BufGlobalsMemory, &m_FrameUniformOffset,
             m_BufMvp, m_BufMvpMemory, m_MvpDynamicStride, mvpBufferSize,
             m_BufMaterials, m_BufMaterialsMemory, m_MaterialDynamicStride, materialBufferSize,
-            m_BufInstances, m_BufInstancesMemory, m_BufInstancesSize,
+            m_BufInstances, m_BufInstancesMemory, m_BufInstancesSize, &m_InstanceOffset,
             &m_MvpDynamicOffset, &m_MaterialDynamicOffset,
             pass.descriptorSets);
         pass.shader->SetReflection(reflForVk);
@@ -1097,8 +1078,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_RenderGraph::ResetFrameDynamicUBOs() {
-        m_MvpDynamicOffset = 0;
-        m_MaterialDynamicOffset = 0;
+        // Select this frame-in-flight's private region within each engine buffer. The BeginFrame
+        // fence wait guarantees the frame that last used this slot has finished, so writing here
+        // never races with an in-flight GPU read.
+        const VkDeviceSize slot = m_Renderer
+            ? static_cast<VkDeviceSize>(m_Renderer->GetCurrentFrameInFlight())
+            : 0;
+
+        m_FrameUniformOffset = slot * m_FrameUniformStride;
+        m_MvpDynamicOffset = slot * m_MvpFrameRegionStride;
+        m_MaterialDynamicOffset = slot * m_MaterialFrameRegionStride;
+        m_InstanceOffset = slot * m_InstanceRegionStride;
         m_SwapchainColorWritten = false;
     }
 
@@ -1226,30 +1216,37 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return vkCreateDescriptorPool(m_Renderer->GetDevice(), &poolInfo, nullptr, &m_ImGuiDescriptorPool) == VK_SUCCESS;
     }
 
+    void VK_RenderGraph::DestroyEngineBuffers() {
+        if (!m_Renderer) return;
+        VkDevice device = m_Renderer->GetDevice();
+
+        auto destroyBuffer = [&](VkBuffer& buffer, VkDeviceMemory& memory) {
+            if (buffer != VK_NULL_HANDLE) { vkDestroyBuffer(device, buffer, nullptr); buffer = VK_NULL_HANDLE; }
+            if (memory != VK_NULL_HANDLE) { vkFreeMemory(device, memory, nullptr); memory = VK_NULL_HANDLE; }
+        };
+        destroyBuffer(m_BufInstances, m_BufInstancesMemory);
+        destroyBuffer(m_BufMaterials, m_BufMaterialsMemory);
+        destroyBuffer(m_BufMvp, m_BufMvpMemory);
+        destroyBuffer(m_BufGlobals, m_BufGlobalsMemory);
+    }
+
     void VK_RenderGraph::DestroyImGuiDescriptorPool() {
-        if (m_ImGuiDescriptorPool != VK_NULL_HANDLE && m_Renderer) {
-            VkDevice device = m_Renderer->GetDevice();
-            for (auto& pass : m_PassPipelines) {
-                for (auto& [setIndex, ds] : pass.descriptorSets) {
-                    (void)setIndex;
-                    if (ds != VK_NULL_HANDLE)
-                        vkFreeDescriptorSets(device, m_ImGuiDescriptorPool, 1, &ds);
-                }
-                pass.descriptorSets.clear();
+        if (m_ImGuiDescriptorPool == VK_NULL_HANDLE || !m_Renderer) return;
+
+        VkDevice device = m_Renderer->GetDevice();
+        for (auto& pass : m_PassPipelines) {
+            for (auto& [setIndex, ds] : pass.descriptorSets) {
+                (void)setIndex;
+                if (ds != VK_NULL_HANDLE)
+                    vkFreeDescriptorSets(device, m_ImGuiDescriptorPool, 1, &ds);
             }
-
-            if (m_BufInstances != VK_NULL_HANDLE) { vkDestroyBuffer(device, m_BufInstances, nullptr); m_BufInstances = VK_NULL_HANDLE; }
-            if (m_BufInstancesMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Renderer->GetDevice(), m_BufInstancesMemory, nullptr); m_BufInstancesMemory = VK_NULL_HANDLE; }
-            if (m_BufMaterials != VK_NULL_HANDLE) { vkDestroyBuffer(m_Renderer->GetDevice(), m_BufMaterials, nullptr); m_BufMaterials = VK_NULL_HANDLE; }
-            if (m_BufMaterialsMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Renderer->GetDevice(), m_BufMaterialsMemory, nullptr); m_BufMaterialsMemory = VK_NULL_HANDLE; }
-            if (m_BufMvp != VK_NULL_HANDLE) { vkDestroyBuffer(m_Renderer->GetDevice(), m_BufMvp, nullptr); m_BufMvp = VK_NULL_HANDLE; }
-            if (m_BufMvpMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Renderer->GetDevice(), m_BufMvpMemory, nullptr); m_BufMvpMemory = VK_NULL_HANDLE; }
-            if (m_BufGlobals != VK_NULL_HANDLE) { vkDestroyBuffer(m_Renderer->GetDevice(), m_BufGlobals, nullptr); m_BufGlobals = VK_NULL_HANDLE; }
-            if (m_BufGlobalsMemory != VK_NULL_HANDLE) { vkFreeMemory(m_Renderer->GetDevice(), m_BufGlobalsMemory, nullptr); m_BufGlobalsMemory = VK_NULL_HANDLE; }
-
-            vkDestroyDescriptorPool(m_Renderer->GetDevice(), m_ImGuiDescriptorPool, nullptr);
-            m_ImGuiDescriptorPool = VK_NULL_HANDLE;
+            pass.descriptorSets.clear();
         }
+
+        DestroyEngineBuffers();
+
+        vkDestroyDescriptorPool(device, m_ImGuiDescriptorPool, nullptr);
+        m_ImGuiDescriptorPool = VK_NULL_HANDLE;
     }
 
     bool VK_RenderGraph::CreateDepthResources() {
@@ -1298,14 +1295,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
             VkMemoryRequirements memReq{};
             vkGetImageMemoryRequirements(device, depth.m_Image, &memReq);
-            uint32_t memTypeIndex = UINT32_MAX;
-            for (uint32_t j = 0; j < memProps.memoryTypeCount; ++j) {
-                if ((memReq.memoryTypeBits & (1u << j)) &&
-                    (memProps.memoryTypes[j].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-                    memTypeIndex = j;
-                    break;
-                }
-            }
+            const uint32_t memTypeIndex = FindMemoryTypeIndex(memProps, memReq.memoryTypeBits,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
             if (memTypeIndex == UINT32_MAX) return false;
 
             VkMemoryAllocateInfo allocInfo{};
@@ -1365,14 +1356,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkMemoryRequirements memReq{};
         vkGetBufferMemoryRequirements(device, m_FullscreenQuadBuffer, &memReq);
         const auto& memProps = m_Renderer->GetMemoryProperties();
-        uint32_t memTypeIndex = UINT32_MAX;
-        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-            if ((memReq.memoryTypeBits & (1u << i)) &&
-                (memProps.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))) {
-                memTypeIndex = i;
-                break;
-            }
-        }
+        const uint32_t memTypeIndex = FindMemoryTypeIndex(memProps, memReq.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         if (memTypeIndex == UINT32_MAX) return;
 
         VkMemoryAllocateInfo allocInfo{};

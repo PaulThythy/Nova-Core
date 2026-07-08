@@ -60,8 +60,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         uint32_t GetSwapchainWidth() const { return m_VKSwapchain.GetExtent().width; }
         uint32_t GetSwapchainHeight() const { return m_VKSwapchain.GetExtent().height; }
         uint32_t GetSwapchainImageCount() const { return m_VKSwapchain.GetImageCount(); }
+        uint32_t GetFramesInFlight() const { return m_VKSwapchain.GetFramesInFlight(); }
+        uint32_t GetCurrentFrameInFlight() const { return m_VKSwapchain.GetCurrentFrame(); }
         VkFormat GetSwapchainImageFormat() const { return m_VKSwapchain.GetImageFormat(); }
-        const std::vector<VkImageView>& GetSwapchainImageViews() const;
+        std::vector<VkImageView> GetSwapchainImageViews() const;
         VkFramebuffer GetSwapchainFramebuffer(uint32_t imageIndex) const;
         uint32_t GetAcquiredImageIndex() const { return m_VKSwapchain.GetAcquiredImageIndex(); }
 
