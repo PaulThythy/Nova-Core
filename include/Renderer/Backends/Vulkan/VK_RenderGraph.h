@@ -13,6 +13,7 @@
 #include "Renderer/RHI/RHI_RenderGraph.h"
 #include "Renderer/RHI/RHI_ShaderReflection.h"
 #include "Renderer/Backends/Vulkan/VK_Shaders.h"
+#include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -140,9 +141,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         std::vector<VkFramebuffer> m_SwapchainFramebuffers;
 
         struct SwapchainDepthImage {
-            VkImage        m_Image = VK_NULL_HANDLE;
-            VkDeviceMemory m_Memory = VK_NULL_HANDLE;
-            VkImageView    m_View = VK_NULL_HANDLE;
+            VK_ImageAllocation m_Image{};
+            VkImageView        m_View = VK_NULL_HANDLE;
         };
 
         // One depth attachment per swapchain image so concurrent in-flight frames
@@ -156,30 +156,25 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // concurrent in-flight frames never share (and race on) the same uniform memory.
         uint32_t       m_FramesInFlight = 1;
 
-        VkBuffer       m_BufGlobals = VK_NULL_HANDLE;
-        VkDeviceMemory m_BufGlobalsMemory = VK_NULL_HANDLE;
+        VK_BufferAllocation m_BufGlobals{};
         VkDeviceSize   m_FrameUniformStride = 0;   // aligned size of one FrameUniforms region
         VkDeviceSize   m_FrameUniformOffset = 0;   // current frame's region base (dynamic offset)
-        VkBuffer       m_BufMvp = VK_NULL_HANDLE;
-        VkDeviceMemory m_BufMvpMemory = VK_NULL_HANDLE;
+        VK_BufferAllocation m_BufMvp{};
         VkDeviceSize   m_MvpDynamicStride = 0;
         VkDeviceSize   m_MvpFrameRegionStride = 0; // bytes reserved per frame (MAX_MODEL_DRAWS entries)
         VkDeviceSize   m_MvpDynamicOffset = 0;
-        VkBuffer       m_BufMaterials = VK_NULL_HANDLE;
-        VkDeviceMemory m_BufMaterialsMemory = VK_NULL_HANDLE;
+        VK_BufferAllocation m_BufMaterials{};
         VkDeviceSize   m_MaterialDynamicStride = 0;
         VkDeviceSize   m_MaterialFrameRegionStride = 0;
         VkDeviceSize   m_MaterialDynamicOffset = 0;
-        VkBuffer       m_BufInstances = VK_NULL_HANDLE;
-        VkDeviceMemory m_BufInstancesMemory = VK_NULL_HANDLE;
+        VK_BufferAllocation m_BufInstances{};
         VkDeviceSize   m_BufInstancesSize = 0;      // usable instance bytes per frame region
         VkDeviceSize   m_InstanceRegionStride = 0;  // aligned size of one instance region
         VkDeviceSize   m_InstanceOffset = 0;        // current frame's region base (dynamic offset)
 
         std::vector<PassPipeline> m_PassPipelines;
 
-        VkBuffer       m_FullscreenQuadBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory m_FullscreenQuadMemory = VK_NULL_HANDLE;
+        VK_BufferAllocation m_FullscreenQuadBuffer{};
     };
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

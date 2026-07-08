@@ -12,6 +12,7 @@
 
 #include "Renderer/Backends/Vulkan/VK_Instance.h"
 #include "Renderer/Backends/Vulkan/VK_Device.h"
+#include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
 #include "Renderer/Backends/Vulkan/VK_Swapchain.h"
 #include "Renderer/Backends/Vulkan/VK_Mesh.h"
 #include "Renderer/Backends/Vulkan/VK_RenderGraph.h"
@@ -55,7 +56,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkPhysicalDevice GetPhysicalDevice() const { return m_VKDevice.GetPhysicalDevice(); }
         VkQueue GetGraphicsQueue() const { return m_VKDevice.GetGraphicsQueue(); }
         uint32_t GetGraphicsQueueFamily() const { return m_VKDevice.GetGraphicsQueueFamily(); }
-        const VkPhysicalDeviceMemoryProperties& GetMemoryProperties() const { return m_VKDevice.GetMemoryProperties(); }
+        VK_MemoryAllocator& GetMemoryAllocator() { return m_MemoryAllocator; }
+        const VK_MemoryAllocator& GetMemoryAllocator() const { return m_MemoryAllocator; }
 
         uint32_t GetSwapchainWidth() const { return m_VKSwapchain.GetExtent().width; }
         uint32_t GetSwapchainHeight() const { return m_VKSwapchain.GetExtent().height; }
@@ -68,7 +70,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         uint32_t GetAcquiredImageIndex() const { return m_VKSwapchain.GetAcquiredImageIndex(); }
 
         bool HasViewportFramebuffer() const { return m_ViewportFramebuffer != VK_NULL_HANDLE; }
-        VkImage GetViewportImage() const { return m_ViewportImage; }
+        VkImage GetViewportImage() const { return m_ViewportImage.image; }
         uint32_t GetViewportWidth() const { return static_cast<uint32_t>(m_ViewportWidth); }
         uint32_t GetViewportHeight() const { return static_cast<uint32_t>(m_ViewportHeight); }
         VkFramebuffer GetViewportFramebuffer() const { return m_ViewportFramebuffer; }
@@ -80,9 +82,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void DestroyViewportFramebuffer();
 
     private:
-        VK_Instance    m_VKInstance;
-        VK_Device      m_VKDevice;
-        VK_Swapchain   m_VKSwapchain;
+        VK_Instance          m_VKInstance;
+        VK_Device            m_VKDevice;
+        VK_MemoryAllocator   m_MemoryAllocator;
+        VK_Swapchain         m_VKSwapchain;
         RHI::RHI_SwapchainDesc m_SwapchainDesc{};
 
         std::unique_ptr<RHI::IRenderGraph> m_RenderGraph;
@@ -93,12 +96,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         int m_ViewportWidth = 0;
         int m_ViewportHeight = 0;
-        VkImage m_ViewportImage = VK_NULL_HANDLE;
+        VK_ImageAllocation m_ViewportImage{};
         VkImageView m_ViewportImageView = VK_NULL_HANDLE;
-        VkDeviceMemory m_ViewportImageMemory = VK_NULL_HANDLE;
-        VkImage m_ViewportDepthImage = VK_NULL_HANDLE;
+        VK_ImageAllocation m_ViewportDepthImage{};
         VkImageView m_ViewportDepthImageView = VK_NULL_HANDLE;
-        VkDeviceMemory m_ViewportDepthImageMemory = VK_NULL_HANDLE;
         VkFramebuffer m_ViewportFramebuffer = VK_NULL_HANDLE;
         VkSampler m_ViewportSampler = VK_NULL_HANDLE;
         VkDescriptorSet m_ViewportDescriptorSet = VK_NULL_HANDLE;

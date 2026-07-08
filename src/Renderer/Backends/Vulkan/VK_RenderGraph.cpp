@@ -737,9 +737,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_RenderGraph::DrawFullscreenQuad(VkCommandBuffer cmd, VK_Shaders& /*shader*/) {
-        if (m_FullscreenQuadBuffer == VK_NULL_HANDLE) return;
+        if (m_FullscreenQuadBuffer.buffer == VK_NULL_HANDLE) return;
         VkDeviceSize offsets[] = { 0 };
-        vkCmdBindVertexBuffers(cmd, 0, 1, &m_FullscreenQuadBuffer, offsets);
+        const VkBuffer quadBuffer = m_FullscreenQuadBuffer.buffer;
+        vkCmdBindVertexBuffers(cmd, 0, 1, &quadBuffer, offsets);
         vkCmdDraw(cmd, 6, 1, 0, 0);
     }
 
@@ -902,8 +903,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
-        if (m_BufGlobals == VK_NULL_HANDLE) {
-            const auto& memProps = m_Renderer->GetMemoryProperties();
+        if (m_BufGlobals.buffer == VK_NULL_HANDLE) {
+            VK_MemoryAllocator& allocator = m_Renderer->GetMemoryAllocator();
             const VkDeviceSize framesInFlight = static_cast<VkDeviceSize>(std::max(1u, m_FramesInFlight));
 
             VkPhysicalDeviceProperties physProps{};
@@ -914,48 +915,29 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             const VkDeviceSize uboAlign = physProps.limits.minUniformBufferOffsetAlignment;
             const VkDeviceSize ssboAlign = physProps.limits.minStorageBufferOffsetAlignment;
 
-            auto createHostBuffer = [&](VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& outBuf, VkDeviceMemory& outMem) -> bool {
-                VkBufferCreateInfo bufInfo{};
-                bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-                bufInfo.size = size;
-                bufInfo.usage = usage;
-                bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-                if (vkCreateBuffer(device, &bufInfo, nullptr, &outBuf) != VK_SUCCESS) return false;
-
-                VkMemoryRequirements memReq{};
-                vkGetBufferMemoryRequirements(device, outBuf, &memReq);
-                const uint32_t memTypeIndex = FindMemoryTypeIndex(memProps, memReq.memoryTypeBits,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-                if (memTypeIndex == UINT32_MAX) return false;
-
-                VkMemoryAllocateInfo allocInfo{};
-                allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-                allocInfo.allocationSize = memReq.size;
-                allocInfo.memoryTypeIndex = memTypeIndex;
-                if (vkAllocateMemory(device, &allocInfo, nullptr, &outMem) != VK_SUCCESS) return false;
-                vkBindBufferMemory(device, outBuf, outMem, 0);
-                return true;
+            auto createHostBuffer = [&](VkDeviceSize size, VkBufferUsageFlags usage, VK_BufferAllocation& out) -> bool {
+                return allocator.CreateBuffer(size, usage, VK_MemoryLocation::CpuReadWrite, out);
             };
 
             // FrameUniforms: one aligned region per frame-in-flight (dynamic UBO).
             m_FrameUniformStride = alignUp(sizeof(Renderer::RHI::FrameUniforms), uboAlign);
             if (!createHostBuffer(m_FrameUniformStride * framesInFlight,
                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                    m_BufGlobals, m_BufGlobalsMemory))
+                    m_BufGlobals))
                 return false;
 
             // MVP: MAX_MODEL_DRAWS entries per frame-in-flight (dynamic UBO).
             m_MvpDynamicStride = alignUp(sizeof(Renderer::RHI::MVP), uboAlign);
             m_MvpFrameRegionStride = m_MvpDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
             if (!createHostBuffer(m_MvpFrameRegionStride * framesInFlight,
-                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, m_BufMvp, m_BufMvpMemory))
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, m_BufMvp))
                 return false;
 
             // Material: MAX_MODEL_DRAWS entries per frame-in-flight (dynamic UBO).
             m_MaterialDynamicStride = alignUp(sizeof(Renderer::RHI::Material), uboAlign);
             m_MaterialFrameRegionStride = m_MaterialDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
             if (!createHostBuffer(m_MaterialFrameRegionStride * framesInFlight,
-                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, m_BufMaterials, m_BufMaterialsMemory))
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, m_BufMaterials))
                 return false;
 
             // Instances: one region per frame-in-flight (dynamic storage buffer).
@@ -963,7 +945,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_InstanceRegionStride = alignUp(instanceUsable, ssboAlign);
             m_BufInstancesSize = instanceUsable;
             if (!createHostBuffer(m_InstanceRegionStride * framesInFlight,
-                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, m_BufInstances, m_BufInstancesMemory))
+                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, m_BufInstances))
                 return false;
         }
 
@@ -983,14 +965,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 for (const auto& [idx, ds] : pass.descriptorSets) if (idx == set) return ds;
                 return VK_NULL_HANDLE;
             };
-            auto writeEngineBuffer = [&](const char* name, VkBuffer buffer, VkDeviceSize range) {
+            auto writeEngineBuffer = [&](const char* name, const VK_BufferAllocation& buffer, VkDeviceSize range) {
                 const RHI::RHI_BindingInfo* info = reflForVk.FindBindingByName(name);
-                if (!info || buffer == VK_NULL_HANDLE) return;
+                if (!info || !buffer.IsValid()) return;
                 VkDescriptorSet ds = findDescriptorSet(info->m_Key.m_Set);
                 if (ds == VK_NULL_HANDLE) return;
 
                 VkDescriptorBufferInfo bufferInfo{};
-                bufferInfo.buffer = buffer;
+                bufferInfo.buffer = buffer.buffer;
                 bufferInfo.offset = 0;
                 bufferInfo.range = range;
 
@@ -1060,11 +1042,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const VkDeviceSize framesInFlight = static_cast<VkDeviceSize>(std::max(1u, m_FramesInFlight));
         const VkDeviceSize mvpBufferSize = m_MvpFrameRegionStride * framesInFlight;
         const VkDeviceSize materialBufferSize = m_MaterialFrameRegionStride * framesInFlight;
-        pass.shader->SetSceneBuffers(device,
-            m_BufGlobals, m_BufGlobalsMemory, &m_FrameUniformOffset,
-            m_BufMvp, m_BufMvpMemory, m_MvpDynamicStride, mvpBufferSize,
-            m_BufMaterials, m_BufMaterialsMemory, m_MaterialDynamicStride, materialBufferSize,
-            m_BufInstances, m_BufInstancesMemory, m_BufInstancesSize, &m_InstanceOffset,
+        pass.shader->SetSceneBuffers(&m_Renderer->GetMemoryAllocator(),
+            m_BufGlobals, &m_FrameUniformOffset,
+            m_BufMvp, m_MvpDynamicStride, mvpBufferSize,
+            m_BufMaterials, m_MaterialDynamicStride, materialBufferSize,
+            m_BufInstances, m_BufInstancesSize, &m_InstanceOffset,
             &m_MvpDynamicOffset, &m_MaterialDynamicOffset,
             pass.descriptorSets);
         pass.shader->SetReflection(reflForVk);
@@ -1218,16 +1200,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_RenderGraph::DestroyEngineBuffers() {
         if (!m_Renderer) return;
-        VkDevice device = m_Renderer->GetDevice();
+        VK_MemoryAllocator& allocator = m_Renderer->GetMemoryAllocator();
 
-        auto destroyBuffer = [&](VkBuffer& buffer, VkDeviceMemory& memory) {
-            if (buffer != VK_NULL_HANDLE) { vkDestroyBuffer(device, buffer, nullptr); buffer = VK_NULL_HANDLE; }
-            if (memory != VK_NULL_HANDLE) { vkFreeMemory(device, memory, nullptr); memory = VK_NULL_HANDLE; }
-        };
-        destroyBuffer(m_BufInstances, m_BufInstancesMemory);
-        destroyBuffer(m_BufMaterials, m_BufMaterialsMemory);
-        destroyBuffer(m_BufMvp, m_BufMvpMemory);
-        destroyBuffer(m_BufGlobals, m_BufGlobalsMemory);
+        allocator.DestroyBuffer(m_BufInstances);
+        allocator.DestroyBuffer(m_BufMaterials);
+        allocator.DestroyBuffer(m_BufMvp);
+        allocator.DestroyBuffer(m_BufGlobals);
     }
 
     void VK_RenderGraph::DestroyImGuiDescriptorPool() {
@@ -1286,30 +1264,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
         VkDevice device = m_Renderer->GetDevice();
-        const auto& memProps = m_Renderer->GetMemoryProperties();
+        VK_MemoryAllocator& allocator = m_Renderer->GetMemoryAllocator();
 
         for (uint32_t i = 0; i < imageCount; ++i) {
             auto& depth = m_SwapchainDepthImages[i];
-            if (vkCreateImage(device, &imageInfo, nullptr, &depth.m_Image) != VK_SUCCESS)
+            if (!allocator.CreateImage(imageInfo, VK_MemoryLocation::GpuOnly, depth.m_Image))
                 return false;
-
-            VkMemoryRequirements memReq{};
-            vkGetImageMemoryRequirements(device, depth.m_Image, &memReq);
-            const uint32_t memTypeIndex = FindMemoryTypeIndex(memProps, memReq.memoryTypeBits,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-            if (memTypeIndex == UINT32_MAX) return false;
-
-            VkMemoryAllocateInfo allocInfo{};
-            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            allocInfo.allocationSize = memReq.size;
-            allocInfo.memoryTypeIndex = memTypeIndex;
-            if (vkAllocateMemory(device, &allocInfo, nullptr, &depth.m_Memory) != VK_SUCCESS)
-                return false;
-            vkBindImageMemory(device, depth.m_Image, depth.m_Memory, 0);
 
             VkImageViewCreateInfo viewInfo{};
             viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            viewInfo.image = depth.m_Image;
+            viewInfo.image = depth.m_Image.image;
             viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
             viewInfo.format = m_DepthFormat;
             viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -1326,17 +1290,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     void VK_RenderGraph::DestroyDepthResources() {
         if (!m_Renderer) return;
         VkDevice device = m_Renderer->GetDevice();
+        VK_MemoryAllocator& allocator = m_Renderer->GetMemoryAllocator();
         for (auto& depth : m_SwapchainDepthImages) {
             if (depth.m_View != VK_NULL_HANDLE) { vkDestroyImageView(device, depth.m_View, nullptr); depth.m_View = VK_NULL_HANDLE; }
-            if (depth.m_Image != VK_NULL_HANDLE) { vkDestroyImage(device, depth.m_Image, nullptr); depth.m_Image = VK_NULL_HANDLE; }
-            if (depth.m_Memory != VK_NULL_HANDLE) { vkFreeMemory(device, depth.m_Memory, nullptr); depth.m_Memory = VK_NULL_HANDLE; }
+            allocator.DestroyImage(depth.m_Image);
         }
         m_SwapchainDepthImages.clear();
     }
 
     void VK_RenderGraph::CreateFullscreenQuadBuffer() {
-        VkDevice device = m_Renderer->GetDevice();
-        if (device == VK_NULL_HANDLE || m_FullscreenQuadBuffer != VK_NULL_HANDLE) return;
+        if (!m_Renderer || !m_Renderer->GetMemoryAllocator().IsValid() || m_FullscreenQuadBuffer.IsValid()) return;
 
         static const float kQuadVerts[] = {
             -1.f, -1.f, 0.f, 0.f,
@@ -1347,38 +1310,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
              1.f,  1.f, 1.f, 1.f,
         };
 
-        VkBufferCreateInfo bufInfo{};
-        bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufInfo.size = sizeof(kQuadVerts);
-        bufInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        if (vkCreateBuffer(device, &bufInfo, nullptr, &m_FullscreenQuadBuffer) != VK_SUCCESS) return;
+        VK_MemoryAllocator& allocator = m_Renderer->GetMemoryAllocator();
+        if (!allocator.CreateBuffer(sizeof(kQuadVerts), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                VK_MemoryLocation::CpuReadWrite, m_FullscreenQuadBuffer))
+            return;
 
-        VkMemoryRequirements memReq{};
-        vkGetBufferMemoryRequirements(device, m_FullscreenQuadBuffer, &memReq);
-        const auto& memProps = m_Renderer->GetMemoryProperties();
-        const uint32_t memTypeIndex = FindMemoryTypeIndex(memProps, memReq.memoryTypeBits,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        if (memTypeIndex == UINT32_MAX) return;
-
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memReq.size;
-        allocInfo.memoryTypeIndex = memTypeIndex;
-        if (vkAllocateMemory(device, &allocInfo, nullptr, &m_FullscreenQuadMemory) != VK_SUCCESS) return;
-        vkBindBufferMemory(device, m_FullscreenQuadBuffer, m_FullscreenQuadMemory, 0);
-
-        void* data = nullptr;
-        if (vkMapMemory(device, m_FullscreenQuadMemory, 0, sizeof(kQuadVerts), 0, &data) == VK_SUCCESS) {
-            std::memcpy(data, kQuadVerts, sizeof(kQuadVerts));
-            vkUnmapMemory(device, m_FullscreenQuadMemory);
-        }
+        allocator.WriteToBuffer(m_FullscreenQuadBuffer, 0, sizeof(kQuadVerts), kQuadVerts);
     }
 
     void VK_RenderGraph::DestroyFullscreenQuadBuffer() {
         if (!m_Renderer) return;
-        VkDevice device = m_Renderer->GetDevice();
-        if (m_FullscreenQuadBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(device, m_FullscreenQuadBuffer, nullptr); m_FullscreenQuadBuffer = VK_NULL_HANDLE; }
-        if (m_FullscreenQuadMemory != VK_NULL_HANDLE) { vkFreeMemory(device, m_FullscreenQuadMemory, nullptr); m_FullscreenQuadMemory = VK_NULL_HANDLE; }
+        m_Renderer->GetMemoryAllocator().DestroyBuffer(m_FullscreenQuadBuffer);
     }
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

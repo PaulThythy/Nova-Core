@@ -69,6 +69,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
+        if (!m_MemoryAllocator.Create(
+                m_VKInstance.GetInstance(),
+                m_VKDevice.GetPhysicalDevice(),
+                m_VKDevice.GetDevice(),
+                VK_API_VERSION_1_3)) {
+            NV_LOG_ERROR("VK_MemoryAllocator::Create failed");
+            return false;
+        }
+
         if (desc.m_EnableSwapchain && m_VKInstance.GetSurface() != VK_NULL_HANDLE) {
             if (!m_VKSwapchain.Create(
                     m_VKDevice.GetPhysicalDevice(),
@@ -110,6 +119,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_RenderGraph.reset();
 
         m_VKSwapchain.Destroy();
+        m_MemoryAllocator.Destroy();
         m_VKDevice.Destroy();
         m_VKInstance.Destroy();
 
@@ -319,8 +329,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         auto vkMesh = std::make_shared<VK_Mesh>(*cpuMesh);
         vkMesh->Init(
+            &m_MemoryAllocator,
             m_VKDevice.GetDevice(),
-            m_VKDevice.GetPhysicalDevice(),
             m_VKSwapchain.GetCommandPool(),
             m_VKDevice.GetGraphicsQueue());
         vkMesh->Upload(*cpuMesh);
@@ -331,9 +341,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_Renderer::CreateViewportFramebuffer(int w, int h) {
         if (w <= 0 || h <= 0) return;
+        if (!m_MemoryAllocator.IsValid()) return;
 
         VkDevice device = m_VKDevice.GetDevice();
-        VkPhysicalDevice physicalDevice = m_VKDevice.GetPhysicalDevice();
         VkFormat colorFormat = m_VKSwapchain.GetImageFormat();
         VkFormat depthFormat = GetVKRenderGraph() ? GetVKRenderGraph()->GetDepthFormat() : VK_FORMAT_D32_SFLOAT;
 
@@ -349,29 +359,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
-        CheckVkResult(vkCreateImage(device, &imageInfo, nullptr, &m_ViewportImage));
-
-        VkMemoryRequirements memReq{};
-        vkGetImageMemoryRequirements(device, m_ViewportImage, &memReq);
-        VkPhysicalDeviceMemoryProperties memProps{};
-        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProps);
-        uint32_t memTypeIndex = FindMemoryTypeIndex(memProps, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        if (memTypeIndex == UINT32_MAX) {
-            vkDestroyImage(device, m_ViewportImage, nullptr);
-            m_ViewportImage = VK_NULL_HANDLE;
+        if (!m_MemoryAllocator.CreateImage(imageInfo, VK_MemoryLocation::GpuOnly, m_ViewportImage))
             return;
-        }
-
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memReq.size;
-        allocInfo.memoryTypeIndex = memTypeIndex;
-        CheckVkResult(vkAllocateMemory(device, &allocInfo, nullptr, &m_ViewportImageMemory));
-        vkBindImageMemory(device, m_ViewportImage, m_ViewportImageMemory, 0);
 
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = m_ViewportImage;
+        viewInfo.image = m_ViewportImage.image;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = colorFormat;
         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -382,21 +375,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkImageCreateInfo depthImageInfo = imageInfo;
         depthImageInfo.format = depthFormat;
         depthImageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        CheckVkResult(vkCreateImage(device, &depthImageInfo, nullptr, &m_ViewportDepthImage));
-
-        vkGetImageMemoryRequirements(device, m_ViewportDepthImage, &memReq);
-        memTypeIndex = FindMemoryTypeIndex(memProps, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        if (memTypeIndex == UINT32_MAX) {
+        if (!m_MemoryAllocator.CreateImage(depthImageInfo, VK_MemoryLocation::GpuOnly, m_ViewportDepthImage)) {
             DestroyViewportFramebuffer();
             return;
         }
-        allocInfo.allocationSize = memReq.size;
-        allocInfo.memoryTypeIndex = memTypeIndex;
-        CheckVkResult(vkAllocateMemory(device, &allocInfo, nullptr, &m_ViewportDepthImageMemory));
-        vkBindImageMemory(device, m_ViewportDepthImage, m_ViewportDepthImageMemory, 0);
 
         VkImageViewCreateInfo depthViewInfo = viewInfo;
-        depthViewInfo.image = m_ViewportDepthImage;
+        depthViewInfo.image = m_ViewportDepthImage.image;
         depthViewInfo.format = depthFormat;
         depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         CheckVkResult(vkCreateImageView(device, &depthViewInfo, nullptr, &m_ViewportDepthImageView));
@@ -446,11 +431,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (m_ViewportSampler != VK_NULL_HANDLE) { vkDestroySampler(device, m_ViewportSampler, nullptr); m_ViewportSampler = VK_NULL_HANDLE; }
         if (m_ViewportFramebuffer != VK_NULL_HANDLE) { vkDestroyFramebuffer(device, m_ViewportFramebuffer, nullptr); m_ViewportFramebuffer = VK_NULL_HANDLE; }
         if (m_ViewportDepthImageView != VK_NULL_HANDLE) { vkDestroyImageView(device, m_ViewportDepthImageView, nullptr); m_ViewportDepthImageView = VK_NULL_HANDLE; }
-        if (m_ViewportDepthImage != VK_NULL_HANDLE) { vkDestroyImage(device, m_ViewportDepthImage, nullptr); m_ViewportDepthImage = VK_NULL_HANDLE; }
-        if (m_ViewportDepthImageMemory != VK_NULL_HANDLE) { vkFreeMemory(device, m_ViewportDepthImageMemory, nullptr); m_ViewportDepthImageMemory = VK_NULL_HANDLE; }
+        m_MemoryAllocator.DestroyImage(m_ViewportDepthImage);
         if (m_ViewportImageView != VK_NULL_HANDLE) { vkDestroyImageView(device, m_ViewportImageView, nullptr); m_ViewportImageView = VK_NULL_HANDLE; }
-        if (m_ViewportImage != VK_NULL_HANDLE) { vkDestroyImage(device, m_ViewportImage, nullptr); m_ViewportImage = VK_NULL_HANDLE; }
-        if (m_ViewportImageMemory != VK_NULL_HANDLE) { vkFreeMemory(device, m_ViewportImageMemory, nullptr); m_ViewportImageMemory = VK_NULL_HANDLE; }
+        m_MemoryAllocator.DestroyImage(m_ViewportImage);
     }
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan
