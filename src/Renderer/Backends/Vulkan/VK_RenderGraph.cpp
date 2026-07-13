@@ -161,9 +161,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
-        m_GeometryPassIndex = FindPassIndexByType(RHI::RHI_RenderPassType::Geometry);
-        m_ImGuiPassIndex = FindPassIndexByType(RHI::RHI_RenderPassType::ImGui);
-
         m_PassPipelines.resize(m_Passes.size());
         for (size_t i = 0; i < m_Passes.size(); ++i) {
             m_PassPipelines[i].type = m_Passes[i].m_Type;
@@ -197,8 +194,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         DestroySwapchainResources();
         m_PassPipelines.clear();
 
-        m_GeometryPassIndex = -1;
-        m_ImGuiPassIndex = -1;
         m_ActivePassIndex = -1;
         m_GeometryPassActive = false;
         m_InsideRenderPass = false;
@@ -323,27 +318,38 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_RenderGraph::ApplyPassDesc(PassPipeline& pass, const RHI::RHI_RenderPassDesc& desc) {
         pass.type = desc.m_Type;
+        pass.writesToViewport = RHI::PassWritesToViewport(desc);
+        pass.writesToBackBuffer = RHI::PassWritesToBackBuffer(desc);
+
+        const bool readsColor = RHI::PassReadsResource(desc, RHI::RHI_RenderGraphResource::ViewportColor)
+            || RHI::PassReadsResource(desc, RHI::RHI_RenderGraphResource::BackBufferColor);
+
         switch (desc.m_Type) {
         case RHI::RHI_RenderPassType::Fullscreen:
-            pass.target = desc.m_Fullscreen.m_Target;
             pass.alphaBlend = desc.m_Fullscreen.m_AlphaBlend;
             pass.depthTest = desc.m_Fullscreen.m_DepthTest;
             pass.depthWrite = desc.m_Fullscreen.m_DepthWrite;
-            pass.colorLoadOp = desc.m_Fullscreen.m_ClearColor ? RHI::RHI_LoadOp::Clear : RHI::RHI_LoadOp::Load;
-            pass.clearDepth = desc.m_Fullscreen.m_ClearDepth;
+            pass.colorLoadOp = readsColor
+                ? RHI::RHI_LoadOp::Load
+                : (desc.m_Fullscreen.m_ClearColor ? RHI::RHI_LoadOp::Clear : RHI::RHI_LoadOp::Load);
+            pass.clearDepth = desc.m_Fullscreen.m_ClearDepth
+                && !RHI::PassReadsResource(desc, RHI::RHI_RenderGraphResource::ViewportDepth)
+                && !RHI::PassReadsResource(desc, RHI::RHI_RenderGraphResource::BackBufferDepth);
             break;
         case RHI::RHI_RenderPassType::Geometry:
-            pass.target = desc.m_Geometry.m_Target;
-            pass.colorLoadOp = desc.m_Geometry.m_ColorLoadOp;
-            pass.clearDepth = desc.m_Geometry.m_ClearDepth;
+            pass.colorLoadOp = readsColor ? RHI::RHI_LoadOp::Load : RHI::RHI_LoadOp::Clear;
+            pass.clearDepth = desc.m_Geometry.m_ClearDepth
+                && !RHI::PassReadsResource(desc, RHI::RHI_RenderGraphResource::ViewportDepth)
+                && !RHI::PassReadsResource(desc, RHI::RHI_RenderGraphResource::BackBufferDepth);
             pass.depthTest = desc.m_Geometry.m_DepthTest;
             pass.depthWrite = desc.m_Geometry.m_DepthWrite;
             pass.alphaBlend = false;
             break;
         case RHI::RHI_RenderPassType::ImGui:
-            pass.target = desc.m_ImGui.m_Target;
-            pass.colorLoadOp = desc.m_ImGui.m_ClearColor ? RHI::RHI_LoadOp::Clear : RHI::RHI_LoadOp::Load;
-            pass.clearDepth = true;
+            pass.colorLoadOp = readsColor
+                ? RHI::RHI_LoadOp::Load
+                : (desc.m_ImGui.m_ClearColor ? RHI::RHI_LoadOp::Clear : RHI::RHI_LoadOp::Load);
+            pass.clearDepth = !RHI::PassReadsResource(desc, RHI::RHI_RenderGraphResource::BackBufferDepth);
             break;
         }
     }
@@ -383,13 +389,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const uint32_t height = useViewport ? m_Renderer->GetViewportHeight() : m_Renderer->GetSwapchainHeight();
         if (width == 0 || height == 0) return;
 
-        for (size_t i = 0; i < m_Passes.size(); ++i) {
-            if (m_Passes[i].m_Type == RHI::RHI_RenderPassType::ImGui)
+        for (size_t passIndex : m_ExecutionOrder) {
+            const auto& passDesc = m_Passes[passIndex];
+            if (passDesc.m_Type == RHI::RHI_RenderPassType::ImGui)
                 break;
 
-            if (m_Passes[i].m_Type == RHI::RHI_RenderPassType::Fullscreen) {
-                auto& pass = m_PassPipelines[i];
-                const bool passViewport = useViewport && pass.target == RHI::RHI_RenderTarget::Viewport;
+            if (passDesc.m_Type == RHI::RHI_RenderPassType::Fullscreen) {
+                auto& pass = m_PassPipelines[passIndex];
+                const bool passViewport = useViewport && pass.writesToViewport;
                 VkFramebuffer fb = passViewport
                     ? m_Renderer->GetViewportFramebuffer()
                     : m_Renderer->GetSwapchainFramebuffer(m_Renderer->GetAcquiredImageIndex());
@@ -417,9 +424,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 continue;
             }
 
-            if (m_Passes[i].m_Type == RHI::RHI_RenderPassType::Geometry) {
-                auto& pass = m_PassPipelines[i];
-                const bool passViewport = useViewport && pass.target == RHI::RHI_RenderTarget::Viewport;
+            if (passDesc.m_Type == RHI::RHI_RenderPassType::Geometry) {
+                auto& pass = m_PassPipelines[passIndex];
+                const bool passViewport = useViewport && pass.writesToViewport;
                 VkFramebuffer fb = passViewport
                     ? m_Renderer->GetViewportFramebuffer()
                     : m_Renderer->GetSwapchainFramebuffer(m_Renderer->GetAcquiredImageIndex());
@@ -432,7 +439,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
                 SetViewportScissor(cmd, width, height);
 
-                m_ActivePassIndex = static_cast<int>(i);
+                m_ActivePassIndex = static_cast<int>(passIndex);
                 m_GeometryPassActive = true;
                 return;
             }
@@ -444,9 +451,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return m_Renderer->GetCurrentCommandBuffer();
     }
 
-    RHI::RHI_Shaders* VK_RenderGraph::GetGeometryPassShader() const {
-        if (m_GeometryPassIndex < 0) return nullptr;
-        return GetPassShader(static_cast<size_t>(m_GeometryPassIndex));
+    RHI::RHI_Shaders* VK_RenderGraph::GetActivePassShader() const {
+        if (m_ActivePassIndex < 0) return nullptr;
+        return GetPassShader(static_cast<size_t>(m_ActivePassIndex));
     }
 
     void VK_RenderGraph::EnsureRenderPassesBegun() {
@@ -489,7 +496,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkCommandBuffer vkCmd = GetCurrentCommandBuffer();
 
-        if (auto* shader = GetGeometryPassShader()) {
+        if (auto* shader = GetActivePassShader()) {
             shader->Bind(vkCmd);
             shader->ApplyParameters(vkCmd);
         }
@@ -513,7 +520,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkCommandBuffer vkCmd = GetCurrentCommandBuffer();
 
-        if (auto* shader = GetGeometryPassShader()) {
+        if (auto* shader = GetActivePassShader()) {
             shader->Bind(vkCmd);
             shader->ApplyParameters(vkCmd);
         }
@@ -588,12 +595,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const uint32_t height = m_Renderer->GetSwapchainHeight();
         if (width == 0 || height == 0) return;
 
-        if (m_ImGuiPassIndex < 0) {
+        const int imGuiPassIndex = FindPassIndexByType(RHI::RHI_RenderPassType::ImGui);
+        if (imGuiPassIndex < 0) {
             SetViewportScissor(cmd, width, height);
             return;
         }
 
-        auto& pass = m_PassPipelines[static_cast<size_t>(m_ImGuiPassIndex)];
+        auto& pass = m_PassPipelines[static_cast<size_t>(imGuiPassIndex)];
         VkFramebuffer fb = m_Renderer->GetSwapchainFramebuffer(swapchainImageIndex);
 
         // Pick the render pass whose color initial layout matches the image's real state:
@@ -609,7 +617,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return;
 
         SetViewportScissor(cmd, width, height);
-        m_ActivePassIndex = m_ImGuiPassIndex;
+        m_ActivePassIndex = imGuiPassIndex;
     }
 
     void VK_RenderGraph::EndActivePass(VkCommandBuffer cmd) {

@@ -43,9 +43,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void BeginImGuiPass(VkCommandBuffer cmd, uint32_t swapchainImageIndex);
         void EndActivePass(VkCommandBuffer cmd);
 
-        int GetGeometryPassIndex() const { return m_GeometryPassIndex; }
-        int GetImGuiPassIndex() const { return m_ImGuiPassIndex; }
-
         bool InitSwapchainResources();
         void DestroySwapchainResources();
         bool RecreateSwapchainRenderTargets();
@@ -76,7 +73,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             bool depthWrite = true;
             RHI::RHI_LoadOp colorLoadOp = RHI::RHI_LoadOp::Clear;
             bool clearDepth = true;
-            RHI::RHI_RenderTarget target = RHI::RHI_RenderTarget::Viewport;
+            bool writesToViewport = true;
+            bool writesToBackBuffer = false;
         };
 
         bool CreateImGuiDescriptorPool();
@@ -116,14 +114,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         void BeginRenderPasses(VkCommandBuffer cmd);
         void EnsureRenderPassesBegun();
-        RHI::RHI_Shaders* GetGeometryPassShader() const;
+        RHI::RHI_Shaders* GetActivePassShader() const;
         VkCommandBuffer GetCurrentCommandBuffer();
 
         VK_Renderer* m_Renderer = nullptr;
 
         bool m_ResourcesInitialized = false;
-        int m_GeometryPassIndex = -1;
-        int m_ImGuiPassIndex = -1;
         int m_ActivePassIndex = -1;
         bool m_GeometryPassActive = false;
         bool m_InsideRenderPass = false;
