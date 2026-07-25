@@ -3,11 +3,11 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
-
-#include <glm/glm.hpp>
 
 #include "Api.h"
 #include "Core/GraphicsAPI.h"
@@ -19,18 +19,84 @@ namespace Nova::Core::Renderer::RHI {
     struct RHI_DrawCommand;
     struct RHI_DrawIndexedCommand;
 
-    enum class RHI_RenderPassType : uint8_t {
-        Fullscreen = 0,
-        Geometry,
-        ImGui,
+    // -------------------------------------------------------------------------
+    // Resource descriptors
+    // -------------------------------------------------------------------------
+
+    enum class RHI_TextureFormat : uint8_t {
+        Unknown,
+        RGBA8,
+        RGBA16F,
+        RGBA32F,
+        Depth32,
+        Depth24Stencil8,
     };
 
-    /** Logical render-graph resources used to express pass read/write dependencies. */
-    enum class RHI_RenderGraphResource : uint8_t {
-        ViewportColor,
-        ViewportDepth,
-        BackBufferColor,
-        BackBufferDepth,
+    enum class RHI_TextureUsage : uint32_t {
+        None = 0,
+        ColorAttachment = 1u << 0,
+        DepthAttachment = 1u << 1,
+        Sampled           = 1u << 2,
+        Storage           = 1u << 3,
+    };
+
+    inline RHI_TextureUsage operator|(RHI_TextureUsage a, RHI_TextureUsage b) {
+        return static_cast<RHI_TextureUsage>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+    }
+
+    inline RHI_TextureUsage operator&(RHI_TextureUsage a, RHI_TextureUsage b) {
+        return static_cast<RHI_TextureUsage>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+    }
+
+    inline bool HasTextureUsage(RHI_TextureUsage flags, RHI_TextureUsage test) {
+        return (static_cast<uint32_t>(flags) & static_cast<uint32_t>(test)) != 0;
+    }
+
+    struct NV_API RHI_TextureDesc {
+        uint32_t m_Width = 0;
+        uint32_t m_Height = 0;
+        RHI_TextureFormat m_Format = RHI_TextureFormat::Unknown;
+        RHI_TextureUsage m_Usage = RHI_TextureUsage::Sampled;
+    };
+
+    enum class RHI_BufferFormat : uint8_t {
+        Unknown,
+        Raw,
+        Uniform,
+        Storage,
+        Vertex,
+        Index,
+    };
+
+    enum class RHI_BufferUsage : uint32_t {
+        None = 0,
+        Uniform  = 1u << 0,
+        Storage  = 1u << 1,
+        Vertex   = 1u << 2,
+        Index    = 1u << 3,
+        Transfer = 1u << 4,
+    };
+
+    inline RHI_BufferUsage operator|(RHI_BufferUsage a, RHI_BufferUsage b) {
+        return static_cast<RHI_BufferUsage>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+    }
+
+    inline bool HasBufferUsage(RHI_BufferUsage flags, RHI_BufferUsage test) {
+        return (static_cast<uint32_t>(flags) & static_cast<uint32_t>(test)) != 0;
+    }
+
+    struct NV_API RHI_BufferDesc {
+        uint64_t m_Size = 0;
+        RHI_BufferFormat m_Format = RHI_BufferFormat::Raw;
+        RHI_BufferUsage m_Usage = RHI_BufferUsage::None;
+    };
+
+    enum class RHI_ResourceState : uint8_t {
+        Undefined,
+        RenderTarget,
+        DepthWrite,
+        ShaderRead,
+        Present,
     };
 
     enum class RHI_LoadOp : uint8_t {
@@ -39,117 +105,253 @@ namespace Nova::Core::Renderer::RHI {
         DontCare,
     };
 
-    struct NV_API RHI_GraphicsShaderDesc {
-        std::filesystem::path m_VertexShader;
-        std::filesystem::path m_FragmentShader;
+    // -------------------------------------------------------------------------
+    // Handles — every resource is an index into the graph's arrays
+    // -------------------------------------------------------------------------
+
+    struct NV_API RHI_TextureHandle {
+        uint32_t m_Index = UINT32_MAX;
+        bool IsValid() const { return m_Index != UINT32_MAX; }
+        static RHI_TextureHandle Invalid() { return {}; }
+        friend bool operator==(const RHI_TextureHandle& a, const RHI_TextureHandle& b) { return a.m_Index == b.m_Index; }
+        friend bool operator!=(const RHI_TextureHandle& a, const RHI_TextureHandle& b) { return !(a == b); }
+    };
+
+    struct NV_API RHI_BufferHandle {
+        uint32_t m_Index = UINT32_MAX;
+        bool IsValid() const { return m_Index != UINT32_MAX; }
+        static RHI_BufferHandle Invalid() { return {}; }
+        friend bool operator==(const RHI_BufferHandle& a, const RHI_BufferHandle& b) { return a.m_Index == b.m_Index; }
+        friend bool operator!=(const RHI_BufferHandle& a, const RHI_BufferHandle& b) { return !(a == b); }
+    };
+
+    struct NV_API RHI_ShaderHandle {
+        uint32_t m_Index = UINT32_MAX;
+        bool IsValid() const { return m_Index != UINT32_MAX; }
+        static RHI_ShaderHandle Invalid() { return {}; }
+        friend bool operator==(const RHI_ShaderHandle& a, const RHI_ShaderHandle& b) { return a.m_Index == b.m_Index; }
+        friend bool operator!=(const RHI_ShaderHandle& a, const RHI_ShaderHandle& b) { return !(a == b); }
+    };
+
+    // -------------------------------------------------------------------------
+    // Shader description — graphics today, compute by filling m_Compute
+    // -------------------------------------------------------------------------
+
+    enum class RHI_VertexLayout : uint8_t {
+        None,
+        FullscreenQuad,
+        Mesh,
+    };
+
+    struct NV_API RHI_ShaderDesc {
+        std::string m_Name;
+
+        std::filesystem::path m_Vertex;
+        std::filesystem::path m_Fragment;
+        std::filesystem::path m_Compute;
+
         std::string m_EntryPoint = "main";
-        /** Extra Slang include search paths (engine/editor shader roots are added automatically). */
         std::vector<std::filesystem::path> m_IncludeDirs;
-    };
 
-    struct NV_API RHI_FullscreenPassDesc {
-        std::string m_Name;
-        RHI_GraphicsShaderDesc m_Shaders;
-        bool m_ClearColor = true;
-        bool m_ClearDepth = true;
+        RHI_VertexLayout m_VertexLayout = RHI_VertexLayout::Mesh;
+        bool m_AlphaBlend = false;
         bool m_DepthTest = true;
         bool m_DepthWrite = true;
-        bool m_AlphaBlend = true;
+
+        bool IsCompute() const { return !m_Compute.empty(); }
     };
 
-    struct NV_API RHI_GeometryPassDesc {
+    // -------------------------------------------------------------------------
+    // Pass execution context — passed to each pass callback
+    // -------------------------------------------------------------------------
+
+    class NV_API RHI_PassContext {
+    public:
+        virtual ~RHI_PassContext() = default;
+
+        virtual RHI_Shaders* GetShader(RHI_ShaderHandle shader) = 0;
+        virtual void DrawFullscreen(RHI_ShaderHandle shader) = 0;
+        virtual void BindShader(RHI_ShaderHandle shader) = 0;
+        virtual void Draw(const RHI_DrawCommand& cmd) = 0;
+        virtual void DrawIndexed(const RHI_DrawIndexedCommand& cmd) = 0;
+        virtual uint32_t GetRenderWidth() const = 0;
+        virtual uint32_t GetRenderHeight() const = 0;
+    };
+
+    // -------------------------------------------------------------------------
+    // Declared graph data — filled by the builder, consumed by the backend
+    // -------------------------------------------------------------------------
+
+    static constexpr size_t RHI_InvalidPassIndex = static_cast<size_t>(-1);
+
+    struct NV_API RHI_RenderGraphPassDesc {
         std::string m_Name;
-        RHI_GraphicsShaderDesc m_Shaders;
-        bool m_ClearDepth = true;
-        bool m_DepthTest = true;
-        bool m_DepthWrite = true;
+
+        std::vector<RHI_TextureHandle> m_ReadTextures;
+        std::vector<RHI_TextureHandle> m_WriteTextures;
+        std::vector<RHI_TextureHandle> m_ReadWriteTextures;
+        std::vector<RHI_BufferHandle> m_ReadBuffers;
+        std::vector<RHI_BufferHandle> m_WriteBuffers;
+
+        /** Passes this one depends on, derived from resource versioning during setup. */
+        std::vector<size_t> m_DependsOn;
+
+        /** When true, this pass is deferred to ExecutePresentPasses (e.g. swapchain + ImGui). */
+        bool m_PresentOnly = false;
+
+        std::function<void(RHI_PassContext&)> m_Execute;
     };
 
-    struct NV_API RHI_ImGuiPassDesc {
-        std::string m_Name;
-        bool m_ClearColor = true;
+    struct NV_API RHI_RenderGraphTextureResource {
+        RHI_TextureDesc m_Desc;
+        bool m_Imported = false;
+        bool m_IsSwapchain = false;
+        RHI_ResourceState m_InitialState = RHI_ResourceState::Undefined;
     };
 
-    struct NV_API RHI_RenderPassDesc {
-        RHI_RenderPassType m_Type = RHI_RenderPassType::Fullscreen;
-
-        /** Resources this pass reads (must execute after the latest writer of each resource). */
-        std::vector<RHI_RenderGraphResource> m_Reads;
-
-        /** Resources this pass writes (establishes a new version of each resource). */
-        std::vector<RHI_RenderGraphResource> m_Writes;
-
-        /** Optional explicit dependencies on other passes, referenced by name. */
-        std::vector<std::string> m_Dependencies;
-
-        RHI_FullscreenPassDesc m_Fullscreen{};
-        RHI_GeometryPassDesc m_Geometry{};
-        RHI_ImGuiPassDesc m_ImGui{};
+    struct NV_API RHI_RenderGraphBufferResource {
+        RHI_BufferDesc m_Desc;
+        bool m_Imported = false;
     };
 
-    std::string GetRenderPassName(const RHI_RenderPassDesc& pass);
-    bool PassReadsResource(const RHI_RenderPassDesc& pass, RHI_RenderGraphResource resource);
-    bool PassWritesResource(const RHI_RenderPassDesc& pass, RHI_RenderGraphResource resource);
-    bool PassWritesToViewport(const RHI_RenderPassDesc& pass);
-    bool PassWritesToBackBuffer(const RHI_RenderPassDesc& pass);
+    struct NV_API RHI_RenderGraphData {
+        std::vector<RHI_RenderGraphTextureResource> m_Textures;
+        std::vector<RHI_RenderGraphBufferResource> m_Buffers;
+        std::vector<RHI_ShaderDesc> m_Shaders;
+        std::vector<RHI_RenderGraphPassDesc> m_Passes;
+    };
 
     /**
-     * Abstract render graph: pass descriptions, dependency resolution, and backend-specific execution.
-     * Concrete implementations are created via RHI_RenderGraphBuilder::Build() or IRenderGraph::Create().
+     * Abstract render graph: compiled pass order and backend execution.
      */
-
     class NV_API IRenderGraph {
     public:
         virtual ~IRenderGraph() = default;
 
-        static std::unique_ptr<IRenderGraph> Create(Core::GraphicsAPI api, std::vector<RHI_RenderPassDesc> passes);
+        static std::unique_ptr<IRenderGraph> Create(Core::GraphicsAPI api, RHI_RenderGraphData data);
 
         virtual void OnBeginFrame() = 0;
+
+        /** Execute passes that do not target the swapchain (scene rendering). */
+        virtual void ExecuteScenePasses() = 0;
+
+        /** Execute passes that write to the imported swapchain texture (presentation). */
+        virtual void ExecutePresentPasses() = 0;
+
         virtual void OnEndFrame() = 0;
-        virtual void OnDraw(const RHI_DrawCommand& cmd) = 0;
-        virtual void OnDrawIndexed(const RHI_DrawIndexedCommand& cmd) = 0;
-        virtual void OnTransitionToImGuiPass() = 0;
         virtual bool ReloadChangedShaders() = 0;
 
-        const std::vector<RHI_RenderPassDesc>& GetPasses() const { return m_Passes; }
+        /** Resolve a declared shader to its backend pipeline, building it on first use. */
+        virtual RHI_Shaders* GetShader(RHI_ShaderHandle shader) = 0;
+
+        virtual void* GetTextureImGuiID(RHI_TextureHandle handle) const = 0;
+        virtual bool Resize(uint32_t width, uint32_t height) = 0;
+
+        const std::vector<RHI_RenderGraphPassDesc>& GetPasses() const { return m_Passes; }
         const std::vector<size_t>& GetExecutionOrder() const { return m_ExecutionOrder; }
-        size_t GetPassCount() const { return m_Passes.size(); }
-
-        int FindPassIndex(const std::string& name) const;
-        int FindPassIndexByType(RHI_RenderPassType type) const;
-
-        RHI_Shaders* GetPassShader(size_t passIndex) const;
-        RHI_Shaders* GetPassShader(const std::string& name) const;
-
         bool IsCompiled() const { return m_Compiled; }
 
     protected:
-        explicit IRenderGraph(std::vector<RHI_RenderPassDesc> passes);
+        explicit IRenderGraph(RHI_RenderGraphData data);
 
-        /**
-         * Builds m_ExecutionOrder from explicit pass dependencies and inferred read/write ordering.
-         * Returns false when a dependency is missing or a cycle is detected.
-         */
-        virtual bool SortPassesTopologically();
-        void SetPassShader(size_t passIndex, RHI_Shaders* shader);
-        void SetCompiled(bool compiled) { m_Compiled = compiled; }
-        void ClearPassShaders();
+        bool SortPassesTopologically();
+        bool PassWritesSwapchain(const RHI_RenderGraphPassDesc& pass) const;
 
-        std::vector<RHI_RenderPassDesc> m_Passes;
+        RHI_RenderGraphData m_Data;
+        std::vector<RHI_RenderGraphPassDesc> m_Passes;
         std::vector<size_t> m_ExecutionOrder;
-        std::vector<RHI_Shaders*> m_PassShaders;
         bool m_Compiled = false;
-
     };
 
+    class RHI_RenderGraphBuilder;
+
+    /**
+     * Scoped access declaration for a single pass. Bound to the pass being set up,
+     * so there is no pass index to pass around.
+     */
+    class NV_API RHI_PassBuilder {
+    public:
+        void Read(RHI_TextureHandle handle);
+        void Write(RHI_TextureHandle handle);
+
+        /** Read-modify-write access (UAV / compute). */
+        void ReadWrite(RHI_TextureHandle handle);
+
+        void Read(RHI_BufferHandle handle);
+        void Write(RHI_BufferHandle handle);
+
+        /** Defer this pass to the presentation phase (swapchain + ImGui). */
+        void PresentOnly();
+
+    private:
+        friend class RHI_RenderGraphBuilder;
+
+        RHI_PassBuilder(RHI_RenderGraphBuilder& graph, size_t passIndex)
+            : m_Graph(graph), m_PassIndex(passIndex) {}
+
+        RHI_RenderGraphBuilder& m_Graph;
+        size_t m_PassIndex;
+    };
+
+    /**
+     * Frame graph declaration: resources, shaders and passes.
+     *
+     * Example:
+     *   auto color = fg.CreateTexture({1920, 1080, RGBA8, ColorAttachment | Sampled});
+     *   auto shader = fg.CreateShader({.m_Name = "Grid", .m_Vertex = ..., .m_Fragment = ...});
+     *   fg.AddPass("Grid",
+     *       [&](RHI_PassBuilder& b) { b.Write(color); },
+     *       [&](RHI_PassContext& ctx) { ctx.DrawFullscreen(shader); });
+     *   renderer.SetRenderGraph(fg.Build(api));
+     */
     class NV_API RHI_RenderGraphBuilder {
     public:
-        RHI_RenderGraphBuilder& AddPass(RHI_RenderPassDesc pass);
+        RHI_TextureHandle CreateTexture(const RHI_TextureDesc& desc);
+        RHI_TextureHandle ImportTexture(const RHI_TextureDesc& desc, RHI_ResourceState initialState);
+
+        RHI_BufferHandle CreateBuffer(const RHI_BufferDesc& desc);
+        RHI_BufferHandle ImportBuffer(const RHI_BufferDesc& desc);
+
+        RHI_ShaderHandle CreateShader(RHI_ShaderDesc desc);
+
+        /** Register a pass. Setup runs immediately and wires the DAG; execute is stored for later. */
+        template<typename SetupFn, typename ExecFn>
+        RHI_RenderGraphBuilder& AddPass(std::string name, SetupFn&& setup, ExecFn&& execute) {
+            const size_t passIndex = m_Data.m_Passes.size();
+
+            RHI_RenderGraphPassDesc pass{};
+            pass.m_Name = std::move(name);
+            pass.m_Execute = std::forward<ExecFn>(execute);
+            m_Data.m_Passes.push_back(std::move(pass));
+
+            RHI_PassBuilder builder(*this, passIndex);
+            setup(builder);
+            return *this;
+        }
 
         std::unique_ptr<IRenderGraph> Build(Core::GraphicsAPI api);
 
+        const RHI_RenderGraphData& GetData() const { return m_Data; }
+
     private:
-        std::vector<RHI_RenderPassDesc> m_Passes;
+        friend class RHI_PassBuilder;
+
+        /** One entry per resource write; readers of a version force WAR edges on the next write. */
+        struct ResourceVersion {
+            size_t m_WriterPass = RHI_InvalidPassIndex;
+            std::vector<size_t> m_ReaderPasses;
+            bool HasWriter() const { return m_WriterPass != RHI_InvalidPassIndex; }
+        };
+
+        using VersionHistory = std::vector<ResourceVersion>;
+
+        void RecordRead(size_t passIndex, VersionHistory& history);
+        void RecordWrite(size_t passIndex, VersionHistory& history);
+        void RecordReadWrite(size_t passIndex, VersionHistory& history);
+
+        RHI_RenderGraphData m_Data;
+        std::vector<VersionHistory> m_TextureVersions;
+        std::vector<VersionHistory> m_BufferVersions;
     };
 
 } // namespace Nova::Core::Renderer::RHI

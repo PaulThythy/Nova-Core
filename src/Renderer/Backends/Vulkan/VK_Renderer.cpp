@@ -7,13 +7,9 @@
 #include "Core/ImGuiLayer.h"
 #include "Core/Log.h"
 
-#include "imgui.h"
-#include "backends/imgui_impl_vulkan.h"
-
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
-#include <array>
 #include <vector>
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
@@ -39,7 +35,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return dynamic_cast<VK_RenderGraph*>(m_RenderGraph.get());
     }
 
-    void VK_Renderer::WarnIfNoPipeline(const char* operation) const {
+    void VK_Renderer::WarnIfNoRenderGraph(const char* operation) const {
         if (!m_RenderGraph || !m_RenderGraph->IsCompiled()) {
             NV_LOG_WARN(("VK_Renderer: no render graph bound — " + std::string(operation)).c_str());
         }
@@ -106,8 +102,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (m_VKDevice.GetDevice() != VK_NULL_HANDLE)
             vkDeviceWaitIdle(m_VKDevice.GetDevice());
 
-        DestroyViewportFramebuffer();
-
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
         imguiLayer.DestroyImGuiBackend(GraphicsAPI::Vulkan);
 
@@ -127,7 +121,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         NV_LOG_INFO("Vulkan renderer destroyed.");
     }
 
-    void VK_Renderer::SetPipeline(std::unique_ptr<RHI::IRenderGraph> graph) {
+    void VK_Renderer::SetRenderGraph(std::unique_ptr<RHI::IRenderGraph> graph) {
         if (auto* vkGraph = GetVKRenderGraph())
             vkGraph->Destroy();
 
@@ -136,13 +130,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         auto* vkGraph = dynamic_cast<VK_RenderGraph*>(m_RenderGraph.get());
         if (!vkGraph) {
-            NV_LOG_ERROR("VK_Renderer::SetPipeline - render graph is not a Vulkan implementation");
+            NV_LOG_ERROR("VK_Renderer::SetRenderGraph - render graph is not a Vulkan implementation");
             m_RenderGraph.reset();
             return;
         }
 
         if (!vkGraph->Create(*this)) {
-            NV_LOG_ERROR("VK_Renderer::SetPipeline - failed to compile render graph");
+            NV_LOG_ERROR("VK_Renderer::SetRenderGraph - failed to compile render graph");
             m_RenderGraph.reset();
         }
     }
@@ -154,18 +148,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     bool VK_Renderer::Resize(int w, int h) {
-        if (w > 0 && h > 0) {
-            if (w != m_ViewportWidth || h != m_ViewportHeight) {
-                DestroyViewportFramebuffer();
-                CreateViewportFramebuffer(w, h);
-                m_ViewportWidth = w;
-                m_ViewportHeight = h;
-            }
-        } else {
-            DestroyViewportFramebuffer();
-            m_ViewportWidth = 0;
-            m_ViewportHeight = 0;
-        }
+        if (w <= 0 || h <= 0)
+            return true;
+
+        if (auto* vkGraph = GetVKRenderGraph())
+            return vkGraph->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+
         return true;
     }
 
@@ -177,13 +165,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         imguiLayer.SetVulkanBeforeRenderCallback({});
 
         if (!m_RenderGraph) {
-            WarnIfNoPipeline("BeginFrame skipped");
+            WarnIfNoRenderGraph("BeginFrame skipped");
             return;
         }
 
         auto* vkGraph = GetVKRenderGraph();
         if (!vkGraph) {
-            WarnIfNoPipeline("BeginFrame skipped");
+            WarnIfNoRenderGraph("BeginFrame skipped");
             return;
         }
 
@@ -239,29 +227,53 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         imguiLayer.SetVulkanCommandBuffer(cmd);
         imguiLayer.SetVulkanBeforeRenderCallback([this]() {
-            if (m_RenderGraph) m_RenderGraph->OnTransitionToImGuiPass();
+            if (auto* vkGraph = GetVKRenderGraph())
+                vkGraph->ExecutePresentPasses();
         });
 
         m_FrameActive = true;
         m_RenderGraph->OnBeginFrame();
     }
 
+    void VK_Renderer::ExecuteScenePasses() {
+        if (!m_FrameActive || !m_RenderGraph) return;
+        if (auto* vkGraph = GetVKRenderGraph())
+            vkGraph->ExecuteScenePasses();
+    }
+
     void VK_Renderer::Draw(const RHI::RHI_DrawCommand& cmd) {
-        if (!m_FrameActive) return;
-        if (!m_RenderGraph) { WarnIfNoPipeline("Draw ignored"); return; }
-        m_RenderGraph->OnDraw(cmd);
+        if (!m_FrameActive || !cmd.m_Mesh) return;
+
+        auto vkMesh = GetOrUploadMesh(cmd.m_Mesh);
+        if (!vkMesh) return;
+
+        VkCommandBuffer vkCmd = GetCurrentCommandBuffer();
+        vkMesh->SetCommandBuffer(vkCmd);
+        vkMesh->Bind();
+        vkCmdDraw(vkCmd, cmd.m_VertexCount, cmd.m_InstanceCount, cmd.m_FirstVertex, cmd.m_FirstInstance);
     }
 
     void VK_Renderer::DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) {
-        if (!m_FrameActive) return;
-        if (!m_RenderGraph) { WarnIfNoPipeline("DrawIndexed ignored"); return; }
-        m_RenderGraph->OnDrawIndexed(cmd);
+        if (!m_FrameActive || !cmd.m_Mesh) return;
+
+        auto vkMesh = GetOrUploadMesh(cmd.m_Mesh);
+        if (!vkMesh) return;
+
+        if (cmd.m_IndexType != RHI::RHI_IndexType::UInt32) {
+            NV_LOG_WARN("VK_Renderer::DrawIndexed currently supports only UInt32 index buffers.");
+            return;
+        }
+
+        VkCommandBuffer vkCmd = GetCurrentCommandBuffer();
+        vkMesh->SetCommandBuffer(vkCmd);
+        vkMesh->Bind();
+        vkCmdDrawIndexed(vkCmd, cmd.m_IndexCount, cmd.m_InstanceCount, cmd.m_FirstIndex, cmd.m_VertexOffset, cmd.m_FirstInstance);
     }
 
-    void* VK_Renderer::GetViewportTextureID() const {
-        if (m_ViewportDescriptorSet == VK_NULL_HANDLE)
-            return nullptr;
-        return (void*)m_ViewportDescriptorSet;
+    void* VK_Renderer::GetTextureImGuiID(RHI::RHI_TextureHandle handle) const {
+        if (m_RenderGraph)
+            return m_RenderGraph->GetTextureImGuiID(handle);
+        return nullptr;
     }
 
     void VK_Renderer::EndFrame() {
@@ -337,103 +349,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_MeshCache[cpuMesh.get()] = vkMesh;
         return vkMesh;
-    }
-
-    void VK_Renderer::CreateViewportFramebuffer(int w, int h) {
-        if (w <= 0 || h <= 0) return;
-        if (!m_MemoryAllocator.IsValid()) return;
-
-        VkDevice device = m_VKDevice.GetDevice();
-        VkFormat colorFormat = m_VKSwapchain.GetImageFormat();
-        VkFormat depthFormat = GetVKRenderGraph() ? GetVKRenderGraph()->GetDepthFormat() : VK_FORMAT_D32_SFLOAT;
-
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = colorFormat;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-
-        if (!m_MemoryAllocator.CreateImage(imageInfo, VK_MemoryLocation::GpuOnly, m_ViewportImage))
-            return;
-
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = m_ViewportImage.image;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = colorFormat;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.layerCount = 1;
-        CheckVkResult(vkCreateImageView(device, &viewInfo, nullptr, &m_ViewportImageView));
-
-        VkImageCreateInfo depthImageInfo = imageInfo;
-        depthImageInfo.format = depthFormat;
-        depthImageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        if (!m_MemoryAllocator.CreateImage(depthImageInfo, VK_MemoryLocation::GpuOnly, m_ViewportDepthImage)) {
-            DestroyViewportFramebuffer();
-            return;
-        }
-
-        VkImageViewCreateInfo depthViewInfo = viewInfo;
-        depthViewInfo.image = m_ViewportDepthImage.image;
-        depthViewInfo.format = depthFormat;
-        depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        CheckVkResult(vkCreateImageView(device, &depthViewInfo, nullptr, &m_ViewportDepthImageView));
-
-        std::array<VkImageView, 2> attachments = { m_ViewportImageView, m_ViewportDepthImageView };
-        VkFramebufferCreateInfo fbInfo{};
-        fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbInfo.renderPass = GetVKRenderGraph() ? GetVKRenderGraph()->GetViewportRenderPass() : VK_NULL_HANDLE;
-        fbInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        fbInfo.pAttachments = attachments.data();
-        fbInfo.width = static_cast<uint32_t>(w);
-        fbInfo.height = static_cast<uint32_t>(h);
-        fbInfo.layers = 1;
-        CheckVkResult(vkCreateFramebuffer(device, &fbInfo, nullptr, &m_ViewportFramebuffer));
-
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        CheckVkResult(vkCreateSampler(device, &samplerInfo, nullptr, &m_ViewportSampler));
-
-        if (GetVKRenderGraph()) {
-            m_ViewportDescriptorSet = ImGui_ImplVulkan_AddTexture(
-                m_ViewportSampler,
-                m_ViewportImageView,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        }
-    }
-
-    void VK_Renderer::DestroyViewportFramebuffer() {
-        VkDevice device = m_VKDevice.GetDevice();
-        if (device == VK_NULL_HANDLE) return;
-
-        CheckVkResult(vkDeviceWaitIdle(device));
-
-        if (m_ViewportDescriptorSet != VK_NULL_HANDLE) {
-            if (auto* vkGraph = GetVKRenderGraph()) {
-                VkDescriptorPool pool = vkGraph->GetImGuiDescriptorPool();
-                if (pool != VK_NULL_HANDLE)
-                    vkFreeDescriptorSets(device, pool, 1, &m_ViewportDescriptorSet);
-            }
-            m_ViewportDescriptorSet = VK_NULL_HANDLE;
-        }
-        if (m_ViewportSampler != VK_NULL_HANDLE) { vkDestroySampler(device, m_ViewportSampler, nullptr); m_ViewportSampler = VK_NULL_HANDLE; }
-        if (m_ViewportFramebuffer != VK_NULL_HANDLE) { vkDestroyFramebuffer(device, m_ViewportFramebuffer, nullptr); m_ViewportFramebuffer = VK_NULL_HANDLE; }
-        if (m_ViewportDepthImageView != VK_NULL_HANDLE) { vkDestroyImageView(device, m_ViewportDepthImageView, nullptr); m_ViewportDepthImageView = VK_NULL_HANDLE; }
-        m_MemoryAllocator.DestroyImage(m_ViewportDepthImage);
-        if (m_ViewportImageView != VK_NULL_HANDLE) { vkDestroyImageView(device, m_ViewportImageView, nullptr); m_ViewportImageView = VK_NULL_HANDLE; }
-        m_MemoryAllocator.DestroyImage(m_ViewportImage);
     }
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan
