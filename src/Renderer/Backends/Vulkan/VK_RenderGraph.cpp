@@ -774,14 +774,23 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         viewInfo.subresourceRange.levelCount = 1;
         viewInfo.subresourceRange.layerCount = 1;
 
+        // Depth sampled in ImGui / shaders: swizzle R→RGB so the single channel displays as grayscale.
+        if (IsDepthFormat(desc.m_Format) && HasTextureUsage(desc.m_Usage, RHI::RHI_TextureUsage::Sampled)) {
+            viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+            viewInfo.components.g = VK_COMPONENT_SWIZZLE_R;
+            viewInfo.components.b = VK_COMPONENT_SWIZZLE_R;
+            viewInfo.components.a = VK_COMPONENT_SWIZZLE_ONE;
+        }
+
         if (vkCreateImageView(device, &viewInfo, nullptr, &texture.view) != VK_SUCCESS)
             return false;
 
         if (HasTextureUsage(desc.m_Usage, RHI::RHI_TextureUsage::Sampled)) {
+            const bool isDepth = IsDepthFormat(desc.m_Format);
             VkSamplerCreateInfo samplerInfo{};
             samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-            samplerInfo.magFilter = VK_FILTER_LINEAR;
-            samplerInfo.minFilter = VK_FILTER_LINEAR;
+            samplerInfo.magFilter = isDepth ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
+            samplerInfo.minFilter = isDepth ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
             samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
             samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
             samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -1074,15 +1083,33 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_InsideRenderPass = false;
         }
 
-        // Transition written color textures that are also sampled.
+        // Transition sampled textures only after their last scene-pass write, so later
+        // passes can still use them as attachments (e.g. Grid then Scene).
         if (!writesSwapchain) {
+            auto isLastWriter = [&](RHI::RHI_TextureHandle handle) {
+                auto it = std::find(m_ExecutionOrder.begin(), m_ExecutionOrder.end(), passIndex);
+                if (it == m_ExecutionOrder.end())
+                    return true;
+                for (++it; it != m_ExecutionOrder.end(); ++it) {
+                    const auto& later = m_Passes[*it];
+                    if (later.m_PresentOnly)
+                        continue;
+                    const auto& writes = later.m_WriteTextures;
+                    if (std::find(writes.begin(), writes.end(), handle) != writes.end())
+                        return false;
+                }
+                return true;
+            };
+
             for (RHI::RHI_TextureHandle handle : pass.m_WriteTextures) {
                 if (!handle.IsValid() || handle.m_Index >= m_Textures.size()) continue;
                 TextureResource& tex = m_Textures[handle.m_Index];
                 if (tex.desc.m_IsSwapchain) continue;
-                if (IsDepthFormat(tex.desc.m_Desc.m_Format)) continue;
-                if (HasTextureUsage(tex.desc.m_Desc.m_Usage, RHI::RHI_TextureUsage::Sampled))
-                    TransitionTextureForSampling(cmd, tex);
+                if (!HasTextureUsage(tex.desc.m_Desc.m_Usage, RHI::RHI_TextureUsage::Sampled))
+                    continue;
+                if (!isLastWriter(handle))
+                    continue;
+                TransitionTextureForSampling(cmd, tex);
             }
         }
 
@@ -1092,21 +1119,33 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     void VK_RenderGraph::TransitionTextureForSampling(VkCommandBuffer cmd, TextureResource& texture) {
         if (texture.image.image == VK_NULL_HANDLE) return;
 
+        const bool isDepth = IsDepthFormat(texture.desc.m_Desc.m_Format);
+
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.srcAccessMask = isDepth
+            ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+            : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        barrier.oldLayout = isDepth
+            ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+            : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = texture.image.image;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.aspectMask = isDepth
+            ? VK_IMAGE_ASPECT_DEPTH_BIT
+            : VK_IMAGE_ASPECT_COLOR_BIT;
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.layerCount = 1;
 
+        const VkPipelineStageFlags srcStage = isDepth
+            ? (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)
+            : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
         vkCmdPipelineBarrier(cmd,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            srcStage,
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             0, 0, nullptr, 0, nullptr, 1, &barrier);
 
@@ -1192,7 +1231,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         depthAttachment.format = m_DepthFormat;
         depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         depthAttachment.loadOp = depthLoad;
-        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        // Preserve depth so it can be sampled (e.g. ImGui depth debug view).
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAttachment.initialLayout = (depthLoad == VK_ATTACHMENT_LOAD_OP_LOAD)
