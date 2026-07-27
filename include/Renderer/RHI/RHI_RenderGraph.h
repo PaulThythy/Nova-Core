@@ -2,7 +2,6 @@
 #define RHI_RENDERGRAPH_H
 
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -10,8 +9,8 @@
 #include <vector>
 
 #include "Api.h"
+#include "Asset/Assets/ShaderAsset.h"
 #include "Core/GraphicsAPI.h"
-#include "Renderer/RHI/RHI_ShaderCompiler.h"
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -146,19 +145,19 @@ namespace Nova::Core::Renderer::RHI {
     struct NV_API RHI_ShaderDesc {
         std::string m_Name;
 
-        std::filesystem::path m_Vertex;
-        std::filesystem::path m_Fragment;
-        std::filesystem::path m_Compute;
+        /** Compiled stage assets acquired via AssetManager (not raw filesystem paths). */
+        std::shared_ptr<Core::Asset::Assets::ShaderAsset> m_Vertex;
+        std::shared_ptr<Core::Asset::Assets::ShaderAsset> m_Fragment;
+        std::shared_ptr<Core::Asset::Assets::ShaderAsset> m_Compute;
 
         std::string m_EntryPoint = "main";
-        std::vector<std::filesystem::path> m_IncludeDirs;
 
         RHI_VertexLayout m_VertexLayout = RHI_VertexLayout::Mesh;
         bool m_AlphaBlend = false;
         bool m_DepthTest = true;
         bool m_DepthWrite = true;
 
-        bool IsCompute() const { return !m_Compute.empty(); }
+        bool IsCompute() const { return static_cast<bool>(m_Compute); }
     };
 
     // -------------------------------------------------------------------------
@@ -297,9 +296,12 @@ namespace Nova::Core::Renderer::RHI {
      * Frame graph declaration: resources, shaders and passes.
      *
      * Example:
+     *   auto vert = AssetManager::Get().Acquire<ShaderAsset>("Engine://Shaders/Scene.vert.slang").GetAssetRef();
+     *   auto frag = AssetManager::Get().Acquire<ShaderAsset>("Engine://Shaders/Scene.frag.slang").GetAssetRef();
+     *   vert->Compile(); frag->Compile();
      *   auto color = fg.CreateTexture({1920, 1080, RGBA8, ColorAttachment | Sampled});
-     *   auto shader = fg.CreateShader({.m_Name = "Grid", .m_Vertex = ..., .m_Fragment = ...});
-     *   fg.AddPass("Grid",
+     *   auto shader = fg.RegisterShader({.m_Name = "Scene", .m_Vertex = vert, .m_Fragment = frag});
+     *   fg.AddPass("Scene",
      *       [&](RHI_PassBuilder& b) { b.Write(color); },
      *       [&](RHI_PassContext& ctx) { ctx.DrawFullscreen(shader); });
      *   renderer.SetRenderGraph(fg.Build(api));
@@ -312,7 +314,8 @@ namespace Nova::Core::Renderer::RHI {
         RHI_BufferHandle CreateBuffer(const RHI_BufferDesc& desc);
         RHI_BufferHandle ImportBuffer(const RHI_BufferDesc& desc);
 
-        RHI_ShaderHandle CreateShader(RHI_ShaderDesc desc);
+        /** Register a graphics/compute program built from already-acquired ShaderAssets. */
+        RHI_ShaderHandle RegisterShader(RHI_ShaderDesc desc);
 
         /** Register a pass. Setup runs immediately and wires the DAG; execute is stored for later. */
         template<typename SetupFn, typename ExecFn>

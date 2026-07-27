@@ -215,7 +215,7 @@ namespace Nova::Core::Renderer::RHI {
         return RHI_BufferHandle{ index };
     }
 
-    RHI_ShaderHandle RHI_RenderGraphBuilder::CreateShader(RHI_ShaderDesc desc) {
+    RHI_ShaderHandle RHI_RenderGraphBuilder::RegisterShader(RHI_ShaderDesc desc) {
         const uint32_t index = static_cast<uint32_t>(m_Data.m_Shaders.size());
         m_Data.m_Shaders.push_back(std::move(desc));
         return RHI_ShaderHandle{ index };

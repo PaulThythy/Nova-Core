@@ -107,40 +107,33 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         RHI::RHI_ShaderCompileResult& vertOut,
         RHI::RHI_ShaderCompileResult& fragOut)
     {
-        auto buildInput = [&](const std::filesystem::path& file, RHI::RHI_ShaderStage stage) {
-            RHI::RHI_ShaderCompileInput in{};
-            in.m_File = file;
-            in.m_Stage = stage;
-            in.m_EntryPoint = desc.m_EntryPoint;
-            in.m_IncludeDirs = desc.m_IncludeDirs;
-
-            const std::filesystem::path engineRoot =
-                std::filesystem::current_path() / "Nova-Core" / "Resources" / "Engine" / "Shaders";
-
-            auto addInclude = [&](const std::filesystem::path& dir) {
-                if (dir.empty()) return;
-                if (std::find(in.m_IncludeDirs.begin(), in.m_IncludeDirs.end(), dir) == in.m_IncludeDirs.end())
-                    in.m_IncludeDirs.push_back(dir);
-            };
-            addInclude(engineRoot);
-            addInclude(file.parent_path());
-            in.m_Defines.emplace_back("NOVA_VULKAN", "1");
-            return in;
-        };
-
-        vertOut = RHI::RHI_ShaderCompiler::Compile(
-            buildInput(desc.m_Vertex, RHI::ShaderStageFromFileExtension(desc.m_Vertex)));
-        if (!vertOut.m_Success) {
-            NV_LOG_WARN(("VK_PipelineCache: vertex compile failed:\n" + vertOut.m_Log).c_str());
+        if (!desc.m_Vertex || !desc.m_Fragment) {
+            NV_LOG_WARN("VK_PipelineCache: RegisterShader requires vertex and fragment ShaderAssets.");
             return false;
         }
 
-        fragOut = RHI::RHI_ShaderCompiler::Compile(
-            buildInput(desc.m_Fragment, RHI::ShaderStageFromFileExtension(desc.m_Fragment)));
-        if (!fragOut.m_Success) {
-            NV_LOG_WARN(("VK_PipelineCache: fragment compile failed:\n" + fragOut.m_Log).c_str());
+        if (!desc.m_Vertex->Compile()) {
+            NV_LOG_WARN(("VK_PipelineCache: vertex compile failed:\n" + desc.m_Vertex->GetLastLog()).c_str());
             return false;
         }
+        if (!desc.m_Fragment->Compile()) {
+            NV_LOG_WARN(("VK_PipelineCache: fragment compile failed:\n" + desc.m_Fragment->GetLastLog()).c_str());
+            return false;
+        }
+
+        vertOut.m_Success = true;
+        vertOut.m_Binary = desc.m_Vertex->GetBinary();
+        vertOut.m_Format = desc.m_Vertex->GetBinaryFormat();
+        vertOut.m_Source = desc.m_Vertex->GetSource();
+        vertOut.m_Reflection = desc.m_Vertex->GetReflection();
+        vertOut.m_Stage = desc.m_Vertex->GetStage();
+
+        fragOut.m_Success = true;
+        fragOut.m_Binary = desc.m_Fragment->GetBinary();
+        fragOut.m_Format = desc.m_Fragment->GetBinaryFormat();
+        fragOut.m_Source = desc.m_Fragment->GetSource();
+        fragOut.m_Reflection = desc.m_Fragment->GetReflection();
+        fragOut.m_Stage = desc.m_Fragment->GetStage();
         return true;
     }
 
@@ -305,13 +298,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         bool anyChanged = false;
         for (auto& entry : m_Entries) {
-            if (!entry.shader)
+            if (!entry.shader || !entry.desc.m_Vertex || !entry.desc.m_Fragment)
                 continue;
 
-            const auto vertTime = GetFileWriteTime(entry.desc.m_Vertex);
-            const auto fragTime = GetFileWriteTime(entry.desc.m_Fragment);
+            const auto vertTime = GetFileWriteTime(entry.desc.m_Vertex->GetPath());
+            const auto fragTime = GetFileWriteTime(entry.desc.m_Fragment->GetPath());
             if (vertTime == entry.vertWriteTime && fragTime == entry.fragWriteTime)
                 continue;
+
+            // Force recompilation through the asset layer before rebuilding the pipeline.
+            entry.desc.m_Vertex->Recompile();
+            entry.desc.m_Fragment->Recompile();
 
             PipelineEntry rebuilt{};
             rebuilt.desc = entry.desc;
@@ -625,8 +622,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             entry.descriptorSets);
         entry.shader->SetReflection(reflForVk);
 
-        entry.vertWriteTime = GetFileWriteTime(entry.desc.m_Vertex);
-        entry.fragWriteTime = GetFileWriteTime(entry.desc.m_Fragment);
+        entry.vertWriteTime = GetFileWriteTime(entry.desc.m_Vertex->GetPath());
+        entry.fragWriteTime = GetFileWriteTime(entry.desc.m_Fragment->GetPath());
         return true;
     }
 
