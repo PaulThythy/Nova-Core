@@ -235,7 +235,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_RenderGraph->OnBeginFrame();
     }
 
-    void VK_Renderer::ExecuteScenePasses() {
+    void VK_Renderer::RenderFrame() {
         if (!m_FrameActive || !m_RenderGraph) return;
         if (auto* vkGraph = GetVKRenderGraph())
             vkGraph->ExecuteScenePasses();

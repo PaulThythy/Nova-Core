@@ -33,14 +33,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void Update(float dt) override;
 
         void BeginFrame() override;
+        void RenderFrame() override;
         void EndFrame() override;
 
         void SetRenderGraph(std::unique_ptr<RHI::IRenderGraph> graph) override;
         RHI::IRenderGraph* GetRenderGraph() const override { return m_RenderGraph.get(); }
 
         VK_RenderGraph* GetVKRenderGraph() const;
-
-        void ExecuteScenePasses() override;
 
         void Draw(const RHI::RHI_DrawCommand& cmd) override;
         void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;

@@ -72,14 +72,15 @@ namespace Nova::Core::Renderer::RHI {
         virtual bool Resize(int w, int h) = 0;
         virtual void Update(float dt) = 0;
 
+        /** Begin the frame. Call during OnBegin. */
         virtual void BeginFrame() = 0;
+        /** Render the frame. Call during OnRender. */
+        virtual void RenderFrame() = 0;
+        /** End the frame. Call during OnEnd. */
         virtual void EndFrame() = 0;
 
         virtual void SetRenderGraph(std::unique_ptr<IRenderGraph> graph) = 0;
         virtual IRenderGraph* GetRenderGraph() const = 0;
-
-        /** Execute scene passes (non-swapchain targets). Call during OnRender. */
-        virtual void ExecuteScenePasses() = 0;
 
         virtual void Draw(const RHI_DrawCommand& cmd) = 0;
         virtual void DrawIndexed(const RHI_DrawIndexedCommand& cmd) = 0;
