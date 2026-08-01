@@ -102,6 +102,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (m_VKDevice.GetDevice() != VK_NULL_HANDLE)
             vkDeviceWaitIdle(m_VKDevice.GetDevice());
 
+        // Unregister ImGui textures before shutting down the ImGui Vulkan backend
+        // (RemoveTexture needs the backend + descriptor pool still alive).
+        if (auto* vkGraph = GetVKRenderGraph())
+            vkGraph->ReleaseImGuiTextures();
+
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
         imguiLayer.DestroyImGuiBackend(GraphicsAPI::Vulkan);
 
@@ -277,9 +282,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::EndFrame() {
-        if (!m_FrameActive) return;
-
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
+
+        if (!m_FrameActive) {
+            // Still pump secondary viewports (own swapchains) when the main frame
+            // was skipped (e.g. acquire failure); scene texture may be stale.
+            imguiLayer.RenderPlatformWindows();
+            return;
+        }
+
         imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
         imguiLayer.SetVulkanBeforeRenderCallback({});
 
@@ -300,6 +311,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkSemaphore renderFinishedSemaphore = m_VKSwapchain.GetRenderFinishedSemaphore(imageIndex);
         VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };
 
+        // Submit the main CB without the frame fence first. Secondary ImGui viewports
+        // submit afterwards on the same queue; an empty follow-up submit arms the fence
+        // so it covers that work too (avoids destroying buffers still referenced by
+        // in-flight secondary command buffers).
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.waitSemaphoreCount = 1;
@@ -310,7 +325,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        CheckVkResult(vkQueueSubmit(m_VKDevice.GetGraphicsQueue(), 1, &submitInfo, fs.m_InFlightFence));
+        CheckVkResult(vkQueueSubmit(m_VKDevice.GetGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE));
+
+        imguiLayer.RenderPlatformWindows();
+
+        VkSubmitInfo fenceSubmit{};
+        fenceSubmit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        CheckVkResult(vkQueueSubmit(m_VKDevice.GetGraphicsQueue(), 1, &fenceSubmit, fs.m_InFlightFence));
 
         VkSwapchainKHR swapchains[] = { m_VKSwapchain.GetSwapchain() };
         VkPresentInfoKHR presentInfo{};

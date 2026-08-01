@@ -172,16 +172,25 @@ namespace Nova::Core {
                 else {
                     NV_LOG_ERROR("Vulkan Command Buffer not set for ImGuiLayer!");
                 }
-
-                if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-                    ImGui::UpdatePlatformWindows();
-                    ImGui::RenderPlatformWindowsDefault();
-                }
+                // Secondary viewports are rendered after the main CB submit
+                // (see RenderPlatformWindows) so they can sample this frame's textures.
                 break;
             }
 
             default:
                 break;
         }
+    }
+
+    void ImGuiLayer::RenderPlatformWindows() {
+        if (!m_IsRendererInitialized)
+            return;
+
+        ImGuiIO& io = ImGui::GetIO();
+        if (!(io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable))
+            return;
+
+        ImGui::UpdatePlatformWindows();
+        ImGui::RenderPlatformWindowsDefault();
     }
 }

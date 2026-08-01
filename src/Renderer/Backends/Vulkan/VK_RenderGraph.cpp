@@ -141,10 +141,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     // VK_PipelineCache
     // -------------------------------------------------------------------------
 
-    bool VK_PipelineCache::Create(VK_Renderer& renderer, const std::vector<RHI::RHI_ShaderDesc>& shaders) {
+    bool VK_PipelineCache::Create(VK_Renderer& renderer, const std::vector<RHI::RHI_ShaderDesc>& shaders, VkFormat colorFormat, VkFormat depthFormat) {
         Destroy();
         m_Renderer = &renderer;
         m_FramesInFlight = std::max(1u, renderer.GetFramesInFlight());
+        m_ColorFormat = colorFormat;
+        m_DepthFormat = depthFormat != VK_FORMAT_UNDEFINED ? depthFormat : VK_FORMAT_D32_SFLOAT;
 
         VkPipelineCacheCreateInfo cacheInfo{};
         cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
@@ -154,12 +156,64 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (!CreateDescriptorPool())
             return false;
 
+        if (!CreateRenderPass(m_ColorFormat, m_DepthFormat))
+            return false;
+
         // One entry per declared shader; pipelines are built lazily on first use.
         m_Entries.resize(shaders.size());
         for (size_t i = 0; i < shaders.size(); ++i)
             m_Entries[i].desc = shaders[i];
 
         return true;
+    }
+
+    bool VK_PipelineCache::CreateRenderPass(VkFormat colorFormat, VkFormat depthFormat) {
+        if (!m_Renderer || colorFormat == VK_FORMAT_UNDEFINED)
+            return false;
+
+        VkDevice device = m_Renderer->GetDevice();
+
+        VkAttachmentDescription attachments[2]{};
+        attachments[0].format = colorFormat;
+        attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        attachments[1].format = depthFormat;
+        attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference colorRef{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        VkAttachmentReference depthRef{ 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorRef;
+        subpass.pDepthStencilAttachment = &depthRef;
+
+        VkSubpassDependency dependency{};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        // Must match CreateColorDepthRenderPass — dependency masks are part of
+        // render-pass compatibility with pipelines created against this RP.
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+        VkRenderPassCreateInfo rpInfo{};
+        rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        rpInfo.attachmentCount = 2;
+        rpInfo.pAttachments = attachments;
+        rpInfo.subpassCount = 1;
+        rpInfo.pSubpasses = &subpass;
+        rpInfo.dependencyCount = 1;
+        rpInfo.pDependencies = &dependency;
+        return vkCreateRenderPass(device, &rpInfo, nullptr, &m_RenderPass) == VK_SUCCESS;
     }
 
     void VK_PipelineCache::Destroy() {
@@ -171,9 +225,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         if (m_Renderer) {
             VkDevice device = m_Renderer->GetDevice();
-            if (m_CompatibleRenderPass != VK_NULL_HANDLE) {
-                vkDestroyRenderPass(device, m_CompatibleRenderPass, nullptr);
-                m_CompatibleRenderPass = VK_NULL_HANDLE;
+            if (m_RenderPass != VK_NULL_HANDLE) {
+                vkDestroyRenderPass(device, m_RenderPass, nullptr);
+                m_RenderPass = VK_NULL_HANDLE;
             }
             if (m_VkPipelineCache != VK_NULL_HANDLE) {
                 vkDestroyPipelineCache(device, m_VkPipelineCache, nullptr);
@@ -538,47 +592,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
-        // Compatible render pass for pipeline creation (color + depth, clear).
-        if (m_CompatibleRenderPass == VK_NULL_HANDLE) {
-            VkAttachmentDescription attachments[2]{};
-            attachments[0].format = m_Renderer->GetSwapchainImageFormat();
-            attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-            attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-            attachments[1].format = VK_FORMAT_D32_SFLOAT;
-            attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-            attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-            VkAttachmentReference colorRef{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-            VkAttachmentReference depthRef{ 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
-            VkSubpassDescription subpass{};
-            subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-            subpass.colorAttachmentCount = 1;
-            subpass.pColorAttachments = &colorRef;
-            subpass.pDepthStencilAttachment = &depthRef;
-
-            VkSubpassDependency dependency{};
-            dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-            dependency.dstSubpass = 0;
-            dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-            VkRenderPassCreateInfo rpInfo{};
-            rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-            rpInfo.attachmentCount = 2;
-            rpInfo.pAttachments = attachments;
-            rpInfo.subpassCount = 1;
-            rpInfo.pSubpasses = &subpass;
-            rpInfo.dependencyCount = 1;
-            rpInfo.pDependencies = &dependency;
-            vkCreateRenderPass(device, &rpInfo, nullptr, &m_CompatibleRenderPass);
+        // Compatible render pass is created up-front in Create() to match the
+        // actual scene color target (swapchain or offscreen panel texture).
+        if (m_RenderPass == VK_NULL_HANDLE) {
+            NV_LOG_ERROR("VK_PipelineCache::BuildPipeline - compatible render pass is missing");
+            vertModule.Destroy();
+            fragModule.Destroy();
+            return false;
         }
 
         VkGraphicsPipelineCreateInfo pipe{};
@@ -594,7 +614,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         pipe.pColorBlendState = &blend;
         pipe.pDynamicState = &dynamic;
         pipe.layout = entry.pipelineLayout;
-        pipe.renderPass = m_CompatibleRenderPass;
+        pipe.renderPass = m_RenderPass;
         pipe.subpass = 0;
 
         if (vkCreateGraphicsPipelines(device, m_VkPipelineCache, 1, &pipe, nullptr, &entry.pipeline) != VK_SUCCESS) {
@@ -642,7 +662,45 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
-        if (!m_PipelineCache.Create(renderer, m_Data.m_Shaders)) {
+        // Prefer an offscreen color attachment format when the graph renders into
+        // a panel texture; otherwise pipelines must match the swapchain format.
+        VkFormat sceneColorFormat = renderer.GetSwapchainImageFormat();
+        for (const auto& texRes : m_Data.m_Textures) {
+            if (texRes.m_IsSwapchain || texRes.m_Imported)
+                continue;
+            if (IsDepthFormat(texRes.m_Desc.m_Format))
+                continue;
+            if (!HasTextureUsage(texRes.m_Desc.m_Usage, RHI::RHI_TextureUsage::ColorAttachment))
+                continue;
+            sceneColorFormat = ToVkFormat(texRes.m_Desc.m_Format);
+            break;
+        }
+
+        // Resolve a depth format early so the compatible pipeline render pass matches
+        // the attachments created later for both swapchain and offscreen targets.
+        VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+        {
+            const std::vector<VkFormat> candidates = {
+                VK_FORMAT_D32_SFLOAT,
+                VK_FORMAT_D32_SFLOAT_S8_UINT,
+                VK_FORMAT_D24_UNORM_S8_UINT
+            };
+            for (VkFormat format : candidates) {
+                VkFormatProperties props{};
+                vkGetPhysicalDeviceFormatProperties(renderer.GetPhysicalDevice(), format, &props);
+                if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+                    depthFormat = format;
+                    break;
+                }
+            }
+        }
+        if (depthFormat == VK_FORMAT_UNDEFINED) {
+            NV_LOG_ERROR("VK_RenderGraph::Create - no supported depth format");
+            return false;
+        }
+        m_DepthFormat = depthFormat;
+
+        if (!m_PipelineCache.Create(renderer, m_Data.m_Shaders, sceneColorFormat, depthFormat)) {
             NV_LOG_ERROR("VK_RenderGraph::Create - failed to create pipeline cache");
             return false;
         }
@@ -670,6 +728,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_PipelineCache.Destroy();
         m_Renderer = nullptr;
         m_Compiled = false;
+    }
+
+    void VK_RenderGraph::ReleaseImGuiTextures() {
+        for (auto& texture : m_Textures) {
+            if (texture.imguiTextureId == nullptr)
+                continue;
+            if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().BackendRendererUserData != nullptr)
+                ImGui_ImplVulkan_RemoveTexture(static_cast<VkDescriptorSet>(texture.imguiTextureId));
+            texture.imguiTextureId = nullptr;
+        }
     }
 
     VkFormat VK_RenderGraph::ToVkFormat(RHI::RHI_TextureFormat format) const {
@@ -765,22 +833,32 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         viewInfo.image = texture.image.image;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = format;
+        viewInfo.components = {
+            VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+            VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY
+        };
         viewInfo.subresourceRange.aspectMask = IsDepthFormat(desc.m_Format)
             ? VK_IMAGE_ASPECT_DEPTH_BIT
             : VK_IMAGE_ASPECT_COLOR_BIT;
         viewInfo.subresourceRange.levelCount = 1;
         viewInfo.subresourceRange.layerCount = 1;
 
-        // Depth sampled in ImGui / shaders: swizzle R→RGB so the single channel displays as grayscale.
+        // Framebuffer attachments require the identity swizzle.
+        if (vkCreateImageView(device, &viewInfo, nullptr, &texture.view) != VK_SUCCESS)
+            return false;
+
+        texture.sampledView = texture.view;
+
+        // Depth sampled in ImGui / shaders: separate view with R→RGB so grayscale
+        // displays correctly without violating framebuffer identity-swizzle rules.
         if (IsDepthFormat(desc.m_Format) && HasTextureUsage(desc.m_Usage, RHI::RHI_TextureUsage::Sampled)) {
             viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
             viewInfo.components.g = VK_COMPONENT_SWIZZLE_R;
             viewInfo.components.b = VK_COMPONENT_SWIZZLE_R;
             viewInfo.components.a = VK_COMPONENT_SWIZZLE_ONE;
+            if (vkCreateImageView(device, &viewInfo, nullptr, &texture.sampledView) != VK_SUCCESS)
+                return false;
         }
-
-        if (vkCreateImageView(device, &viewInfo, nullptr, &texture.view) != VK_SUCCESS)
-            return false;
 
         if (HasTextureUsage(desc.m_Usage, RHI::RHI_TextureUsage::Sampled)) {
             const bool isDepth = IsDepthFormat(desc.m_Format);
@@ -796,7 +874,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 return false;
 
             texture.imguiTextureId = ImGui_ImplVulkan_AddTexture(
-                texture.sampler, texture.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                texture.sampler, texture.sampledView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
 
         texture.state = RHI::RHI_ResourceState::Undefined;
@@ -807,11 +885,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (!m_Renderer) return;
         VkDevice device = m_Renderer->GetDevice();
 
-        if (texture.imguiTextureId != nullptr && texture.sampler != VK_NULL_HANDLE) {
-            VkDescriptorSet ds = (VkDescriptorSet)texture.imguiTextureId;
-            VkDescriptorPool pool = m_PipelineCache.GetDescriptorPool();
-            if (pool != VK_NULL_HANDLE)
-                vkFreeDescriptorSets(device, pool, 1, &ds);
+        if (texture.imguiTextureId != nullptr) {
+            // Backend may already be shut down during app teardown — only remove if alive.
+            if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().BackendRendererUserData != nullptr)
+                ImGui_ImplVulkan_RemoveTexture(static_cast<VkDescriptorSet>(texture.imguiTextureId));
             texture.imguiTextureId = nullptr;
         }
 
@@ -823,10 +900,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             vkDestroySampler(device, texture.sampler, nullptr);
             texture.sampler = VK_NULL_HANDLE;
         }
+        if (texture.sampledView != VK_NULL_HANDLE && texture.sampledView != texture.view) {
+            vkDestroyImageView(device, texture.sampledView, nullptr);
+            texture.sampledView = VK_NULL_HANDLE;
+        }
         if (texture.view != VK_NULL_HANDLE) {
             vkDestroyImageView(device, texture.view, nullptr);
             texture.view = VK_NULL_HANDLE;
         }
+        texture.sampledView = VK_NULL_HANDLE;
         m_Renderer->GetMemoryAllocator().DestroyImage(texture.image);
     }
 
@@ -1291,7 +1373,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         initInfo.PipelineInfoMain.RenderPass = m_BackBufferRenderPass;
         initInfo.PipelineInfoMain.Subpass = 0;
         initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-        initInfo.PipelineInfoForViewports = initInfo.PipelineInfoMain;
+        // Secondary viewports create their own render pass/swapchain; do not reuse
+        // the main window render pass here (ImGui overwrites RenderPass on create).
+        initInfo.PipelineInfoForViewports.Subpass = 0;
+        initInfo.PipelineInfoForViewports.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         initInfo.UseDynamicRendering = false;
         initInfo.CheckVkResultFn = CheckVkResult;
 

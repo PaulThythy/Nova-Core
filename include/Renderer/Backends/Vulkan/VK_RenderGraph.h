@@ -28,7 +28,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_PipelineCache() = default;
         ~VK_PipelineCache() { Destroy(); }
 
-        bool Create(VK_Renderer& renderer, const std::vector<RHI::RHI_ShaderDesc>& shaders);
+        bool Create(VK_Renderer& renderer, const std::vector<RHI::RHI_ShaderDesc>& shaders, VkFormat colorFormat, VkFormat depthFormat);
         void Destroy();
 
         /** Resolve a declared shader, building its pipeline on first use. */
@@ -52,6 +52,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         };
 
         bool BuildPipeline(PipelineEntry& entry);
+        bool CreateRenderPass(VkFormat colorFormat, VkFormat depthFormat);
         void DestroyEntry(PipelineEntry& entry);
         bool CreateEngineBuffers();
         void DestroyEngineBuffers();
@@ -60,7 +61,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_Renderer* m_Renderer = nullptr;
         VkPipelineCache m_VkPipelineCache = VK_NULL_HANDLE;
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
-        VkRenderPass m_CompatibleRenderPass = VK_NULL_HANDLE;
+        VkRenderPass m_RenderPass = VK_NULL_HANDLE;
+        VkFormat m_ColorFormat = VK_FORMAT_UNDEFINED;
+        VkFormat m_DepthFormat = VK_FORMAT_D32_SFLOAT;
 
         VK_BufferAllocation m_BufGlobals{};
         VkDeviceSize m_FrameUniformStride = 0;
@@ -90,6 +93,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         bool Create(VK_Renderer& renderer);
         void Destroy();
 
+        /** Unregister ImGui texture IDs while the Vulkan ImGui backend is still alive. */
+        void ReleaseImGuiTextures();
+
         void OnBeginFrame() override;
         void ExecuteScenePasses() override;
         void ExecutePresentPasses() override;
@@ -112,7 +118,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         struct TextureResource {
             RHI::RHI_RenderGraphTextureResource desc;
             VK_ImageAllocation image{};
+            /** Identity-swizzle view — required for framebuffer attachments. */
             VkImageView view = VK_NULL_HANDLE;
+            /** Optional sampling view (e.g. depth R→RGB for ImGui). Equals view when unused. */
+            VkImageView sampledView = VK_NULL_HANDLE;
             VkSampler sampler = VK_NULL_HANDLE;
             void* imguiTextureId = nullptr;
             VkFramebuffer framebuffer = VK_NULL_HANDLE;
