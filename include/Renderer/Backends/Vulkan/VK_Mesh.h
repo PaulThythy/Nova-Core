@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 #include "Api.h"
 #include "Renderer/RHI/RHI_Mesh.h"
+#include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -13,12 +14,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		explicit VK_Mesh(const Renderer::RHI::RHI_Mesh& mesh);
 		~VK_Mesh() override;
 
-		bool Init(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue graphicsQueue) {
+		bool Init(VK_MemoryAllocator* allocator, VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue) {
+			m_Allocator = allocator;
 			m_Device = device;
-			m_PhysicalDevice = physicalDevice;
 			m_CommandPool = commandPool;
 			m_GraphicsQueue = graphicsQueue;
-			return true;
+			return m_Allocator != nullptr && m_Device != VK_NULL_HANDLE;
 		}
 
 		void Upload(const Renderer::RHI::RHI_Mesh& mesh) override;
@@ -28,30 +29,23 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		void Unbind() const override; // no-op
 		void Draw()   const override;
 
-		VkBuffer GetVertexBuffer() const { return m_VertexBuffer; }
-		VkBuffer GetIndexBuffer()  const { return m_IndexBuffer; }
+		VkBuffer GetVertexBuffer() const { return m_VertexBuffer.buffer; }
+		VkBuffer GetIndexBuffer()  const { return m_IndexBuffer.buffer; }
 		int      GetIndexCount()   const { return m_IndexCount; }
 
 		void SetCommandBuffer(VkCommandBuffer cmd) { m_ActiveCmd = cmd; }
 
+		VK_MemoryAllocator* m_Allocator = nullptr;
 		VkDevice         m_Device = VK_NULL_HANDLE;
-		VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
 		VkCommandPool    m_CommandPool = VK_NULL_HANDLE;
 		VkQueue          m_GraphicsQueue = VK_NULL_HANDLE;
 
-		VkBuffer       m_VertexBuffer = VK_NULL_HANDLE;
-		VkDeviceMemory m_VertexBufferMemory = VK_NULL_HANDLE;
-
-		VkBuffer       m_IndexBuffer = VK_NULL_HANDLE;
-		VkDeviceMemory m_IndexBufferMemory = VK_NULL_HANDLE;
+		VK_BufferAllocation m_VertexBuffer{};
+		VK_BufferAllocation m_IndexBuffer{};
 
 		int m_IndexCount = 0;
 
 		mutable VkCommandBuffer m_ActiveCmd = VK_NULL_HANDLE;
-
-		uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
-
-		bool CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& outBuffer, VkDeviceMemory& outMemory) const;
 
 		bool CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) const;
 	

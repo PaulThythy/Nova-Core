@@ -50,6 +50,9 @@ namespace Nova::Core::Renderer::RHI {
         bool Apply(void* shader) const;
 
     private:
+        /** Resolve a reflection name to its binding info (nullptr if the name is unknown). */
+        const RHI_BindingInfo* FindBindingInfo(const std::string& name) const;
+
         const RHI_ProgramReflection* m_Reflection = nullptr;
         std::unordered_map<std::string, RHI_ResourceBinding> m_Bindings;
     };

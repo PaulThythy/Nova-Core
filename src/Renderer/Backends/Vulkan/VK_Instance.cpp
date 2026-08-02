@@ -15,8 +15,8 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    bool VK_Instance::Create() {
-        return CreateInstance() && CreateSurface();
+    bool VK_Instance::Create(bool createSurface) {
+        return CreateInstance() && (!createSurface || CreateSurface());
     }
 
     void VK_Instance::Destroy() {

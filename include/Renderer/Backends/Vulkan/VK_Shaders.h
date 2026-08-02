@@ -10,6 +10,7 @@
 #include "Api.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
+#include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -63,19 +64,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
          * `descriptorSets` lists every descriptor set allocated for the pipeline as (set index, set)
          * pairs; the set indices and bindings come from Slang reflection.
          */
-        void SetSceneBuffers(VkDevice device,
-            VkBuffer bufFrameUniforms, VkDeviceMemory bufFrameUniformsMemory,
-            VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride,
-            VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory, VkDeviceSize materialDynamicStride,
-            VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
-            std::vector<std::pair<uint32_t, VkDescriptorSet>> descriptorSets);
+        void SetSceneBuffers(VK_MemoryAllocator* allocator,
+            const VK_BufferAllocation& bufFrameUniforms, VkDeviceSize* frameUniformOffset,
+            const VK_BufferAllocation& bufMvp, VkDeviceSize mvpDynamicStride, VkDeviceSize mvpBufferSize,
+            const VK_BufferAllocation& bufMaterials, VkDeviceSize materialDynamicStride, VkDeviceSize materialBufferSize,
+            const VK_BufferAllocation& bufInstances, VkDeviceSize bufInstancesSize, VkDeviceSize* instanceOffset,
+            VkDeviceSize* mvpDynamicOffset, VkDeviceSize* materialDynamicOffset,
+            const std::vector<std::pair<uint32_t, VkDescriptorSet>>& descriptorSets);
 
         void Bind(void* apiContext = nullptr) override;
         void ApplyParameters(void* apiContext = nullptr) override;
         void* GetNativeHandle() const override;
-
-        /** Reset per-draw dynamic UBO offsets at frame start. */
-        void ResetDynamicUBOs();
 
         /**
          * Update a single (set, binding) in one of the pipeline's descriptor sets.
@@ -94,35 +93,37 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         bool ApplyResourceBinding(const RHI::RHI_BindingInfo& info, const RHI::RHI_ResourceBinding& value) override;
 
         /** Map a host-visible region and copy `size` bytes from `src` into it. */
-        void MapAndCopy(VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, const void* src);
+        void MapAndCopy(const VK_BufferAllocation& allocation, VkDeviceSize offset, VkDeviceSize size, const void* src);
         /**
          * Copy `src` into a dynamic uniform buffer at the current per-draw cursor, advance the cursor
          * by `stride`, and return the offset used for this draw (0 when the buffer isn't dynamic).
          */
-        VkDeviceSize UploadDynamic(VkDeviceMemory memory, VkDeviceSize size, const void* src,
-            VkDeviceSize stride, VkDeviceSize& offsetCursor);
+        VkDeviceSize UploadDynamic(const VK_BufferAllocation& allocation, VkDeviceSize size, const void* src,
+            VkDeviceSize stride, VkDeviceSize& offsetCursor, VkDeviceSize bufferSize);
         /** Bind all descriptor sets, supplying dynamic offsets in reflection (set, binding) order. */
-        void BindDescriptorSets(VkCommandBuffer cmd, VkDeviceSize mvpDynamicOffset, VkDeviceSize materialDynamicOffset);
+        void BindDescriptorSets(VkCommandBuffer cmd,
+            VkDeviceSize frameDynamicOffset, VkDeviceSize mvpDynamicOffset,
+            VkDeviceSize materialDynamicOffset, VkDeviceSize instanceDynamicOffset);
         /** Resolve the descriptor set allocated for a given reflection set index (VK_NULL_HANDLE if none). */
         VkDescriptorSet FindDescriptorSet(uint32_t set) const;
 
         VkPipeline m_Pipeline = VK_NULL_HANDLE;
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
 
-        VkDevice m_Device = VK_NULL_HANDLE;
-        VkBuffer m_BufFrameUniforms = VK_NULL_HANDLE;
-        VkDeviceMemory m_BufFrameUniformsMemory = VK_NULL_HANDLE;
-        VkBuffer m_BufMvp = VK_NULL_HANDLE;
-        VkDeviceMemory m_BufMvpMemory = VK_NULL_HANDLE;
+        VK_MemoryAllocator* m_Allocator = nullptr;
+        VK_BufferAllocation m_BufFrameUniforms{};
+        VkDeviceSize* m_FrameUniformOffset = nullptr; // current frame's region base (dynamic UBO)
+        VK_BufferAllocation m_BufMvp{};
         VkDeviceSize m_MvpDynamicStride = 0;
-        VkDeviceSize m_MvpDynamicOffset = 0;
-        VkBuffer m_BufMaterials = VK_NULL_HANDLE;
-        VkDeviceMemory m_BufMaterialsMemory = VK_NULL_HANDLE;
+        VkDeviceSize m_MvpBufferSize = 0;
+        VkDeviceSize* m_MvpDynamicOffset = nullptr;
+        VK_BufferAllocation m_BufMaterials{};
         VkDeviceSize m_MaterialDynamicStride = 0;
-        VkDeviceSize m_MaterialDynamicOffset = 0;
-        VkBuffer m_BufInstances = VK_NULL_HANDLE;
-        VkDeviceMemory m_BufInstancesMemory = VK_NULL_HANDLE;
+        VkDeviceSize m_MaterialBufferSize = 0;
+        VkDeviceSize* m_MaterialDynamicOffset = nullptr;
+        VK_BufferAllocation m_BufInstances{};
         VkDeviceSize m_BufInstancesSize = 0;
+        VkDeviceSize* m_InstanceOffset = nullptr; // current frame's region base (dynamic storage)
         // All descriptor sets allocated for this pipeline, as (reflection set index, set) pairs.
         std::vector<std::pair<uint32_t, VkDescriptorSet>> m_DescriptorSets;
     };
