@@ -6,7 +6,7 @@
 
 namespace Nova::Core::Renderer::RHI {
 
-    std::unique_ptr<IRenderer> IRenderer::Create(Core::GraphicsAPI api) {
+    std::unique_ptr<IRenderer> IRenderer::Create(Core::GraphicsAPI api, const RHI_SwapchainDesc& desc) {
         std::unique_ptr<IRenderer> renderer;
 
         switch (api) {
@@ -18,7 +18,7 @@ namespace Nova::Core::Renderer::RHI {
             return nullptr;
         }
 
-        if (!renderer->Create()) {
+        if (!renderer->Create(desc)) {
             NV_LOG_ERROR("IRenderer::Create - backend Create() failed");
             return nullptr;
         }

@@ -28,6 +28,9 @@ namespace Nova::Core {
 
         void Begin();
         void End();
+        /** Vulkan multi-viewport: call after the main queue submit so secondary
+         *  windows sample textures that have already been written this frame. */
+        void RenderPlatformWindows();
 
         void BlockEvents(bool block) { m_BlockEvents = block; }
 

@@ -82,7 +82,7 @@ namespace Nova::Core::Asset::Assets {
             std::filesystem::current_path() / "Nova-Core" / "Resources" / "Engine" / "Shaders";
 
         const std::filesystem::path editorShaderRoot =
-            std::filesystem::current_path() / "Nova-Editor" / "Resources" / "Editor" / "Shaders";
+            std::filesystem::current_path() / "Nova-App" / "Resources" / "Editor" / "Shaders";
 
         opts.m_IncludeDirs.push_back(engineShaderRoot);
         opts.m_IncludeDirs.push_back(editorShaderRoot);

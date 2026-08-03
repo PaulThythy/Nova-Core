@@ -119,6 +119,11 @@ if(BUILD_SHARED_LIBS AND TARGET slang)
     set_property(TARGET slang PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif()
 
+# VulkanMemoryAllocator
+set(VULKAN_MEMORY_ALLOCATOR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/VulkanMemoryAllocator)
+add_subdirectory(${VULKAN_MEMORY_ALLOCATOR_DIR} EXCLUDE_FROM_ALL)
+include_directories(${VULKAN_MEMORY_ALLOCATOR_DIR})
+
 # linking
 target_link_libraries(Nova-Core PUBLIC
     Vulkan::Vulkan
@@ -128,6 +133,7 @@ target_link_libraries(Nova-Core PUBLIC
     imguizmo
     EnTT::EnTT
     slang
+    VulkanMemoryAllocator
 )
 
 target_include_directories(Nova-Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

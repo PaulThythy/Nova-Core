@@ -20,6 +20,18 @@ namespace Nova::Core::Renderer::RHI {
         return nullptr;
     }
 
+    const RHI_BindingKey* RHI_ProgramReflection::FindBindingKeyByName(const std::string& name) const {
+        auto it = m_NameToBinding.find(name);
+        if (it == m_NameToBinding.end()) return nullptr;
+        return &it->second;
+    }
+
+    const RHI_BindingInfo* RHI_ProgramReflection::FindBindingByName(const std::string& name) const {
+        const RHI_BindingKey* key = FindBindingKeyByName(name);
+        if (!key) return nullptr;
+        return FindBinding(key->m_Set, key->m_Binding);
+    }
+
     static void SortAndDedupe(RHI_ProgramReflection& refl) {
         std::sort(refl.m_Sets.begin(), refl.m_Sets.end(),
             [](const auto& a, const auto& b) { return a.m_Set < b.m_Set; });

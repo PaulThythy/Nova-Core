@@ -1,8 +1,12 @@
 #ifndef ASSETMANAGER_H
 #define ASSETMANAGER_H
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <mutex>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include "Api.h"
@@ -19,10 +23,6 @@ namespace Nova::Core::Asset {
             static AssetManager s_Instance;
             return s_Instance;
         }
-
-        // generic runtime acquisition
-        //template <typename T>
-        //AssetHandle<T> Acquire(const std::filesystem::path& path);
 
         // generic runtime acquisition with additional parameters
         template<typename T, typename... Args>
@@ -70,10 +70,45 @@ namespace Nova::Core::Asset {
         //AssetHandle<T> Acquire(UUID uuid);
 
     private:
+        /** Resolve virtual asset URIs (Engine://Shaders/..., Editor://Shaders/...) to filesystem paths. */
+        static std::filesystem::path ResolveUri(const std::filesystem::path& p) {
+            const std::string s = p.generic_string();
+
+            auto tryMount = [&](std::string_view prefix, const std::filesystem::path& root) -> std::filesystem::path {
+                if (s.size() < prefix.size())
+                    return {};
+                if (s.compare(0, prefix.size(), prefix) != 0)
+                    return {};
+                return root / s.substr(prefix.size());
+            };
+
+            const std::filesystem::path cwd = std::filesystem::current_path();
+            const std::filesystem::path engineShaders = cwd / "Nova-Core" / "Resources" / "Engine" / "Shaders";
+            const std::filesystem::path editorShaders = cwd / "Nova-App" / "Resources" / "Editor" / "Shaders";
+
+            if (auto resolved = tryMount("Engine://Shaders/", engineShaders); !resolved.empty())
+                return resolved;
+            if (auto resolved = tryMount("Engine:/Shaders/", engineShaders); !resolved.empty())
+                return resolved;
+            if (auto resolved = tryMount("Editor://Shaders/", editorShaders); !resolved.empty())
+                return resolved;
+            if (auto resolved = tryMount("Editor:/Shaders/", editorShaders); !resolved.empty())
+                return resolved;
+
+            return p;
+        }
+
         static std::filesystem::path NormalizePath(const std::filesystem::path& p) {
+            const std::filesystem::path resolved = ResolveUri(p);
+
+            // Virtual URIs (e.g. Engine://Primitives/Cube) stay as-is for asset-specific loaders.
+            const std::string s = resolved.generic_string();
+            if (s.find("://") != std::string::npos || s.rfind("Engine:", 0) == 0 || s.rfind("Editor:", 0) == 0)
+                return resolved;
+
             std::error_code ec;
-            auto abs = std::filesystem::absolute(p, ec);
-            if (ec) abs = p;
+            auto abs = std::filesystem::absolute(resolved, ec);
+            if (ec) abs = resolved;
 
             // lexically_normal does not touch the filesystem, so it still works for missing files.
             return abs.lexically_normal();
@@ -84,7 +119,7 @@ namespace Nova::Core::Asset {
             std::string s = p.generic_string();
 #if defined(_WIN32)
             std::transform(s.begin(), s.end(), s.begin(),
-                [](unsigned char c) { return (char)std::tolower(c); });
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 #endif
             return s;
         }

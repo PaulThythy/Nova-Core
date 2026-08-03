@@ -1,9 +1,12 @@
 #include "Renderer/Backends/Vulkan/VK_Shaders.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
+#include "Core/Log.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <cstring>
+#include <algorithm>
+#include <utility>
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -44,46 +47,50 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_PipelineLayout = layout;
     }
 
-    void VK_Shaders::SetSceneBuffers(VkDevice device,
-        VkBuffer bufFrameUniforms, VkDeviceMemory bufFrameUniformsMemory,
-        VkBuffer bufMvp, VkDeviceMemory bufMvpMemory, VkDeviceSize mvpDynamicStride,
-        VkBuffer bufMaterials, VkDeviceMemory bufMaterialsMemory, VkDeviceSize materialDynamicStride,
-        VkBuffer bufInstances, VkDeviceMemory bufInstancesMemory, VkDeviceSize bufInstancesSize,
-        VkDescriptorSet sceneDescriptorSet,
-        VkDescriptorSet userDescriptorSet)
+    void VK_Shaders::SetSceneBuffers(VK_MemoryAllocator* allocator,
+        const VK_BufferAllocation& bufFrameUniforms, VkDeviceSize* frameUniformOffset,
+        const VK_BufferAllocation& bufMvp, VkDeviceSize mvpDynamicStride, VkDeviceSize mvpBufferSize,
+        const VK_BufferAllocation& bufMaterials, VkDeviceSize materialDynamicStride, VkDeviceSize materialBufferSize,
+        const VK_BufferAllocation& bufInstances, VkDeviceSize bufInstancesSize, VkDeviceSize* instanceOffset,
+        VkDeviceSize* mvpDynamicOffset, VkDeviceSize* materialDynamicOffset,
+        const std::vector<std::pair<uint32_t, VkDescriptorSet>>& descriptorSets)
     {
-        m_Device = device;
+        m_Allocator = allocator;
         m_BufFrameUniforms = bufFrameUniforms;
-        m_BufFrameUniformsMemory = bufFrameUniformsMemory;
+        m_FrameUniformOffset = frameUniformOffset;
         m_BufMvp = bufMvp;
-        m_BufMvpMemory = bufMvpMemory;
         m_MvpDynamicStride = mvpDynamicStride;
-        m_MvpDynamicOffset = 0;
+        m_MvpBufferSize = mvpBufferSize;
+        m_MvpDynamicOffset = mvpDynamicOffset;
         m_BufMaterials = bufMaterials;
-        m_BufMaterialsMemory = bufMaterialsMemory;
         m_MaterialDynamicStride = materialDynamicStride;
-        m_MaterialDynamicOffset = 0;
+        m_MaterialBufferSize = materialBufferSize;
+        m_MaterialDynamicOffset = materialDynamicOffset;
         m_BufInstances = bufInstances;
-        m_BufInstancesMemory = bufInstancesMemory;
         m_BufInstancesSize = bufInstancesSize;
-        m_SceneDescriptorSet = sceneDescriptorSet;
-        m_UserDescriptorSet = userDescriptorSet;
+        m_InstanceOffset = instanceOffset;
+        m_DescriptorSets = descriptorSets;
+        std::sort(m_DescriptorSets.begin(), m_DescriptorSets.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
     }
 
-    void VK_Shaders::ResetDynamicUBOs() {
-        m_MvpDynamicOffset = 0;
-        m_MaterialDynamicOffset = 0;
+    VkDescriptorSet VK_Shaders::FindDescriptorSet(uint32_t set) const {
+        for (const auto& [idx, ds] : m_DescriptorSets) {
+            if (idx == set) return ds;
+        }
+        return VK_NULL_HANDLE;
     }
 
-    void VK_Shaders::WriteUserDescriptor(uint32_t binding, VkDescriptorType type,
+    void VK_Shaders::WriteDescriptor(uint32_t set, uint32_t binding, VkDescriptorType type,
         const VkDescriptorBufferInfo* bufferInfo,
         const VkDescriptorImageInfo* imageInfo)
     {
-        if (m_Device == VK_NULL_HANDLE || m_UserDescriptorSet == VK_NULL_HANDLE) return;
+        VkDescriptorSet dstSet = FindDescriptorSet(set);
+        if (m_Allocator == nullptr || dstSet == VK_NULL_HANDLE) return;
 
         VkWriteDescriptorSet write{};
         write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = m_UserDescriptorSet;
+        write.dstSet = dstSet;
         write.dstBinding = binding;
         write.dstArrayElement = 0;
         write.descriptorCount = 1;
@@ -91,7 +98,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         write.pBufferInfo = bufferInfo;
         write.pImageInfo = imageInfo;
 
-        vkUpdateDescriptorSets(m_Device, 1, &write, 0, nullptr);
+        vkUpdateDescriptorSets(m_Allocator->GetDevice(), 1, &write, 0, nullptr);
     }
 
     static VkDescriptorType ToVkDescriptorType(RHI::RHI_ResourceKind kind) {
@@ -109,14 +116,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     bool VK_Shaders::ApplyResourceBinding(const RHI::RHI_BindingInfo& info, const RHI::RHI_ResourceBinding& value) {
-        // This class only supports updating the user descriptor set (set 1).
-        if (info.m_Key.m_Set != RHI::kUserDescriptorSet) return false;
-        if (m_Device == VK_NULL_HANDLE || m_UserDescriptorSet == VK_NULL_HANDLE) return false;
+        // Write to whatever (set, binding) Slang reflection assigned to this resource.
+        const uint32_t set = info.m_Key.m_Set;
+        const uint32_t binding = info.m_Key.m_Binding;
+        if (m_Allocator == nullptr || FindDescriptorSet(set) == VK_NULL_HANDLE) return false;
 
         const VkDescriptorType type = ToVkDescriptorType(info.m_Kind);
         if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM) return false;
-
-        const uint32_t binding = info.m_Key.m_Binding;
 
         if (std::holds_alternative<RHI::RHI_BufferBinding>(value)) {
             const auto b = std::get<RHI::RHI_BufferBinding>(value);
@@ -124,7 +130,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             bi.buffer = reinterpret_cast<VkBuffer>(b.m_Handle);
             bi.offset = static_cast<VkDeviceSize>(b.m_Offset);
             bi.range = (b.m_Range == 0) ? VK_WHOLE_SIZE : static_cast<VkDeviceSize>(b.m_Range);
-            WriteUserDescriptor(binding, type, &bi, nullptr);
+            WriteDescriptor(set, binding, type, &bi, nullptr);
             return true;
         }
 
@@ -133,7 +139,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             VkDescriptorImageInfo ii{};
             ii.imageView = reinterpret_cast<VkImageView>(t.m_TextureHandle);
             ii.imageLayout = (t.m_ImageLayout == 0) ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : static_cast<VkImageLayout>(t.m_ImageLayout);
-            WriteUserDescriptor(binding, type, nullptr, &ii);
+            WriteDescriptor(set, binding, type, nullptr, &ii);
             return true;
         }
 
@@ -141,7 +147,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             const auto s = std::get<RHI::RHI_SamplerBinding>(value);
             VkDescriptorImageInfo ii{};
             ii.sampler = reinterpret_cast<VkSampler>(s.m_SamplerHandle);
-            WriteUserDescriptor(binding, type, nullptr, &ii);
+            WriteDescriptor(set, binding, type, nullptr, &ii);
             return true;
         }
 
@@ -154,118 +160,82 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
     }
 
-    void VK_Shaders::UploadFrameUniforms() {
-        RHI::FrameUniforms frameUniforms{};
-        if (m_BufFrameUniforms != VK_NULL_HANDLE) {
-            const auto& frameUniformsLayout = RHI::GetFrameUniformsLayout();
-            for (const auto& [name, offset] : frameUniformsLayout) {
-                auto it = m_Parameters.find(name);
-                if (it == m_Parameters.end()) continue;
-                char* dst = reinterpret_cast<char*>(&frameUniforms) + offset;
-                std::visit([dst](auto&& v) {
-                    using T = std::decay_t<decltype(v)>;
-                    if constexpr (std::is_same_v<T, int>) *reinterpret_cast<int*>(dst) = v;
-                    else if constexpr (std::is_same_v<T, float>) *reinterpret_cast<float*>(dst) = v;
-                    if constexpr (std::is_same_v<T, glm::vec3>)
-                        std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 3);
-                    if constexpr (std::is_same_v<T, glm::vec4>)
-                        std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 4);
-                }, it->second);
-            }
-        }
-
-        if (m_BufFrameUniformsMemory != VK_NULL_HANDLE) {
-            void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_BufFrameUniformsMemory, 0, sizeof(RHI::FrameUniforms), 0, &mapped) == VK_SUCCESS) {
-                std::memcpy(mapped, &frameUniforms, sizeof(RHI::FrameUniforms));
-                vkUnmapMemory(m_Device, m_BufFrameUniformsMemory);
-            }
+    // Pack the SetParameter() values listed in `layout` (name -> byte offset) into `dstBase`,
+    // which already holds the struct's defaults. Used identically for every engine uniform block.
+    static void CopyParametersIntoStruct(const std::unordered_map<std::string, RHI::UniformValue>& params, const std::unordered_map<std::string, size_t>& layout, void* dstBase) {
+        for (const auto& [name, offset] : layout) {
+            auto it = params.find(name);
+            if (it == params.end()) continue;
+            char* dst = static_cast<char*>(dstBase) + offset;
+            std::visit([dst](auto&& v) {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, int>)        *reinterpret_cast<int*>(dst) = v;
+                else if constexpr (std::is_same_v<T, float>) *reinterpret_cast<float*>(dst) = v;
+                else if constexpr (std::is_same_v<T, glm::vec2>) std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 2);
+                else if constexpr (std::is_same_v<T, glm::vec3>) std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 3);
+                else if constexpr (std::is_same_v<T, glm::vec4>) std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 4);
+                else if constexpr (std::is_same_v<T, glm::mat2>) std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 4);
+                else if constexpr (std::is_same_v<T, glm::mat3>) std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 9);
+                else if constexpr (std::is_same_v<T, glm::mat4>) std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 16);
+            }, it->second);
         }
     }
 
-    void VK_Shaders::UploadMvpUniforms(VkDeviceSize& outDynamicOffsetThisDraw) {
-        outDynamicOffsetThisDraw = 0;
-
-        RHI::MVP mvp{};
-        if (m_BufMvp != VK_NULL_HANDLE) {
-            auto itM = m_Parameters.find("model"), itV = m_Parameters.find("view"), itP = m_Parameters.find("proj"), itVP = m_Parameters.find("viewProj"), itInvVP = m_Parameters.find("invViewProj");
-            if (itM != m_Parameters.end() && std::holds_alternative<glm::mat4>(itM->second)) mvp.m_Model = std::get<glm::mat4>(itM->second);
-            if (itV != m_Parameters.end() && std::holds_alternative<glm::mat4>(itV->second)) mvp.m_View = std::get<glm::mat4>(itV->second);
-            if (itP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itP->second)) mvp.m_Proj = std::get<glm::mat4>(itP->second);
-            if (itVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itVP->second)) mvp.m_ViewProj = std::get<glm::mat4>(itVP->second);
-            if (itInvVP != m_Parameters.end() && std::holds_alternative<glm::mat4>(itInvVP->second)) mvp.m_InvViewProj = std::get<glm::mat4>(itInvVP->second);
-        }
-
-        if (m_BufMvpMemory != VK_NULL_HANDLE && m_MvpDynamicStride != 0) {
-            outDynamicOffsetThisDraw = m_MvpDynamicOffset;
-            void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_BufMvpMemory, outDynamicOffsetThisDraw, sizeof(RHI::MVP), 0, &mapped) == VK_SUCCESS) {
-                std::memcpy(mapped, &mvp, sizeof(RHI::MVP));
-                vkUnmapMemory(m_Device, m_BufMvpMemory);
-            }
-            m_MvpDynamicOffset += m_MvpDynamicStride;
-        }
+    void VK_Shaders::MapAndCopy(const VK_BufferAllocation& allocation, VkDeviceSize offset, VkDeviceSize size, const void* src) {
+        if (!m_Allocator || !allocation.IsValid()) return;
+        m_Allocator->WriteToBuffer(allocation, offset, size, src);
     }
 
-    void VK_Shaders::UploadMaterialUniforms(VkDeviceSize& outDynamicOffsetThisDraw) {
-        outDynamicOffsetThisDraw = 0;
-
-        RHI::Material material{};
-        if (m_BufMaterials != VK_NULL_HANDLE) {
-            const auto& layout = RHI::GetMaterialParameterLayout();
-            for (const auto& [name, offset] : layout) {
-                auto it = m_Parameters.find(name);
-                if (it == m_Parameters.end()) continue;
-                char* dst = reinterpret_cast<char*>(&material) + offset;
-                std::visit([dst](auto&& v) {
-                    using T = std::decay_t<decltype(v)>;
-                    if constexpr (std::is_same_v<T, glm::vec3>)
-                        std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 3);
-                    else if constexpr (std::is_same_v<T, glm::vec4>)
-                        std::memcpy(dst, glm::value_ptr(v), sizeof(float) * 4);
-                    else if constexpr (std::is_same_v<T, float>) *reinterpret_cast<float*>(dst) = v;
-                    else if constexpr (std::is_same_v<T, int>) *reinterpret_cast<int*>(dst) = v;
-                }, it->second);
-            }
+    VkDeviceSize VK_Shaders::UploadDynamic(const VK_BufferAllocation& allocation, VkDeviceSize size, const void* src,
+        VkDeviceSize stride, VkDeviceSize& offsetCursor, VkDeviceSize bufferSize)
+    {
+        if (!allocation.IsValid() || stride == 0) return 0;
+        if (bufferSize > 0 && offsetCursor + size > bufferSize) {
+            NV_LOG_WARN("VK_Shaders::UploadDynamic - dynamic UBO ring buffer overflow");
+            return 0;
         }
-
-        if (m_BufMaterialsMemory != VK_NULL_HANDLE && m_MaterialDynamicStride != 0) {
-            outDynamicOffsetThisDraw = m_MaterialDynamicOffset;
-            void* mapped = nullptr;
-            if (vkMapMemory(m_Device, m_BufMaterialsMemory, outDynamicOffsetThisDraw, sizeof(RHI::Material), 0, &mapped) == VK_SUCCESS) {
-                std::memcpy(mapped, &material, sizeof(RHI::Material));
-                vkUnmapMemory(m_Device, m_BufMaterialsMemory);
-            }
-            m_MaterialDynamicOffset += m_MaterialDynamicStride;
-        }
+        const VkDeviceSize offsetThisDraw = offsetCursor;
+        MapAndCopy(allocation, offsetThisDraw, size, src);
+        offsetCursor += stride;
+        return offsetThisDraw;
     }
 
-    void VK_Shaders::BindDescriptorSets(VkCommandBuffer cmd, VkDeviceSize mvpDynamicOffset, VkDeviceSize materialDynamicOffset) {
-        if (m_SceneDescriptorSet != VK_NULL_HANDLE) {
-            uint32_t dynOffsets[2] = {
-                static_cast<uint32_t>(mvpDynamicOffset),
-                static_cast<uint32_t>(materialDynamicOffset)
-            };
-            const uint32_t dynCount =
-                (m_MvpDynamicStride != 0 && m_MaterialDynamicStride != 0) ? 2u :
-                (m_MvpDynamicStride != 0 || m_MaterialDynamicStride != 0) ? 1u : 0u;
+    void VK_Shaders::BindDescriptorSets(VkCommandBuffer cmd,
+        VkDeviceSize frameDynamicOffset, VkDeviceSize mvpDynamicOffset,
+        VkDeviceSize materialDynamicOffset, VkDeviceSize instanceDynamicOffset)
+    {
+        if (m_DescriptorSets.empty()) return;
 
-            if (dynCount == 2) {
-                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
-                    static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &m_SceneDescriptorSet, 2, dynOffsets);
-            } else if (dynCount == 1) {
-                uint32_t one = (m_MvpDynamicStride != 0) ? dynOffsets[0] : dynOffsets[1];
-                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
-                    static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &m_SceneDescriptorSet, 1, &one);
-            } else {
-                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
-                    static_cast<uint32_t>(RHI::kEngineDescriptorSet), 1, &m_SceneDescriptorSet, 0, nullptr);
+        // Every engine buffer (frame, MVP, material, instances) is a dynamic descriptor: each
+        // frame-in-flight owns a distinct region and the dynamic offset selects it. Vulkan requires
+        // one dynamic offset per dynamic descriptor in the set, in ascending binding order.
+        struct EngineDynamic { const char* name; VkDeviceSize offset; };
+        const EngineDynamic engineDynamics[] = {
+            { RHI::EngineResourceName::Frame,     frameDynamicOffset },
+            { RHI::EngineResourceName::Mvp,       mvpDynamicOffset },
+            { RHI::EngineResourceName::Material,  materialDynamicOffset },
+            { RHI::EngineResourceName::Instances, instanceDynamicOffset },
+        };
+
+        // m_DescriptorSets is sorted by set index in SetSceneBuffers.
+        for (const auto& [setIndex, ds] : m_DescriptorSets) {
+            if (ds == VK_NULL_HANDLE) continue;
+
+            std::vector<std::pair<uint32_t, uint32_t>> dyn; // (binding, offset)
+            for (const auto& ed : engineDynamics) {
+                const RHI::RHI_BindingInfo* info = m_Reflection.FindBindingByName(ed.name);
+                if (info && info->m_IsDynamicUniformBuffer && info->m_Key.m_Set == setIndex)
+                    dyn.emplace_back(info->m_Key.m_Binding, static_cast<uint32_t>(ed.offset));
             }
-        }
+            std::sort(dyn.begin(), dyn.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
 
-        if (m_UserDescriptorSet != VK_NULL_HANDLE) {
+            std::vector<uint32_t> offsets;
+            offsets.reserve(dyn.size());
+            for (const auto& [binding, offset] : dyn) offsets.push_back(offset);
+
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
-                static_cast<uint32_t>(RHI::kUserDescriptorSet), 1, &m_UserDescriptorSet, 0, nullptr);
+                setIndex, 1, &ds,
+                static_cast<uint32_t>(offsets.size()), offsets.empty() ? nullptr : offsets.data());
         }
     }
 
@@ -273,30 +243,42 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (!apiContext || m_PipelineLayout == VK_NULL_HANDLE) return;
         VkCommandBuffer cmd = static_cast<VkCommandBuffer>(apiContext);
 
-        UploadFrameUniforms();
+        // Every engine buffer is dynamic: it is written into this frame-in-flight's private region
+        // (base provided by the render graph) so concurrent in-flight frames never clobber each
+        // other's uniforms — the root cause of per-object flickering with multiple frames in flight.
 
+        // FrameUniforms: one region per frame, addressed by its dynamic offset.
+        const VkDeviceSize frameOffsetThisFrame = m_FrameUniformOffset ? *m_FrameUniformOffset : 0;
+        RHI::FrameUniforms frame{};
+        CopyParametersIntoStruct(m_Parameters, RHI::GetFrameLayout(), &frame);
+        MapAndCopy(m_BufFrameUniforms, frameOffsetThisFrame, sizeof frame, &frame);
+
+        RHI::MVP mvp{};
+        CopyParametersIntoStruct(m_Parameters, RHI::GetMvpLayout(), &mvp);
         VkDeviceSize mvpOffsetThisDraw = 0;
+        if (m_MvpDynamicOffset) {
+            mvpOffsetThisDraw = UploadDynamic(
+                m_BufMvp, sizeof mvp, &mvp, m_MvpDynamicStride, *m_MvpDynamicOffset, m_MvpBufferSize);
+        }
+
+        RHI::Material material{};
+        CopyParametersIntoStruct(m_Parameters, RHI::GetMaterialLayout(), &material);
         VkDeviceSize materialOffsetThisDraw = 0;
-        UploadMvpUniforms(mvpOffsetThisDraw);
-        UploadMaterialUniforms(materialOffsetThisDraw);
+        if (m_MaterialDynamicOffset) {
+            materialOffsetThisDraw = UploadDynamic(
+                m_BufMaterials, sizeof material, &material, m_MaterialDynamicStride, *m_MaterialDynamicOffset, m_MaterialBufferSize);
+        }
 
-        BindDescriptorSets(cmd, mvpOffsetThisDraw, materialOffsetThisDraw);
-    }
+        // Per-instance data for GPU instancing (read by the shader as `nova.instances[instanceID]`
+        // when `u_UseInstancing != 0`). Clamp to the region capacity and upload at this frame's base.
+        const VkDeviceSize instanceOffsetThisFrame = m_InstanceOffset ? *m_InstanceOffset : 0;
+        if (!m_Instances.empty() && m_BufInstancesSize >= sizeof(RHI::Instance)) {
+            const VkDeviceSize capacity = m_BufInstancesSize / sizeof(RHI::Instance);
+            const VkDeviceSize count = std::min<VkDeviceSize>(m_Instances.size(), capacity);
+            MapAndCopy(m_BufInstances, instanceOffsetThisFrame, count * sizeof(RHI::Instance), m_Instances.data());
+        }
 
-    void VK_Shaders::UploadInstanceBuffer(const std::vector<RHI::Instance>& instances) {
-        if (m_Device == VK_NULL_HANDLE || m_BufInstancesMemory == VK_NULL_HANDLE || instances.empty())
-            return;
-
-        const VkDeviceSize requiredSize = static_cast<VkDeviceSize>(instances.size() * sizeof(RHI::Instance));
-        if (requiredSize > m_BufInstancesSize)
-            return;
-
-        void* mapped = nullptr;
-        if (vkMapMemory(m_Device, m_BufInstancesMemory, 0, requiredSize, 0, &mapped) != VK_SUCCESS)
-            return;
-
-        std::memcpy(mapped, instances.data(), static_cast<size_t>(requiredSize));
-        vkUnmapMemory(m_Device, m_BufInstancesMemory);
+        BindDescriptorSets(cmd, frameOffsetThisFrame, mvpOffsetThisDraw, materialOffsetThisDraw, instanceOffsetThisFrame);
     }
 
     void* VK_Shaders::GetNativeHandle() const {
