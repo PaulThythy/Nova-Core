@@ -51,7 +51,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const VK_BufferAllocation& bufFrameUniforms, VkDeviceSize* frameUniformOffset,
         const VK_BufferAllocation& bufMvp, VkDeviceSize mvpDynamicStride, VkDeviceSize mvpBufferSize,
         const VK_BufferAllocation& bufMaterials, VkDeviceSize materialDynamicStride, VkDeviceSize materialBufferSize,
-        const VK_BufferAllocation& bufInstances, VkDeviceSize bufInstancesSize, VkDeviceSize* instanceOffset,
         VkDeviceSize* mvpDynamicOffset, VkDeviceSize* materialDynamicOffset,
         const std::vector<std::pair<uint32_t, VkDescriptorSet>>& descriptorSets)
     {
@@ -66,9 +65,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_MaterialDynamicStride = materialDynamicStride;
         m_MaterialBufferSize = materialBufferSize;
         m_MaterialDynamicOffset = materialDynamicOffset;
-        m_BufInstances = bufInstances;
-        m_BufInstancesSize = bufInstancesSize;
-        m_InstanceOffset = instanceOffset;
         m_DescriptorSets = descriptorSets;
         std::sort(m_DescriptorSets.begin(), m_DescriptorSets.end(),
             [](const auto& a, const auto& b) { return a.first < b.first; });
@@ -202,19 +198,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_Shaders::BindDescriptorSets(VkCommandBuffer cmd,
         VkDeviceSize frameDynamicOffset, VkDeviceSize mvpDynamicOffset,
-        VkDeviceSize materialDynamicOffset, VkDeviceSize instanceDynamicOffset)
+        VkDeviceSize materialDynamicOffset)
     {
         if (m_DescriptorSets.empty()) return;
 
-        // Every engine buffer (frame, MVP, material, instances) is a dynamic descriptor: each
+        // Every engine buffer (frame, MVP, material) is a dynamic descriptor: each
         // frame-in-flight owns a distinct region and the dynamic offset selects it. Vulkan requires
         // one dynamic offset per dynamic descriptor in the set, in ascending binding order.
         struct EngineDynamic { const char* name; VkDeviceSize offset; };
         const EngineDynamic engineDynamics[] = {
-            { RHI::EngineResourceName::Frame,     frameDynamicOffset },
-            { RHI::EngineResourceName::Mvp,       mvpDynamicOffset },
-            { RHI::EngineResourceName::Material,  materialDynamicOffset },
-            { RHI::EngineResourceName::Instances, instanceDynamicOffset },
+            { RHI::EngineResourceName::Frame,    frameDynamicOffset },
+            { RHI::EngineResourceName::Mvp,      mvpDynamicOffset },
+            { RHI::EngineResourceName::Material, materialDynamicOffset },
         };
 
         // m_DescriptorSets is sorted by set index in SetSceneBuffers.
@@ -269,16 +264,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 m_BufMaterials, sizeof material, &material, m_MaterialDynamicStride, *m_MaterialDynamicOffset, m_MaterialBufferSize);
         }
 
-        // Per-instance data for GPU instancing (read by the shader as `nova.instances[instanceID]`
-        // when `u_UseInstancing != 0`). Clamp to the region capacity and upload at this frame's base.
-        const VkDeviceSize instanceOffsetThisFrame = m_InstanceOffset ? *m_InstanceOffset : 0;
-        if (!m_Instances.empty() && m_BufInstancesSize >= sizeof(RHI::Instance)) {
-            const VkDeviceSize capacity = m_BufInstancesSize / sizeof(RHI::Instance);
-            const VkDeviceSize count = std::min<VkDeviceSize>(m_Instances.size(), capacity);
-            MapAndCopy(m_BufInstances, instanceOffsetThisFrame, count * sizeof(RHI::Instance), m_Instances.data());
-        }
-
-        BindDescriptorSets(cmd, frameOffsetThisFrame, mvpOffsetThisDraw, materialOffsetThisDraw, instanceOffsetThisFrame);
+        BindDescriptorSets(cmd, frameOffsetThisFrame, mvpOffsetThisDraw, materialOffsetThisDraw);
     }
 
     void* VK_Shaders::GetNativeHandle() const {

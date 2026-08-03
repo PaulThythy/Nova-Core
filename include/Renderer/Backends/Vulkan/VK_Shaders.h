@@ -60,7 +60,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void SetPipeline(VkPipeline pipeline, VkPipelineLayout layout);
 
         /**
-         * Engine uniform buffers (frame, MVP, material, instances) + the descriptor sets to bind.
+         * Engine uniform buffers (frame, MVP, material) + the descriptor sets to bind.
          * `descriptorSets` lists every descriptor set allocated for the pipeline as (set index, set)
          * pairs; the set indices and bindings come from Slang reflection.
          */
@@ -68,7 +68,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             const VK_BufferAllocation& bufFrameUniforms, VkDeviceSize* frameUniformOffset,
             const VK_BufferAllocation& bufMvp, VkDeviceSize mvpDynamicStride, VkDeviceSize mvpBufferSize,
             const VK_BufferAllocation& bufMaterials, VkDeviceSize materialDynamicStride, VkDeviceSize materialBufferSize,
-            const VK_BufferAllocation& bufInstances, VkDeviceSize bufInstancesSize, VkDeviceSize* instanceOffset,
             VkDeviceSize* mvpDynamicOffset, VkDeviceSize* materialDynamicOffset,
             const std::vector<std::pair<uint32_t, VkDescriptorSet>>& descriptorSets);
 
@@ -103,7 +102,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         /** Bind all descriptor sets, supplying dynamic offsets in reflection (set, binding) order. */
         void BindDescriptorSets(VkCommandBuffer cmd,
             VkDeviceSize frameDynamicOffset, VkDeviceSize mvpDynamicOffset,
-            VkDeviceSize materialDynamicOffset, VkDeviceSize instanceDynamicOffset);
+            VkDeviceSize materialDynamicOffset);
         /** Resolve the descriptor set allocated for a given reflection set index (VK_NULL_HANDLE if none). */
         VkDescriptorSet FindDescriptorSet(uint32_t set) const;
 
@@ -121,9 +120,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkDeviceSize m_MaterialDynamicStride = 0;
         VkDeviceSize m_MaterialBufferSize = 0;
         VkDeviceSize* m_MaterialDynamicOffset = nullptr;
-        VK_BufferAllocation m_BufInstances{};
-        VkDeviceSize m_BufInstancesSize = 0;
-        VkDeviceSize* m_InstanceOffset = nullptr; // current frame's region base (dynamic storage)
         // All descriptor sets allocated for this pipeline, as (reflection set index, set) pairs.
         std::vector<std::pair<uint32_t, VkDescriptorSet>> m_DescriptorSets;
     };

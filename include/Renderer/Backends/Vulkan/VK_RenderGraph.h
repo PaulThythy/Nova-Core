@@ -22,7 +22,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     /** Vulkan pipeline cache with hot-reload support, indexed by RHI_ShaderHandle. */
     class NV_API VK_PipelineCache {
     public:
-        static constexpr uint32_t MAX_MODEL_INSTANCES = 1024;
         static constexpr uint32_t MAX_MODEL_DRAWS = 4096;
 
         VK_PipelineCache() = default;
@@ -76,10 +75,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkDeviceSize m_MaterialDynamicStride = 0;
         VkDeviceSize m_MaterialFrameRegionStride = 0;
         VkDeviceSize m_MaterialDynamicOffset = 0;
-        VK_BufferAllocation m_BufInstances{};
-        VkDeviceSize m_BufInstancesSize = 0;
-        VkDeviceSize m_InstanceRegionStride = 0;
-        VkDeviceSize m_InstanceOffset = 0;
 
         uint32_t m_FramesInFlight = 1;
         std::vector<PipelineEntry> m_Entries;

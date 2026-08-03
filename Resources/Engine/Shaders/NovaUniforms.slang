@@ -24,8 +24,6 @@ struct FrameUniforms {
     float iTimeDelta;
     float iFrameRate;
     int iFrame;
-    int u_UseInstancing;
-    int2 _Offset0;
     float3 u_CameraPos;
     float _padAlignMouse;
     float4 iMouse;
@@ -40,15 +38,9 @@ struct MVP {
     float4x4 invViewProj;
 };
 
-struct Instance {
-    float4x4 model;
-    float4 color;
-};
-
 struct NovaEngine {
     ConstantBuffer<FrameUniforms> frame;
     ConstantBuffer<MVP> mvp;
-    StructuredBuffer<Instance> instances;
     ConstantBuffer<Material> material;
 };
 

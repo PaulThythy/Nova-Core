@@ -24,10 +24,9 @@ namespace Nova::Core::Renderer::RHI {
     // (`ParameterBlock<NovaEngine> nova;`). The descriptor set and binding for each are
     // assigned by Slang reflection and looked up by these names at runtime.
     namespace EngineResourceName {
-        inline constexpr const char* Frame     = "nova.frame";
-        inline constexpr const char* Mvp       = "nova.mvp";
-        inline constexpr const char* Instances = "nova.instances";
-        inline constexpr const char* Material  = "nova.material";
+        inline constexpr const char* Frame    = "nova.frame";
+        inline constexpr const char* Mvp      = "nova.mvp";
+        inline constexpr const char* Material = "nova.material";
     }
 
     struct NV_API FrameUniforms {
@@ -37,8 +36,6 @@ namespace Nova::Core::Renderer::RHI {
         alignas(4)  float     m_ITimeDelta{ 0.0f };
         alignas(4)  float     m_IFrameRate{ 0.0f };
         alignas(4)  int       m_IFrame{ 0 };
-        alignas(4)  int       m_UUseInstancing{ 0 };
-        alignas(8)  glm::ivec2 m_Offset0{ 0, 0 };
         alignas(16) glm::vec3 m_UCameraPos{ 0.0f, 0.0f, 0.0f };
         alignas(4)  float     m_PadAfterCameraPos{ 0.0f };
         alignas(16) glm::vec4 m_IMouse{ 0.0f, 0.0f, 0.0f, 0.0f };
@@ -51,11 +48,6 @@ namespace Nova::Core::Renderer::RHI {
         alignas(16) glm::mat4 m_Proj{ 1.0f };
         alignas(16) glm::mat4 m_ViewProj{ 1.0f };
         alignas(16) glm::mat4 m_InvViewProj{ 1.0f };
-    };
-
-    struct NV_API Instance {
-        alignas(16) glm::mat4 m_Model{ 1.0f };
-        alignas(16) glm::vec4 m_Color{ 1.0f, 1.0f, 1.0f, 1.0f };
     };
 
     struct NV_API Material {
@@ -140,15 +132,14 @@ namespace Nova::Core::Renderer::RHI {
 
     inline const std::unordered_map<std::string, size_t>& GetFrameLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
-            { "iResolution",     offsetof(FrameUniforms, m_IResolution) },
-            { "iTime",           offsetof(FrameUniforms, m_ITime) },
-            { "iTimeDelta",      offsetof(FrameUniforms, m_ITimeDelta) },
-            { "iFrameRate",      offsetof(FrameUniforms, m_IFrameRate) },
-            { "iFrame",          offsetof(FrameUniforms, m_IFrame) },
-            { "u_UseInstancing", offsetof(FrameUniforms, m_UUseInstancing) },
-            { "u_CameraPos",     offsetof(FrameUniforms, m_UCameraPos) },
-            { "iMouse",          offsetof(FrameUniforms, m_IMouse) },
-            { "iDate",           offsetof(FrameUniforms, m_IDate) },
+            { "iResolution", offsetof(FrameUniforms, m_IResolution) },
+            { "iTime",       offsetof(FrameUniforms, m_ITime) },
+            { "iTimeDelta",  offsetof(FrameUniforms, m_ITimeDelta) },
+            { "iFrameRate",  offsetof(FrameUniforms, m_IFrameRate) },
+            { "iFrame",      offsetof(FrameUniforms, m_IFrame) },
+            { "u_CameraPos", offsetof(FrameUniforms, m_UCameraPos) },
+            { "iMouse",      offsetof(FrameUniforms, m_IMouse) },
+            { "iDate",       offsetof(FrameUniforms, m_IDate) },
         };
         return kLayout;
     }
@@ -160,14 +151,6 @@ namespace Nova::Core::Renderer::RHI {
             { "proj",        offsetof(MVP, m_Proj) },
             { "viewProj",    offsetof(MVP, m_ViewProj) },
             { "invViewProj", offsetof(MVP, m_InvViewProj) },
-        };
-        return kLayout;
-    }
-
-    inline const std::unordered_map<std::string, size_t>& GetInstancesLayout() {
-        static const std::unordered_map<std::string, size_t> kLayout = {
-            { "model", offsetof(Instance, m_Model) },
-            { "color", offsetof(Instance, m_Color) },
         };
         return kLayout;
     }

@@ -19,13 +19,8 @@ struct VSOut {
 };
 
 [shader("vertex")]
-VSOut main(VSIn input, uint instanceID : SV_InstanceID) {
+VSOut main(VSIn input) {
     float4x4 model = nova.mvp.model;
-    float4 color = float4(nova.material.baseColor, 1.0);
-    if (nova.frame.u_UseInstancing != 0) {
-        model = nova.instances[instanceID].model;
-        color = nova.instances[instanceID].color;
-    }
 
     float3x3 m3 = (float3x3)model;
     float3x3 invT = transpose3x3(inverse3x3(m3));

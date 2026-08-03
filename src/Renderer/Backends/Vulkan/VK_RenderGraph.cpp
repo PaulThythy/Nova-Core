@@ -49,7 +49,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             RHI::EngineResourceName::Frame,
             RHI::EngineResourceName::Mvp,
             RHI::EngineResourceName::Material,
-            RHI::EngineResourceName::Instances,
         };
         for (const char* name : dynamicNames) {
             const RHI::RHI_BindingKey* key = refl.FindBindingKeyByName(name);
@@ -279,7 +278,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return (a > 0) ? ((v + a - 1) / a) * a : v;
         };
         const VkDeviceSize uboAlign = physProps.limits.minUniformBufferOffsetAlignment;
-        const VkDeviceSize ssboAlign = physProps.limits.minStorageBufferOffsetAlignment;
 
         auto createHostBuffer = [&](VkDeviceSize size, VkBufferUsageFlags usage, VK_BufferAllocation& out) -> bool {
             return allocator.CreateBuffer(size, usage, VK_MemoryLocation::CpuReadWrite, out);
@@ -302,20 +300,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, m_BufMaterials))
             return false;
 
-        const VkDeviceSize instanceUsable = sizeof(RHI::Instance) * MAX_MODEL_INSTANCES;
-        m_InstanceRegionStride = alignUp(instanceUsable, ssboAlign);
-        m_BufInstancesSize = instanceUsable;
-        if (!createHostBuffer(m_InstanceRegionStride * framesInFlight,
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, m_BufInstances))
-            return false;
-
         return true;
     }
 
     void VK_PipelineCache::DestroyEngineBuffers() {
         if (!m_Renderer) return;
         VK_MemoryAllocator& allocator = m_Renderer->GetMemoryAllocator();
-        allocator.DestroyBuffer(m_BufInstances);
         allocator.DestroyBuffer(m_BufMaterials);
         allocator.DestroyBuffer(m_BufMvp);
         allocator.DestroyBuffer(m_BufGlobals);
@@ -329,7 +319,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_FrameUniformOffset = slot * m_FrameUniformStride;
         m_MvpDynamicOffset = slot * m_MvpFrameRegionStride;
         m_MaterialDynamicOffset = slot * m_MaterialFrameRegionStride;
-        m_InstanceOffset = slot * m_InstanceRegionStride;
     }
 
     RHI::RHI_Shaders* VK_PipelineCache::Get(RHI::RHI_ShaderHandle handle) {
@@ -575,7 +564,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         };
         writeEngineBuffer(RHI::EngineResourceName::Frame, m_BufGlobals, sizeof(RHI::FrameUniforms));
         writeEngineBuffer(RHI::EngineResourceName::Mvp, m_BufMvp, sizeof(RHI::MVP));
-        writeEngineBuffer(RHI::EngineResourceName::Instances, m_BufInstances, m_BufInstancesSize);
         writeEngineBuffer(RHI::EngineResourceName::Material, m_BufMaterials, sizeof(RHI::Material));
 
         std::vector<VkDescriptorSetLayout> setLayouts;
@@ -637,7 +625,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             m_BufGlobals, &m_FrameUniformOffset,
             m_BufMvp, m_MvpDynamicStride, mvpBufferSize,
             m_BufMaterials, m_MaterialDynamicStride, materialBufferSize,
-            m_BufInstances, m_BufInstancesSize, &m_InstanceOffset,
             &m_MvpDynamicOffset, &m_MaterialDynamicOffset,
             entry.descriptorSets);
         entry.shader->SetReflection(reflForVk);
