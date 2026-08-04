@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <cstdint>
+#include <unordered_map>
 
 #include "Api.h"
 #include "Core/GraphicsAPI.h"
@@ -85,8 +86,16 @@ namespace Nova::Core::Renderer::RHI {
         virtual void Draw(const RHI_DrawCommand& cmd) = 0;
         virtual void DrawIndexed(const RHI_DrawIndexedCommand& cmd) = 0;
 
+        /** Upload a CPU mesh to GPU (or return a cached GPU mesh). Backend-specific. */
+        virtual std::shared_ptr<RHI_Mesh> GetOrUploadMesh(const std::shared_ptr<RHI_Mesh>& cpuMesh) = 0;
+
         /** Returns an ImGui texture identifier for a sampled render graph texture. */
         virtual void* GetTextureImGuiID(RHI_TextureHandle handle) const = 0;
+
+    protected:
+        std::unordered_map<const RHI_Mesh*, std::shared_ptr<RHI_Mesh>> m_MeshCache;
+
+        void ClearMeshCache();
     };
 
 } // namespace Nova::Core::Renderer::RHI

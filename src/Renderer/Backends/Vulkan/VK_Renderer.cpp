@@ -110,10 +110,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
         imguiLayer.DestroyImGuiBackend(GraphicsAPI::Vulkan);
 
-        for (auto& [key, mesh] : m_MeshCache) {
-            if (mesh) mesh->Release();
-        }
-        m_MeshCache.clear();
+        ClearMeshCache();
 
         m_RenderGraph.reset();
 
@@ -249,7 +246,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     void VK_Renderer::Draw(const RHI::RHI_DrawCommand& cmd) {
         if (!m_FrameActive || !cmd.m_Mesh) return;
 
-        auto vkMesh = GetOrUploadMesh(cmd.m_Mesh);
+        auto vkMesh = std::static_pointer_cast<VK_Mesh>(GetOrUploadMesh(cmd.m_Mesh));
         if (!vkMesh) return;
 
         VkCommandBuffer vkCmd = GetCurrentCommandBuffer();
@@ -261,7 +258,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     void VK_Renderer::DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) {
         if (!m_FrameActive || !cmd.m_Mesh) return;
 
-        auto vkMesh = GetOrUploadMesh(cmd.m_Mesh);
+        auto vkMesh = std::static_pointer_cast<VK_Mesh>(GetOrUploadMesh(cmd.m_Mesh));
         if (!vkMesh) return;
 
         if (cmd.m_IndexType != RHI::RHI_IndexType::UInt32) {
@@ -352,7 +349,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_VKSwapchain.AdvanceFrame();
     }
 
-    std::shared_ptr<VK_Mesh> VK_Renderer::GetOrUploadMesh(const std::shared_ptr<Renderer::RHI::RHI_Mesh>& cpuMesh) {
+    std::shared_ptr<RHI::RHI_Mesh> VK_Renderer::GetOrUploadMesh(const std::shared_ptr<RHI::RHI_Mesh>& cpuMesh) {
         NV_ASSERT_MSG(cpuMesh, "VK_Renderer::GetOrUploadMesh received a null mesh.");
         if (!cpuMesh) return nullptr;
 

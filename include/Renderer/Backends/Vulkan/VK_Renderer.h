@@ -3,7 +3,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <unordered_map>
 
 #include <vulkan/vulkan.h>
 
@@ -48,7 +47,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         bool IsFrameActive() const { return m_FrameActive; }
         VkCommandBuffer GetCurrentCommandBuffer();
-        std::shared_ptr<VK_Mesh> GetOrUploadMesh(const std::shared_ptr<Renderer::RHI::RHI_Mesh>& cpuMesh);
+        
+        std::shared_ptr<RHI::RHI_Mesh> GetOrUploadMesh(const std::shared_ptr<RHI::RHI_Mesh>& cpuMesh) override;
 
         VkInstance GetVkInstance() const { return m_VKInstance.GetInstance(); }
         VkDevice GetDevice() const { return m_VKDevice.GetDevice(); }
@@ -78,7 +78,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         RHI::RHI_SwapchainDesc m_SwapchainDesc{};
 
         std::unique_ptr<RHI::IRenderGraph> m_RenderGraph;
-        std::unordered_map<const Renderer::RHI::RHI_Mesh*, std::shared_ptr<VK_Mesh>> m_MeshCache;
 
         bool m_FramebufferResized = false;
         bool m_FrameActive = false;

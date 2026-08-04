@@ -1,10 +1,8 @@
 #include "Asset/Assets/MeshAsset.h"
 
-#include "Core/Application.h"
 #include "Core/Log.h"
 
 #include "Renderer/RHI/RHI_Mesh.h"
-#include "Renderer/Backends/Vulkan/VK_Mesh.h"
 
 namespace Nova::Core::Asset::Assets {
 
@@ -13,27 +11,17 @@ namespace Nova::Core::Asset::Assets {
         constexpr const char* kPrimitiveFolder = "Primitives/";
     }
 
-    MeshAsset::MeshAsset(std::filesystem::path path, MeshAssetDesc desc)
-        : Asset(AssetType::Mesh, std::move(path)),
-        m_Desc(std::move(desc))
-    {}
+    MeshAsset::MeshAsset(std::filesystem::path path, MeshAssetDesc desc) : Asset(AssetType::Mesh, std::move(path)), m_Desc(std::move(desc)) {}
 
     bool MeshAsset::Load() {
-        if (m_Loaded && m_CPUMesh && m_GPUMesh)
+        if (m_Loaded && m_CPUMesh)
             return true;
 
         m_CPUMesh.reset();
-        m_GPUMesh.reset();
         m_Primitive = MeshPrimitive::Unknown;
 
         if (!LoadFromPath()) {
             NV_LOG_WARN(("MeshAsset load failed: " + m_Path.generic_string()).c_str());
-            return false;
-        }
-
-        GraphicsAPI api = Application::Get().GetWindow().GetGraphicsAPI();
-        if (!BuildGpuMesh(api)) {
-            NV_LOG_WARN(("MeshAsset GPU build failed: " + m_Path.generic_string()).c_str());
             return false;
         }
 
@@ -136,22 +124,6 @@ namespace Nova::Core::Asset::Assets {
         }
 
         return (bool)m_CPUMesh;
-    }
-
-    bool MeshAsset::BuildGpuMesh(GraphicsAPI api) {
-        if (!m_CPUMesh)
-            return false;
-
-        if (api == GraphicsAPI::Vulkan) {
-            auto vkMesh = std::make_shared<Renderer::Backends::Vulkan::VK_Mesh>(*m_CPUMesh);
-            // vkMesh->Upload(*m_CPUMesh); deferred because Vulkan mesh upload requires a live device.
-            m_GPUMesh = std::move(vkMesh);
-            return true;
-        }
-
-        NV_LOG_WARN("MeshAsset: GPU backend not implemented for this API. Using CPU mesh.");
-        m_GPUMesh = m_CPUMesh;
-        return true;
     }
 
 } // namespace Nova::Core::Asset::Assets
