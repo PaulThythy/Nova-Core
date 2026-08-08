@@ -33,14 +33,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     VkDescriptorType ToVkDescriptorType(const RHI::RHI_BindingInfo& b) {
         using RK = RHI::RHI_ResourceKind;
         switch (b.m_Kind) {
-            case RK::ConstantBuffer: return b.m_IsDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            case RK::StorageBuffer:  return b.m_IsDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            case RK::Texture:        return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-            case RK::Sampler:        return VK_DESCRIPTOR_TYPE_SAMPLER;
+            case RK::ConstantBuffer:     return b.m_IsDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            case RK::StructuredBuffer:   return b.m_IsDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            case RK::Texture:            return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            case RK::Sampler:            return VK_DESCRIPTOR_TYPE_SAMPLER;
             case RK::CombinedTextureSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            case RK::RWTexture:      return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            case RK::RWBuffer:       return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            default:                 return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+            case RK::RWTexture:          return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            case RK::RWStructuredBuffer: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            default:                     return VK_DESCRIPTOR_TYPE_MAX_ENUM;
         }
     }
 
@@ -56,7 +56,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             if (auto* set = const_cast<RHI::RHI_DescriptorSetLayoutInfo*>(refl.FindSet(key->m_Set))) {
                 for (auto& b : set->m_Bindings) {
                     if (b.m_Key.m_Binding == key->m_Binding &&
-                        (b.m_Kind == RHI::RHI_ResourceKind::ConstantBuffer || b.m_Kind == RHI::RHI_ResourceKind::StorageBuffer))
+                        (b.m_Kind == RHI::RHI_ResourceKind::ConstantBuffer || b.m_Kind == RHI::RHI_ResourceKind::StructuredBuffer))
                         b.m_IsDynamicUniformBuffer = true;
                 }
             }
@@ -143,7 +143,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     bool VK_PipelineCache::Create(VK_Renderer& renderer, const std::vector<RHI::RHI_ShaderDesc>& shaders, VkFormat colorFormat, VkFormat depthFormat) {
         Destroy();
         m_Renderer = &renderer;
-        m_FramesInFlight = std::max(1u, renderer.GetFramesInFlight());
         m_ColorFormat = colorFormat;
         m_DepthFormat = depthFormat != VK_FORMAT_UNDEFINED ? depthFormat : VK_FORMAT_D32_SFLOAT;
 
@@ -265,60 +264,34 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return vkCreateDescriptorPool(m_Renderer->GetDevice(), &poolInfo, nullptr, &m_DescriptorPool) == VK_SUCCESS;
     }
 
+    // Creates the 3 ConstantBuffer<T> fields of `ParameterBlock<NovaEngine> nova;` through the RHI
+    // buffer API — the same API available to App code for its own custom ConstantBuffer/StructuredBuffer/
+    // RWStructuredBuffer resources (see IRenderer::CreateConstantBuffer and friends).
     bool VK_PipelineCache::CreateEngineBuffers() {
-        if (m_BufGlobals.buffer != VK_NULL_HANDLE)
+        if (m_Engine.IsValid())
             return true;
 
-        VK_MemoryAllocator& allocator = m_Renderer->GetMemoryAllocator();
-        const VkDeviceSize framesInFlight = static_cast<VkDeviceSize>(std::max(1u, m_FramesInFlight));
+        m_Engine.m_Frame = RHI::CreateConstantBuffer<RHI::FrameUniforms>(*m_Renderer, 1, RHI::EngineResourceName::Frame);
+        m_Engine.m_Mvp = RHI::CreateConstantBuffer<RHI::MVP>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Mvp);
+        m_Engine.m_Material = RHI::CreateConstantBuffer<RHI::Material>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Material);
 
-        VkPhysicalDeviceProperties physProps{};
-        vkGetPhysicalDeviceProperties(m_Renderer->GetPhysicalDevice(), &physProps);
-        auto alignUp = [](VkDeviceSize v, VkDeviceSize a) -> VkDeviceSize {
-            return (a > 0) ? ((v + a - 1) / a) * a : v;
-        };
-        const VkDeviceSize uboAlign = physProps.limits.minUniformBufferOffsetAlignment;
-
-        auto createHostBuffer = [&](VkDeviceSize size, VkBufferUsageFlags usage, VK_BufferAllocation& out) -> bool {
-            return allocator.CreateBuffer(size, usage, VK_MemoryLocation::CpuReadWrite, out);
-        };
-
-        m_FrameUniformStride = alignUp(sizeof(RHI::FrameUniforms), uboAlign);
-        if (!createHostBuffer(m_FrameUniformStride * framesInFlight,
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, m_BufGlobals))
-            return false;
-
-        m_MvpDynamicStride = alignUp(sizeof(RHI::MVP), uboAlign);
-        m_MvpFrameRegionStride = m_MvpDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
-        if (!createHostBuffer(m_MvpFrameRegionStride * framesInFlight,
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, m_BufMvp))
-            return false;
-
-        m_MaterialDynamicStride = alignUp(sizeof(RHI::Material), uboAlign);
-        m_MaterialFrameRegionStride = m_MaterialDynamicStride * static_cast<VkDeviceSize>(MAX_MODEL_DRAWS);
-        if (!createHostBuffer(m_MaterialFrameRegionStride * framesInFlight,
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, m_BufMaterials))
-            return false;
-
-        return true;
+        return m_Engine.IsValid();
     }
 
     void VK_PipelineCache::DestroyEngineBuffers() {
         if (!m_Renderer) return;
-        VK_MemoryAllocator& allocator = m_Renderer->GetMemoryAllocator();
-        allocator.DestroyBuffer(m_BufMaterials);
-        allocator.DestroyBuffer(m_BufMvp);
-        allocator.DestroyBuffer(m_BufGlobals);
+        m_Renderer->DestroyGpuBuffer(m_Engine.m_Material);
+        m_Renderer->DestroyGpuBuffer(m_Engine.m_Mvp);
+        m_Renderer->DestroyGpuBuffer(m_Engine.m_Frame);
+        m_Engine = RHI::RHI_EngineParameterBlock{};
     }
 
+    // Resets this frame-in-flight's per-draw ring cursor for `nova.mvp` / `nova.material`, so the
+    // first draw of the frame writes at the start of its region instead of continuing from
+    // wherever the previous frame using this slot left off.
     void VK_PipelineCache::ResetFrameDynamicUBOs() {
-        const VkDeviceSize slot = m_Renderer
-            ? static_cast<VkDeviceSize>(m_Renderer->GetCurrentFrameInFlight())
-            : 0;
-
-        m_FrameUniformOffset = slot * m_FrameUniformStride;
-        m_MvpDynamicOffset = slot * m_MvpFrameRegionStride;
-        m_MaterialDynamicOffset = slot * m_MaterialFrameRegionStride;
+        if (!m_Renderer) return;
+        m_Renderer->GetGpuBufferPool().ResetDynamicCursors(m_Renderer->GetCurrentFrameInFlight());
     }
 
     RHI::RHI_Shaders* VK_PipelineCache::Get(RHI::RHI_ShaderHandle handle) {
@@ -541,14 +514,20 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             for (const auto& [idx, ds] : entry.descriptorSets) if (idx == set) return ds;
             return VK_NULL_HANDLE;
         };
-        auto writeEngineBuffer = [&](const char* name, const VK_BufferAllocation& buffer, VkDeviceSize range) {
+        // One-time descriptor setup for the engine's ConstantBuffer<T> fields: always dynamic
+        // (offset = 0, range = one element), the per-frame/per-draw region is selected later via
+        // the dynamic offset supplied to vkCmdBindDescriptorSets (see VK_Shaders::BindDescriptorSets).
+        auto writeEngineBuffer = [&](const char* name, RHI::RHI_GpuBufferHandle handle) {
             const RHI::RHI_BindingInfo* info = reflForVk.FindBindingByName(name);
-            if (!info || !buffer.IsValid()) return;
+            VkBuffer buffer = VK_NULL_HANDLE;
+            VkDeviceSize range = 0;
+            if (!info || !m_Renderer->GetGpuBufferPool().GetDescriptorInfo(handle, buffer, range))
+                return;
             VkDescriptorSet ds = findDescriptorSet(info->m_Key.m_Set);
             if (ds == VK_NULL_HANDLE) return;
 
             VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = buffer.buffer;
+            bufferInfo.buffer = buffer;
             bufferInfo.offset = 0;
             bufferInfo.range = range;
 
@@ -562,9 +541,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             write.pBufferInfo = &bufferInfo;
             vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
         };
-        writeEngineBuffer(RHI::EngineResourceName::Frame, m_BufGlobals, sizeof(RHI::FrameUniforms));
-        writeEngineBuffer(RHI::EngineResourceName::Mvp, m_BufMvp, sizeof(RHI::MVP));
-        writeEngineBuffer(RHI::EngineResourceName::Material, m_BufMaterials, sizeof(RHI::Material));
+        writeEngineBuffer(RHI::EngineResourceName::Frame, m_Engine.m_Frame);
+        writeEngineBuffer(RHI::EngineResourceName::Mvp, m_Engine.m_Mvp);
+        writeEngineBuffer(RHI::EngineResourceName::Material, m_Engine.m_Material);
 
         std::vector<VkDescriptorSetLayout> setLayouts;
         setLayouts.reserve(entry.setLayouts.size());
@@ -618,15 +597,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         entry.shader = std::make_unique<VK_Shaders>();
         entry.shader->SetPipeline(entry.pipeline, entry.pipelineLayout);
-        const VkDeviceSize framesInFlight = static_cast<VkDeviceSize>(std::max(1u, m_FramesInFlight));
-        const VkDeviceSize mvpBufferSize = m_MvpFrameRegionStride * framesInFlight;
-        const VkDeviceSize materialBufferSize = m_MaterialFrameRegionStride * framesInFlight;
-        entry.shader->SetSceneBuffers(&m_Renderer->GetMemoryAllocator(),
-            m_BufGlobals, &m_FrameUniformOffset,
-            m_BufMvp, m_MvpDynamicStride, mvpBufferSize,
-            m_BufMaterials, m_MaterialDynamicStride, materialBufferSize,
-            &m_MvpDynamicOffset, &m_MaterialDynamicOffset,
-            entry.descriptorSets);
+        entry.shader->SetEngineBuffers(m_Renderer, m_Engine, entry.descriptorSets);
         entry.shader->SetReflection(reflForVk);
 
         entry.vertWriteTime = GetFileWriteTime(entry.desc.m_Vertex->GetPath());

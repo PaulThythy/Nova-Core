@@ -8,8 +8,11 @@
 
 #include "Api.h"
 #include "Renderer/RHI/RHI_ShaderReflection.h"
+#include "Renderer/RHI/RHI_GpuBuffer.h"
 
 namespace Nova::Core::Renderer::RHI {
+
+    class IRenderer;
 
     struct NV_API RHI_BufferBinding {
         uint64_t m_Handle = 0; // VkBuffer or GLuint (cast)
@@ -43,6 +46,15 @@ namespace Nova::Core::Renderer::RHI {
         void SetReflection(const RHI_ProgramReflection* reflection) { m_Reflection = reflection; }
 
         bool SetBuffer(const std::string& name, uint64_t handle, uint64_t offset = 0, uint64_t range = 0);
+
+        /**
+         * Bind a buffer created via `IRenderer::CreateConstantBuffer` / `CreateStructuredBuffer` /
+         * `CreateRWStructuredBuffer` to a named resource (e.g. "user.myData"). Resolves the handle to
+         * a (buffer/offset/range) for the current frame-in-flight through `renderer`, so callers never
+         * need to touch a raw buffer handle. Preferred over the untyped `SetBuffer` overload above.
+         */
+        bool SetBuffer(const std::string& name, RHI_GpuBufferHandle handle, const IRenderer& renderer, uint32_t elementIndex = 0);
+
         bool SetTexture(const std::string& name, uint64_t textureHandle, uint32_t imageLayout = 0);
         bool SetSampler(const std::string& name, uint64_t samplerHandle);
 

@@ -12,6 +12,7 @@
 #include "Api.h"
 #include "Renderer/RHI/RHI_RenderGraph.h"
 #include "Renderer/RHI/RHI_ShaderReflection.h"
+#include "Renderer/RHI/RHI_ShaderUniforms.h"
 #include "Renderer/Backends/Vulkan/VK_Shaders.h"
 #include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
 
@@ -64,19 +65,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkFormat m_ColorFormat = VK_FORMAT_UNDEFINED;
         VkFormat m_DepthFormat = VK_FORMAT_D32_SFLOAT;
 
-        VK_BufferAllocation m_BufGlobals{};
-        VkDeviceSize m_FrameUniformStride = 0;
-        VkDeviceSize m_FrameUniformOffset = 0;
-        VK_BufferAllocation m_BufMvp{};
-        VkDeviceSize m_MvpDynamicStride = 0;
-        VkDeviceSize m_MvpFrameRegionStride = 0;
-        VkDeviceSize m_MvpDynamicOffset = 0;
-        VK_BufferAllocation m_BufMaterials{};
-        VkDeviceSize m_MaterialDynamicStride = 0;
-        VkDeviceSize m_MaterialFrameRegionStride = 0;
-        VkDeviceSize m_MaterialDynamicOffset = 0;
+        // Mirrors `ParameterBlock<NovaEngine> nova;` (NovaUniforms.slang): the 3 ConstantBuffer<T>
+        // fields, created once via IRenderer::CreateConstantBuffer (see CreateEngineBuffers).
+        RHI::RHI_EngineParameterBlock m_Engine{};
 
-        uint32_t m_FramesInFlight = 1;
         std::vector<PipelineEntry> m_Entries;
     };
 

@@ -7,9 +7,20 @@ struct PSIn {
     float4 v_Color;
 };
 
-static const float3 lightPosition = float3(2.0, 2.0, 2.0);
-static const float3 lightColor = float3(1.0, 1.0, 1.0);
-static const float lightIntensity = 3.0;
+// Temporary App-owned directional light (bound from AppLayer via CreateConstantBuffer).
+// Declared after `nova` so Slang assigns the next descriptor space (set 1).
+struct DirectionalLight {
+    float3 direction; // light travel direction (world space); L = -normalize(direction)
+    float intensity;
+    float3 color;
+    float _pad;
+};
+
+struct AppResources {
+    ConstantBuffer<DirectionalLight> light;
+};
+
+ParameterBlock<AppResources> user;
 
 [shader("fragment")]
 float4 main(PSIn input) : SV_Target0 {
@@ -19,12 +30,8 @@ float4 main(PSIn input) : SV_Target0 {
 
     float3 ambient = 0.03 * base;
 
-    float3 toLight = lightPosition - input.v_Pos;
-    float distSq = max(dot(toLight, toLight), 1e-4);
-    float dist = sqrt(distSq);
-    float3 L = toLight / dist;
-    float attenuation = 1.0 / (1.0 + 0.09 * dist + 0.032 * distSq);
-    float3 radiance = evalPBR(nova.material, N, V, L, lightColor * lightIntensity * attenuation);
+    float3 L = normalize(-user.light.direction);
+    float3 radiance = evalPBR(nova.material, N, V, L, user.light.color * user.light.intensity);
 
     float3 emissive = nova.material.emissionColor.rgb * nova.material.emission;
 

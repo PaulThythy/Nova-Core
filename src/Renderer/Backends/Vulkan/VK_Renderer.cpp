@@ -10,6 +10,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include <algorithm>
 #include <vector>
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
@@ -91,6 +92,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             NV_LOG_WARN("Swapchain requested but no surface is available; skipping swapchain creation.");
         }
 
+        // Frames-in-flight is only final once the swapchain has clamped it, so the pool is
+        // initialized here rather than earlier (it needs an accurate frame count to size buffers).
+        m_GpuBuffers.Init(m_VKDevice.GetPhysicalDevice(), &m_MemoryAllocator, std::max(1u, GetFramesInFlight()));
+
         m_FrameActive = false;
         NV_LOG_INFO("Vulkan renderer core created.");
         return true;
@@ -114,6 +119,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_RenderGraph.reset();
 
+        m_GpuBuffers.DestroyAll();
         m_VKSwapchain.Destroy();
         m_MemoryAllocator.Destroy();
         m_VKDevice.Destroy();
@@ -121,6 +127,30 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_FrameActive = false;
         NV_LOG_INFO("Vulkan renderer destroyed.");
+    }
+
+    RHI::RHI_GpuBufferHandle VK_Renderer::CreateConstantBuffer(const RHI::RHI_GpuBufferDesc& desc) {
+        return m_GpuBuffers.Create(RHI::RHI_ResourceKind::ConstantBuffer, desc);
+    }
+
+    RHI::RHI_GpuBufferHandle VK_Renderer::CreateStructuredBuffer(const RHI::RHI_GpuBufferDesc& desc) {
+        return m_GpuBuffers.Create(RHI::RHI_ResourceKind::StructuredBuffer, desc);
+    }
+
+    RHI::RHI_GpuBufferHandle VK_Renderer::CreateRWStructuredBuffer(const RHI::RHI_GpuBufferDesc& desc) {
+        return m_GpuBuffers.Create(RHI::RHI_ResourceKind::RWStructuredBuffer, desc);
+    }
+
+    void VK_Renderer::DestroyGpuBuffer(RHI::RHI_GpuBufferHandle handle) {
+        m_GpuBuffers.Destroy(handle);
+    }
+
+    void VK_Renderer::UpdateGpuBuffer(RHI::RHI_GpuBufferHandle handle, const void* data, size_t size, uint32_t elementIndex) {
+        m_GpuBuffers.Update(handle, data, size, elementIndex, GetCurrentFrameInFlight());
+    }
+
+    RHI::RHI_BufferBinding VK_Renderer::ResolveGpuBufferBinding(RHI::RHI_GpuBufferHandle handle, uint32_t elementIndex) const {
+        return m_GpuBuffers.ResolveBinding(handle, elementIndex, GetCurrentFrameInFlight());
     }
 
     void VK_Renderer::SetRenderGraph(std::unique_ptr<RHI::IRenderGraph> graph) {

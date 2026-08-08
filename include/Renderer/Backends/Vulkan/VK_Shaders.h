@@ -10,9 +10,10 @@
 #include "Api.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
-#include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
+
+    class VK_Renderer;
 
     /** Single shader module (vertex or fragment). Used internally to build pipelines. */
     class NV_API VK_ShaderModule {
@@ -60,15 +61,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void SetPipeline(VkPipeline pipeline, VkPipelineLayout layout);
 
         /**
-         * Engine uniform buffers (frame, MVP, material) + the descriptor sets to bind.
-         * `descriptorSets` lists every descriptor set allocated for the pipeline as (set index, set)
-         * pairs; the set indices and bindings come from Slang reflection.
+         * Engine `ConstantBuffer<T>` handles (`ParameterBlock<NovaEngine> nova;`: frame/mvp/material)
+         * + the descriptor sets to bind. `descriptorSets` lists every descriptor set allocated for the
+         * pipeline as (set index, set) pairs; the set indices and bindings come from Slang reflection.
+         * Per-frame/per-draw regions are resolved lazily every `ApplyParameters` call through `renderer`'s
+         * GPU buffer pool — this class stores no buffer/stride/offset bookkeeping of its own.
          */
-        void SetSceneBuffers(VK_MemoryAllocator* allocator,
-            const VK_BufferAllocation& bufFrameUniforms, VkDeviceSize* frameUniformOffset,
-            const VK_BufferAllocation& bufMvp, VkDeviceSize mvpDynamicStride, VkDeviceSize mvpBufferSize,
-            const VK_BufferAllocation& bufMaterials, VkDeviceSize materialDynamicStride, VkDeviceSize materialBufferSize,
-            VkDeviceSize* mvpDynamicOffset, VkDeviceSize* materialDynamicOffset,
+        void SetEngineBuffers(VK_Renderer* renderer, const RHI::RHI_EngineParameterBlock& engine,
             const std::vector<std::pair<uint32_t, VkDescriptorSet>>& descriptorSets);
 
         void Bind(void* apiContext = nullptr) override;
@@ -91,35 +90,19 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     private:
         bool ApplyResourceBinding(const RHI::RHI_BindingInfo& info, const RHI::RHI_ResourceBinding& value) override;
 
-        /** Map a host-visible region and copy `size` bytes from `src` into it. */
-        void MapAndCopy(const VK_BufferAllocation& allocation, VkDeviceSize offset, VkDeviceSize size, const void* src);
-        /**
-         * Copy `src` into a dynamic uniform buffer at the current per-draw cursor, advance the cursor
-         * by `stride`, and return the offset used for this draw (0 when the buffer isn't dynamic).
-         */
-        VkDeviceSize UploadDynamic(const VK_BufferAllocation& allocation, VkDeviceSize size, const void* src,
-            VkDeviceSize stride, VkDeviceSize& offsetCursor, VkDeviceSize bufferSize);
         /** Bind all descriptor sets, supplying dynamic offsets in reflection (set, binding) order. */
         void BindDescriptorSets(VkCommandBuffer cmd,
             VkDeviceSize frameDynamicOffset, VkDeviceSize mvpDynamicOffset,
             VkDeviceSize materialDynamicOffset);
         /** Resolve the descriptor set allocated for a given reflection set index (VK_NULL_HANDLE if none). */
         VkDescriptorSet FindDescriptorSet(uint32_t set) const;
+        VkDevice GetDevice() const;
 
         VkPipeline m_Pipeline = VK_NULL_HANDLE;
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
 
-        VK_MemoryAllocator* m_Allocator = nullptr;
-        VK_BufferAllocation m_BufFrameUniforms{};
-        VkDeviceSize* m_FrameUniformOffset = nullptr; // current frame's region base (dynamic UBO)
-        VK_BufferAllocation m_BufMvp{};
-        VkDeviceSize m_MvpDynamicStride = 0;
-        VkDeviceSize m_MvpBufferSize = 0;
-        VkDeviceSize* m_MvpDynamicOffset = nullptr;
-        VK_BufferAllocation m_BufMaterials{};
-        VkDeviceSize m_MaterialDynamicStride = 0;
-        VkDeviceSize m_MaterialBufferSize = 0;
-        VkDeviceSize* m_MaterialDynamicOffset = nullptr;
+        VK_Renderer* m_Renderer = nullptr;
+        RHI::RHI_EngineParameterBlock m_Engine{};
         // All descriptor sets allocated for this pipeline, as (reflection set index, set) pairs.
         std::vector<std::pair<uint32_t, VkDescriptorSet>> m_DescriptorSets;
     };

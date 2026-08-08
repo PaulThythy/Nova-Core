@@ -17,6 +17,7 @@
 #include <unordered_map>
 
 #include "Api.h"
+#include "Renderer/RHI/RHI_GpuBuffer.h"
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -86,6 +87,23 @@ namespace Nova::Core::Renderer::RHI {
         alignas(4)  int         m_ThinWalled{ 0 };
         alignas(4)  int         m_IsOpaque{ 1 };
         alignas(8)  glm::uvec2  m_PadCbufferAlign{ 0u, 0u };
+    };
+
+    /**
+     * C++ mirror of `ParameterBlock<NovaEngine> nova;` (NovaUniforms.slang): one GPU buffer handle
+     * per `ConstantBuffer<T>` field of `NovaEngine`, grouped the same way as the Slang side instead
+     * of being scattered across separate loosely-related variables.
+     *
+     * `m_Frame` holds a single `FrameUniforms` value (one region per frame-in-flight). `m_Mvp` and
+     * `m_Material` are arrays (one element per draw call this frame) — see MAX_MODEL_DRAWS in
+     * VK_PipelineCache.
+     */
+    struct NV_API RHI_EngineParameterBlock {
+        RHI_GpuBufferHandle m_Frame;    // ConstantBuffer<FrameUniforms> frame;
+        RHI_GpuBufferHandle m_Mvp;      // ConstantBuffer<MVP> mvp;
+        RHI_GpuBufferHandle m_Material; // ConstantBuffer<Material> material;
+
+        bool IsValid() const { return m_Frame.IsValid() && m_Mvp.IsValid() && m_Material.IsValid(); }
     };
 
     // name -> byte offset maps describing how SetParameter() values are packed into the engine
