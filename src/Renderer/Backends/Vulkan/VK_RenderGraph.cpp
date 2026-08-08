@@ -294,7 +294,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_Renderer->GetGpuBufferPool().ResetDynamicCursors(m_Renderer->GetCurrentFrameInFlight());
     }
 
-    RHI::RHI_Shaders* VK_PipelineCache::Get(RHI::RHI_ShaderHandle handle) {
+    RHI::IShaders* VK_PipelineCache::Get(RHI::RHI_ShaderHandle handle) {
         if (!handle.IsValid() || handle.m_Index >= m_Entries.size())
             return nullptr;
 
@@ -1211,7 +1211,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_RenderGraph::PassContext::DrawFullscreen(RHI::RHI_ShaderHandle handle) {
-        RHI::RHI_Shaders* shader = m_Graph.m_PipelineCache.Get(handle);
+        RHI::IShaders* shader = m_Graph.m_PipelineCache.Get(handle);
         VkCommandBuffer cmd = m_Graph.GetCurrentCommandBuffer();
         if (!shader || cmd == VK_NULL_HANDLE) return;
         shader->ApplyParameters(cmd);
@@ -1230,7 +1230,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_RenderGraph::PassContext::BindShader(RHI::RHI_ShaderHandle handle) {
-        RHI::RHI_Shaders* shader = m_Graph.m_PipelineCache.Get(handle);
+        RHI::IShaders* shader = m_Graph.m_PipelineCache.Get(handle);
         VkCommandBuffer cmd = m_Graph.GetCurrentCommandBuffer();
         if (!shader || cmd == VK_NULL_HANDLE) return;
         shader->Bind(cmd);

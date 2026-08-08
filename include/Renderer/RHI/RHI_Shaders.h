@@ -20,15 +20,13 @@ namespace Nova::Core::Renderer::RHI {
     >;
     
     /**
-     * Base class for a linked shader program (e.g. vertex + fragment).
-     * Holds a map of uniform names to values; backends implement Bind() then ApplyParameters(),
-     * which uploads the engine uniform blocks (frame, MVP, material) from those values. User-defined
-     * resources (buffers/textures/samplers) are bound by reflection name through Resources().
-     * Descriptor sets and bindings are always assigned by Slang reflection, never hardcoded.
+     * Abstract linked shader program (e.g. vertex + fragment). Backend implements Bind /
+     * ApplyParameters / GetNativeHandle. Holds SetParameter() values and named Resources().
+     * Descriptor sets/bindings always come from Slang reflection.
      */
-    class NV_API RHI_Shaders {
+    class NV_API IShaders {
     public:
-        virtual ~RHI_Shaders() = default;
+        virtual ~IShaders() = default;
 
         /** Store a uniform by name. Same API for all backends. */
         void SetParameter(const std::string& name, int value);

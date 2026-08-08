@@ -14,7 +14,7 @@
 
 namespace Nova::Core::Renderer::RHI {
 
-    class RHI_Shaders;
+    class IShaders;
     struct RHI_DrawCommand;
     struct RHI_DrawIndexedCommand;
 
@@ -161,14 +161,14 @@ namespace Nova::Core::Renderer::RHI {
     };
 
     // -------------------------------------------------------------------------
-    // Pass execution context — passed to each pass callback
+    // Pass execution context — abstract interface passed to each pass callback
     // -------------------------------------------------------------------------
 
-    class NV_API RHI_PassContext {
+    class NV_API IPassContext {
     public:
-        virtual ~RHI_PassContext() = default;
+        virtual ~IPassContext() = default;
 
-        virtual RHI_Shaders* GetShader(RHI_ShaderHandle shader) = 0;
+        virtual IShaders* GetShader(RHI_ShaderHandle shader) = 0;
         virtual void DrawFullscreen(RHI_ShaderHandle shader) = 0;
         virtual void BindShader(RHI_ShaderHandle shader) = 0;
         virtual void Draw(const RHI_DrawCommand& cmd) = 0;
@@ -198,7 +198,7 @@ namespace Nova::Core::Renderer::RHI {
         /** When true, this pass is deferred to ExecutePresentPasses (e.g. swapchain + ImGui). */
         bool m_PresentOnly = false;
 
-        std::function<void(RHI_PassContext&)> m_Execute;
+        std::function<void(IPassContext&)> m_Execute;
     };
 
     struct NV_API RHI_RenderGraphTextureResource {
@@ -241,7 +241,7 @@ namespace Nova::Core::Renderer::RHI {
         virtual bool ReloadChangedShaders() = 0;
 
         /** Resolve a declared shader to its backend pipeline, building it on first use. */
-        virtual RHI_Shaders* GetShader(RHI_ShaderHandle shader) = 0;
+        virtual IShaders* GetShader(RHI_ShaderHandle shader) = 0;
 
         virtual void* GetTextureImGuiID(RHI_TextureHandle handle) const = 0;
         virtual bool Resize(uint32_t width, uint32_t height) = 0;
@@ -303,7 +303,7 @@ namespace Nova::Core::Renderer::RHI {
      *   auto shader = fg.RegisterShader({.m_Name = "Scene", .m_Vertex = vert, .m_Fragment = frag});
      *   fg.AddPass("Scene",
      *       [&](RHI_PassBuilder& b) { b.Write(color); },
-     *       [&](RHI_PassContext& ctx) { ctx.DrawFullscreen(shader); });
+     *       [&](IPassContext& ctx) { ctx.DrawFullscreen(shader); });
      *   renderer.SetRenderGraph(fg.Build(api));
      */
     class NV_API RHI_RenderGraphBuilder {

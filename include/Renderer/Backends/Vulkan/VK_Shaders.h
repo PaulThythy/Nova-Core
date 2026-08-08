@@ -51,8 +51,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkShaderModule m_Module = VK_NULL_HANDLE;
     };
 
-    /** Vulkan pipeline + layout wrapper; derives from RHI_Shaders for SetParameter / ApplyParameters. */
-    class NV_API VK_Shaders final : public RHI::RHI_Shaders {
+    /** Vulkan pipeline + layout wrapper; derives from IShaders for SetParameter / ApplyParameters. */
+    class NV_API VK_Shaders final : public RHI::IShaders {
     public:
         VK_Shaders() = default;
         ~VK_Shaders() override = default;

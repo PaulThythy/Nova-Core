@@ -32,7 +32,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void Destroy();
 
         /** Resolve a declared shader, building its pipeline on first use. */
-        RHI::RHI_Shaders* Get(RHI::RHI_ShaderHandle handle);
+        RHI::IShaders* Get(RHI::RHI_ShaderHandle handle);
         bool ReloadChangedShaders();
 
         void ResetFrameDynamicUBOs();
@@ -89,7 +89,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void OnEndFrame() override;
         bool ReloadChangedShaders() override;
 
-        RHI::RHI_Shaders* GetShader(RHI::RHI_ShaderHandle handle) override { return m_PipelineCache.Get(handle); }
+        RHI::IShaders* GetShader(RHI::RHI_ShaderHandle handle) override { return m_PipelineCache.Get(handle); }
         void* GetTextureImGuiID(RHI::RHI_TextureHandle handle) const override;
         bool Resize(uint32_t width, uint32_t height) override;
 
@@ -122,12 +122,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             RHI::RHI_TextureHandle depthAttachment{};
         };
 
-        class PassContext final : public RHI::RHI_PassContext {
+        class PassContext final : public RHI::IPassContext {
         public:
             PassContext(VK_RenderGraph& graph, uint32_t width, uint32_t height)
                 : m_Graph(graph), m_Width(width), m_Height(height) {}
 
-            RHI::RHI_Shaders* GetShader(RHI::RHI_ShaderHandle shader) override { return m_Graph.m_PipelineCache.Get(shader); }
+            RHI::IShaders* GetShader(RHI::RHI_ShaderHandle shader) override { return m_Graph.m_PipelineCache.Get(shader); }
             void DrawFullscreen(RHI::RHI_ShaderHandle shader) override;
             void Draw(const RHI::RHI_DrawCommand& cmd) override;
             void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;

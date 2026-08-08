@@ -50,7 +50,7 @@ namespace Nova::Core::Renderer::RHI {
 
     bool RHI_ShaderResourceSet::Apply(void* shader) const {
         if (!m_Reflection || !shader) return false;
-        auto* rhiShader = static_cast<RHI_Shaders*>(shader);
+        auto* rhiShader = static_cast<IShaders*>(shader);
 
         for (const auto& [name, value] : m_Bindings) {
             auto itKey = m_Reflection->m_NameToBinding.find(name);
