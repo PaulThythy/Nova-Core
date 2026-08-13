@@ -50,12 +50,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         /** Reset the per-draw ring cursor for the given frame-in-flight (call once per frame). */
         void ResetDynamicCursors(uint32_t currentFrame);
 
-        /** One-time descriptor setup info; the actual per-frame/per-draw offset is supplied later as a dynamic offset. */
+        /**
+         * One-time descriptor setup info. For ConstantBuffer the range is one element (dynamic
+         * offset selects the region). For StructuredBuffer the range is one full frame region
+         * (all elements), so the shader can index the whole array.
+         */
         bool GetDescriptorInfo(RHI::RHI_GpuBufferHandle handle, VkBuffer& outBuffer, VkDeviceSize& outRange) const;
 
     private:
         struct Entry {
             VK_BufferAllocation m_Buffer{};
+            RHI::RHI_ResourceKind m_Kind = RHI::RHI_ResourceKind::ConstantBuffer;
             size_t m_ElementSize = 0;
             VkDeviceSize m_ElementStride = 0; // aligned to UBO/SSBO offset alignment
             uint32_t m_ElementCount = 1;

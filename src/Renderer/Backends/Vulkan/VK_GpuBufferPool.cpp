@@ -56,6 +56,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const VkDeviceSize align = (kind == RHI::RHI_ResourceKind::ConstantBuffer) ? m_UboAlign : m_SsboAlign;
 
         Entry entry{};
+        entry.m_Kind = kind;
         entry.m_ElementSize = desc.m_ElementSize;
         entry.m_ElementStride = AlignUp(static_cast<VkDeviceSize>(desc.m_ElementSize), align);
         entry.m_ElementCount = desc.m_ElementCount;
@@ -145,7 +146,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const Entry* entry = FindEntry(handle);
         if (!entry) return false;
         outBuffer = entry->m_Buffer.buffer;
-        outRange = static_cast<VkDeviceSize>(entry->m_ElementSize);
+        // StructuredBuffer: bind the whole per-frame array so shaders can index [0..N).
+        // ConstantBuffer: one element; dynamic offset selects the frame/draw region.
+        if (entry->m_Kind == RHI::RHI_ResourceKind::StructuredBuffer
+            || entry->m_Kind == RHI::RHI_ResourceKind::RWStructuredBuffer) {
+            outRange = entry->m_FrameRegionStride;
+        } else {
+            outRange = static_cast<VkDeviceSize>(entry->m_ElementSize);
+        }
         return true;
     }
 

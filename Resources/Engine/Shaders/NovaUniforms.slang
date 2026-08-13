@@ -15,6 +15,7 @@
 
 #include "Globals.slang"
 #include "Material.slang"
+#include "Light.slang"
 
 // Frame uniforms (time, resolution, inputs)
 struct FrameUniforms {
@@ -25,7 +26,7 @@ struct FrameUniforms {
     float iFrameRate;
     int iFrame;
     float3 u_CameraPos;
-    float _padAlignMouse;
+    int lightCount;
     float4 iMouse;
     float4 iDate;
 };
@@ -42,6 +43,9 @@ struct NovaEngine {
     ConstantBuffer<FrameUniforms> frame;
     ConstantBuffer<MVP> mvp;
     ConstantBuffer<Material> material;
+    StructuredBuffer<LightGPU> lights;
+    Texture2DArray shadowMaps;
+    SamplerComparisonState shadowSampler;
 };
 
 ParameterBlock<NovaEngine> nova;

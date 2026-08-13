@@ -20,6 +20,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     class VK_Renderer;
 
+    struct NV_API VK_RenderPassAttachmentDesc {
+        VkFormat format = VK_FORMAT_UNDEFINED;
+        VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        VkImageLayout finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    };
+
     /** Vulkan pipeline cache with hot-reload support, indexed by RHI_ShaderHandle. */
     class NV_API VK_PipelineCache {
     public:
@@ -38,6 +46,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void ResetFrameDynamicUBOs();
 
         VkDescriptorPool GetDescriptorPool() const { return m_DescriptorPool; }
+        const RHI::RHI_EngineParameterBlock& GetEngine() const { return m_Engine; }
+        bool BindEngineShadowMaps(VkImageView arrayView, VkSampler comparisonSampler);
+
+        friend class VK_RenderGraph;
 
     private:
         struct PipelineEntry {
@@ -52,22 +64,27 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         };
 
         bool BuildPipeline(PipelineEntry& entry);
-        bool CreateRenderPass(VkFormat colorFormat, VkFormat depthFormat);
+        bool CreateCompatibleRenderPasses(VkFormat colorFormat, VkFormat depthFormat);
         void DestroyEntry(PipelineEntry& entry);
         bool CreateEngineBuffers();
         void DestroyEngineBuffers();
         bool CreateDescriptorPool();
+        void WriteEngineBuffersToEntry(PipelineEntry& entry);
+        void WriteShadowMapsToEntry(PipelineEntry& entry);
 
         VK_Renderer* m_Renderer = nullptr;
         VkPipelineCache m_VkPipelineCache = VK_NULL_HANDLE;
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
+        /** Compatible RP for color+depth pipelines (Grid/Scene). */
         VkRenderPass m_RenderPass = VK_NULL_HANDLE;
+        /** Compatible RP for depth-only shadow pipelines. */
+        VkRenderPass m_DepthOnlyRenderPass = VK_NULL_HANDLE;
         VkFormat m_ColorFormat = VK_FORMAT_UNDEFINED;
         VkFormat m_DepthFormat = VK_FORMAT_D32_SFLOAT;
 
-        // Mirrors `ParameterBlock<NovaEngine> nova;` (NovaUniforms.slang): the 3 ConstantBuffer<T>
-        // fields, created once via IRenderer::CreateConstantBuffer (see CreateEngineBuffers).
         RHI::RHI_EngineParameterBlock m_Engine{};
+        VkImageView m_ShadowMapsView = VK_NULL_HANDLE;
+        VkSampler m_ShadowSampler = VK_NULL_HANDLE;
 
         std::vector<PipelineEntry> m_Entries;
     };
@@ -92,6 +109,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         RHI::IShaders* GetShader(RHI::RHI_ShaderHandle handle) override { return m_PipelineCache.Get(handle); }
         void* GetTextureImGuiID(RHI::RHI_TextureHandle handle) const override;
         bool Resize(uint32_t width, uint32_t height) override;
+        const RHI::RHI_EngineParameterBlock* GetEngineParameterBlock() const override { return &m_PipelineCache.GetEngine(); }
+        bool BindEngineShadowMaps(RHI::RHI_TextureHandle shadowMaps) override;
 
         bool InitSwapchainResources();
         void DestroySwapchainResources();
@@ -105,10 +124,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         struct TextureResource {
             RHI::RHI_RenderGraphTextureResource desc;
             VK_ImageAllocation image{};
-            /** Identity-swizzle view — required for framebuffer attachments. */
+            /** Identity-swizzle view — full resource (2D or 2D array). */
             VkImageView view = VK_NULL_HANDLE;
-            /** Optional sampling view (e.g. depth R→RGB for ImGui). Equals view when unused. */
+            /** Sampling view (array for Texture2DArray; R→RGB for single depth ImGui). */
             VkImageView sampledView = VK_NULL_HANDLE;
+            /** Per-layer 2D views for framebuffer attachments (Texture2DArray). */
+            std::vector<VkImageView> layerViews;
+            std::vector<VkFramebuffer> layerFramebuffers;
             VkSampler sampler = VK_NULL_HANDLE;
             void* imguiTextureId = nullptr;
             VkFramebuffer framebuffer = VK_NULL_HANDLE;
@@ -120,12 +142,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             VkRenderPass renderPassLoad = VK_NULL_HANDLE;
             std::vector<RHI::RHI_TextureHandle> colorAttachments;
             RHI::RHI_TextureHandle depthAttachment{};
+            bool depthOnly = false;
         };
 
         class PassContext final : public RHI::IPassContext {
         public:
-            PassContext(VK_RenderGraph& graph, uint32_t width, uint32_t height)
-                : m_Graph(graph), m_Width(width), m_Height(height) {}
+            PassContext(VK_RenderGraph& graph, uint32_t width, uint32_t height, PassRenderTarget* rt)
+                : m_Graph(graph), m_Width(width), m_Height(height), m_Rt(rt) {}
 
             RHI::IShaders* GetShader(RHI::RHI_ShaderHandle shader) override { return m_Graph.m_PipelineCache.Get(shader); }
             void DrawFullscreen(RHI::RHI_ShaderHandle shader) override;
@@ -134,11 +157,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             void BindShader(RHI::RHI_ShaderHandle shader) override;
             uint32_t GetRenderWidth() const override { return m_Width; }
             uint32_t GetRenderHeight() const override { return m_Height; }
+            void SetDepthBias(float constantFactor, float slopeFactor, float clamp = 0.0f) override;
+            
+            void BeginDepthLayer(RHI::RHI_TextureHandle depth, uint32_t layer, bool clear) override;
+            void EndDepthLayer() override;
 
         private:
             VK_RenderGraph& m_Graph;
             uint32_t m_Width = 0;
             uint32_t m_Height = 0;
+            PassRenderTarget* m_Rt = nullptr;
         };
 
         bool CreateTransientResources();
@@ -150,12 +178,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkFormat ToVkFormat(RHI::RHI_TextureFormat format) const;
         bool IsDepthFormat(RHI::RHI_TextureFormat format) const;
 
+        VkRenderPass CreateRenderPass(
+            const VK_RenderPassAttachmentDesc* colors, uint32_t colorCount,
+            const VK_RenderPassAttachmentDesc* depth) const;
+
         VkRenderPass CreateColorDepthRenderPass(
             VkFormat colorFormat,
             VkAttachmentLoadOp colorLoad,
             VkAttachmentLoadOp depthLoad,
             VkImageLayout finalColorLayout,
             VkImageLayout colorInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED) const;
+
+        VkRenderPass CreateDepthOnlyRenderPass(VkAttachmentLoadOp depthLoad) const;
 
         bool EnsurePassRenderTarget(PassRenderTarget& rt, const RHI::RHI_RenderGraphPassDesc& pass);
         bool ExecutePass(size_t passIndex, bool presentPhase, bool leaveRenderPassOpen);

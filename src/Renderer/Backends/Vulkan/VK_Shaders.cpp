@@ -171,18 +171,19 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_Shaders::BindDescriptorSets(VkCommandBuffer cmd,
         VkDeviceSize frameDynamicOffset, VkDeviceSize mvpDynamicOffset,
-        VkDeviceSize materialDynamicOffset)
+        VkDeviceSize materialDynamicOffset, VkDeviceSize lightsDynamicOffset)
     {
         if (m_DescriptorSets.empty()) return;
 
-        // Every engine buffer (frame, MVP, material) is a dynamic descriptor: each
-        // frame-in-flight owns a distinct region and the dynamic offset selects it. Vulkan requires
-        // one dynamic offset per dynamic descriptor in the set, in ascending binding order.
+        // Every engine buffer that is marked dynamic needs an offset for the current
+        // frame-in-flight region. Vulkan requires one dynamic offset per dynamic
+        // descriptor in the set, in ascending binding order.
         struct EngineDynamic { const char* name; VkDeviceSize offset; };
         const EngineDynamic engineDynamics[] = {
             { RHI::EngineResourceName::Frame,    frameDynamicOffset },
             { RHI::EngineResourceName::Mvp,      mvpDynamicOffset },
             { RHI::EngineResourceName::Material, materialDynamicOffset },
+            { RHI::EngineResourceName::Lights,   lightsDynamicOffset },
         };
 
         // m_DescriptorSets is sorted by set index in SetEngineBuffers.
@@ -233,7 +234,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         CopyParametersIntoStruct(m_Parameters, RHI::GetMaterialLayout(), &material);
         const VkDeviceSize materialOffsetThisDraw = pool.WriteNextDynamicElement(m_Engine.m_Material, &material, sizeof material, frameIdx);
 
-        BindDescriptorSets(cmd, frameOffsetThisFrame, mvpOffsetThisDraw, materialOffsetThisDraw);
+        // Lights SSBO: App uploads the array; bind the current frame region.
+        const VkDeviceSize lightsOffsetThisFrame = m_Engine.m_Lights.IsValid()
+            ? static_cast<VkDeviceSize>(pool.ResolveBinding(m_Engine.m_Lights, 0, frameIdx).m_Offset)
+            : 0;
+
+        BindDescriptorSets(cmd, frameOffsetThisFrame, mvpOffsetThisDraw, materialOffsetThisDraw, lightsOffsetThisFrame);
     }
 
     void* VK_Shaders::GetNativeHandle() const {

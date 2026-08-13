@@ -11,6 +11,7 @@
 #include "Api.h"
 #include "Asset/Assets/ShaderAsset.h"
 #include "Core/GraphicsAPI.h"
+#include "Renderer/RHI/RHI_ShaderUniforms.h"
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -56,6 +57,12 @@ namespace Nova::Core::Renderer::RHI {
         uint32_t m_Height = 0;
         RHI_TextureFormat m_Format = RHI_TextureFormat::Unknown;
         RHI_TextureUsage m_Usage = RHI_TextureUsage::Sampled;
+        /** 1 = Texture2D; >1 = Texture2DArray (e.g. shadow map layers). */
+        uint32_t m_Layers = 1;
+        /** When false, viewport resize leaves width/height unchanged (fixed-size shadow maps). */
+        bool m_ResizeWithViewport = true;
+        /** When true, create a comparison sampler suitable for shadow SampleCmp. */
+        bool m_ComparisonSampler = false;
     };
 
     enum class RHI_BufferFormat : uint8_t {
@@ -142,6 +149,12 @@ namespace Nova::Core::Renderer::RHI {
         Mesh,
     };
 
+    enum class RHI_CullMode : uint8_t {
+        None = 0,
+        Front,
+        Back,
+    };
+
     struct NV_API RHI_ShaderDesc {
         std::string m_Name;
 
@@ -156,6 +169,11 @@ namespace Nova::Core::Renderer::RHI {
         bool m_AlphaBlend = false;
         bool m_DepthTest = true;
         bool m_DepthWrite = true;
+        /** Depth-only pipeline (no color attachments, fragment stage optional). */
+        bool m_DepthOnly = false;
+        RHI_CullMode m_CullMode = RHI_CullMode::Back;
+        float m_DepthBiasConstant = 0.0f;
+        float m_DepthBiasSlope = 0.0f;
 
         bool IsCompute() const { return static_cast<bool>(m_Compute); }
     };
@@ -175,6 +193,20 @@ namespace Nova::Core::Renderer::RHI {
         virtual void DrawIndexed(const RHI_DrawIndexedCommand& cmd) = 0;
         virtual uint32_t GetRenderWidth() const = 0;
         virtual uint32_t GetRenderHeight() const = 0;
+
+        /** Runtime depth bias (shadow maps). No-op if the bound pipeline has no depth bias enabled. */
+        virtual void SetDepthBias(float constantFactor, float slopeFactor, float clamp = 0.0f) {
+            (void)constantFactor; (void)slopeFactor; (void)clamp;
+        }
+
+        /**
+         * Depth-only multi-layer shadow rendering: begin/end a render pass targeting a single
+         * array layer. Used when the graph pass writes a depth Texture2DArray (no color).
+         */
+        virtual void BeginDepthLayer(RHI_TextureHandle depth, uint32_t layer, bool clear) {
+            (void)depth; (void)layer; (void)clear;
+        }
+        virtual void EndDepthLayer() {}
     };
 
     // -------------------------------------------------------------------------
@@ -246,6 +278,15 @@ namespace Nova::Core::Renderer::RHI {
         virtual void* GetTextureImGuiID(RHI_TextureHandle handle) const = 0;
         virtual bool Resize(uint32_t width, uint32_t height) = 0;
 
+        /** Engine `ParameterBlock<NovaEngine>` buffers (frame/mvp/material/lights). */
+        virtual const RHI_EngineParameterBlock* GetEngineParameterBlock() const { return nullptr; }
+
+        /**
+         * Bind a depth Texture2DArray (+ comparison sampler) to `nova.shadowMaps` /
+         * `nova.shadowSampler` on every built pipeline that reflects those names.
+         */
+        virtual bool BindEngineShadowMaps(RHI_TextureHandle shadowMaps) { (void)shadowMaps; return false; }
+
         const std::vector<RHI_RenderGraphPassDesc>& GetPasses() const { return m_Passes; }
         const std::vector<size_t>& GetExecutionOrder() const { return m_ExecutionOrder; }
         bool IsCompiled() const { return m_Compiled; }
@@ -285,8 +326,7 @@ namespace Nova::Core::Renderer::RHI {
     private:
         friend class RHI_RenderGraphBuilder;
 
-        RHI_PassBuilder(RHI_RenderGraphBuilder& graph, size_t passIndex)
-            : m_Graph(graph), m_PassIndex(passIndex) {}
+        RHI_PassBuilder(RHI_RenderGraphBuilder& graph, size_t passIndex) : m_Graph(graph), m_PassIndex(passIndex) {}
 
         RHI_RenderGraphBuilder& m_Graph;
         size_t m_PassIndex;
