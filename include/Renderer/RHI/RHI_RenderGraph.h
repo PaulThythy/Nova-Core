@@ -149,6 +149,12 @@ namespace Nova::Core::Renderer::RHI {
         Mesh,
     };
 
+    enum class RHI_PrimitiveTopology : uint8_t {
+        Triangles,
+        Lines,
+        Points,
+    };
+
     enum class RHI_CullMode : uint8_t {
         None = 0,
         Front,
@@ -166,6 +172,7 @@ namespace Nova::Core::Renderer::RHI {
         std::string m_EntryPoint = "main";
 
         RHI_VertexLayout m_VertexLayout = RHI_VertexLayout::Mesh;
+        RHI_PrimitiveTopology m_PrimitiveTopology = RHI_PrimitiveTopology::Triangles;
         bool m_AlphaBlend = false;
         bool m_DepthTest = true;
         bool m_DepthWrite = true;

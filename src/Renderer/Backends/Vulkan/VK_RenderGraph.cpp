@@ -557,7 +557,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkPipelineVertexInputStateCreateInfo vertexInput{};
         VkPipelineInputAssemblyStateCreateInfo inputAsm{};
         inputAsm.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAsm.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        switch (entry.desc.m_PrimitiveTopology) {
+        case RHI::RHI_PrimitiveTopology::Lines:
+            inputAsm.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+            break;
+        case RHI::RHI_PrimitiveTopology::Points:
+            inputAsm.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+            break;
+        case RHI::RHI_PrimitiveTopology::Triangles:
+        default:
+            inputAsm.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            break;
+        }
 
         VkVertexInputBindingDescription vertexBinding{};
         std::array<VkVertexInputAttributeDescription, 6> vertexAttrs{};

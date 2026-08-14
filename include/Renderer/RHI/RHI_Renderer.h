@@ -31,12 +31,6 @@ namespace Nova::Core::Renderer::RHI {
         RHI_PresentMode m_PreferredPresentMode = RHI_PresentMode::LowLatency;
     };
 
-    enum class RHI_PrimitiveTopology {
-        Triangles,
-        Lines,
-        Points
-    };
-
     enum class RHI_IndexType {
         UInt16,
         UInt32

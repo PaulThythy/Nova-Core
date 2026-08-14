@@ -47,6 +47,9 @@ namespace Nova::Core::Asset::Assets {
         float m_MajorRadius = 0.5f; // distance from center to tube center
         int m_MajorSegments = 32; // segments around the major radius
         int m_MinorSegments = 16; // segments around the minor radius
+
+        /** Number of levels in the AABB tree (1 = single root AABB, 2 = one subdivision, etc.). */
+        uint32_t m_AABBTreeDepth = 4;
     };
 
     class NV_API MeshAsset final : public Asset {
