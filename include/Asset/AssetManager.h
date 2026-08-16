@@ -85,6 +85,7 @@ namespace Nova::Core::Asset {
             const std::filesystem::path cwd = std::filesystem::current_path();
             const std::filesystem::path engineShaders = cwd / "Nova-Core" / "Resources" / "Engine" / "Shaders";
             const std::filesystem::path editorShaders = cwd / "Nova-App" / "Resources" / "Editor" / "Shaders";
+            const std::filesystem::path editorIcons = cwd / "Nova-App" / "Resources" / "Editor" / "Icons";
 
             if (auto resolved = tryMount("Engine://Shaders/", engineShaders); !resolved.empty())
                 return resolved;
@@ -93,6 +94,10 @@ namespace Nova::Core::Asset {
             if (auto resolved = tryMount("Editor://Shaders/", editorShaders); !resolved.empty())
                 return resolved;
             if (auto resolved = tryMount("Editor:/Shaders/", editorShaders); !resolved.empty())
+                return resolved;
+            if (auto resolved = tryMount("Editor://Icons/", editorIcons); !resolved.empty())
+                return resolved;
+            if (auto resolved = tryMount("Editor:/Icons/", editorIcons); !resolved.empty())
                 return resolved;
 
             return p;

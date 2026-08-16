@@ -124,6 +124,10 @@ set(VULKAN_MEMORY_ALLOCATOR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/VulkanMemory
 add_subdirectory(${VULKAN_MEMORY_ALLOCATOR_DIR} EXCLUDE_FROM_ALL)
 include_directories(${VULKAN_MEMORY_ALLOCATOR_DIR})
 
+# stb (header-only image loader used by TextureAsset)
+set(STB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendors/stb)
+target_include_directories(Nova-Core PRIVATE ${STB_DIR})
+
 # linking
 target_link_libraries(Nova-Core PUBLIC
     Vulkan::Vulkan

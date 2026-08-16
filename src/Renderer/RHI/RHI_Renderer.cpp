@@ -33,4 +33,11 @@ namespace Nova::Core::Renderer::RHI {
         m_MeshCache.clear();
     }
 
+    void IRenderer::ClearTextureCache() {
+        for (auto& [key, texture] : m_TextureCache) {
+            if (texture) texture->Release();
+        }
+        m_TextureCache.clear();
+    }
+
 } // namespace Nova::Core::Renderer::RHI

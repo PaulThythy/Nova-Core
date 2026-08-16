@@ -111,6 +111,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // (RemoveTexture needs the backend + descriptor pool still alive).
         if (auto* vkGraph = GetVKRenderGraph())
             vkGraph->ReleaseImGuiTextures();
+        ClearTextureCache();
 
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
         imguiLayer.DestroyImGuiBackend(GraphicsAPI::Vulkan);
@@ -308,6 +309,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return nullptr;
     }
 
+    void* VK_Renderer::GetTextureImGuiID(const std::shared_ptr<RHI::RHI_Texture>& texture) const {
+        if (!texture)
+            return nullptr;
+        // Resolve through cache so callers can pass either the CPU or GPU shared_ptr.
+        auto it = m_TextureCache.find(texture.get());
+        if (it != m_TextureCache.end() && it->second)
+            return it->second->GetImGuiID();
+        return texture->GetImGuiID();
+    }
+
     void VK_Renderer::EndFrame() {
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
 
@@ -397,6 +408,26 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_MeshCache[cpuMesh.get()] = vkMesh;
         return vkMesh;
+    }
+
+    std::shared_ptr<RHI::RHI_Texture> VK_Renderer::GetOrUploadTexture(const std::shared_ptr<RHI::RHI_Texture>& cpuTexture) {
+        NV_ASSERT_MSG(cpuTexture, "VK_Renderer::GetOrUploadTexture received a null texture.");
+        if (!cpuTexture) return nullptr;
+
+        auto it = m_TextureCache.find(cpuTexture.get());
+        if (it != m_TextureCache.end())
+            return it->second;
+
+        auto vkTexture = std::make_shared<VK_Texture>(*cpuTexture);
+        vkTexture->Init(
+            &m_MemoryAllocator,
+            m_VKDevice.GetDevice(),
+            m_VKSwapchain.GetCommandPool(),
+            m_VKDevice.GetGraphicsQueue());
+        vkTexture->Upload(*cpuTexture);
+
+        m_TextureCache[cpuTexture.get()] = vkTexture;
+        return vkTexture;
     }
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

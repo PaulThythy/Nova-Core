@@ -8,6 +8,7 @@
 #include "Api.h"
 #include "Core/GraphicsAPI.h"
 #include "Renderer/RHI/RHI_Mesh.h"
+#include "Renderer/RHI/RHI_Texture.h"
 #include "Renderer/RHI/RHI_ShaderCompiler.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/RHI/RHI_RenderGraph.h"
@@ -85,8 +86,18 @@ namespace Nova::Core::Renderer::RHI {
         /** Upload a CPU mesh to GPU (or return a cached GPU mesh). Backend-specific. */
         virtual std::shared_ptr<RHI_Mesh> GetOrUploadMesh(const std::shared_ptr<RHI_Mesh>& cpuMesh) = 0;
 
+        /** Upload a CPU texture to GPU (or return a cached GPU texture). Backend-specific. */
+        virtual std::shared_ptr<RHI_Texture> GetOrUploadTexture(const std::shared_ptr<RHI_Texture>& cpuTexture) = 0;
+
         /** Returns an ImGui texture identifier for a sampled render graph texture. */
         virtual void* GetTextureImGuiID(RHI_TextureHandle handle) const = 0;
+
+        /**
+         * ImGui ID for a persistent texture uploaded via `GetOrUploadTexture`.
+         * Prefer calling this (or `texture->GetImGuiID()` on the returned GPU object)
+         * rather than storing ImGui IDs on assets.
+         */
+        virtual void* GetTextureImGuiID(const std::shared_ptr<RHI_Texture>& texture) const = 0;
 
         // -------------------------------------------------------------------
         // GPU buffers — mirrors Slang's ConstantBuffer<T> / StructuredBuffer<T> / RWStructuredBuffer<T>.
@@ -118,8 +129,10 @@ namespace Nova::Core::Renderer::RHI {
 
     protected:
         std::unordered_map<const RHI_Mesh*, std::shared_ptr<RHI_Mesh>> m_MeshCache;
+        std::unordered_map<const RHI_Texture*, std::shared_ptr<RHI_Texture>> m_TextureCache;
 
         void ClearMeshCache();
+        void ClearTextureCache();
     };
 
     // -------------------------------------------------------------------------
