@@ -468,7 +468,7 @@ namespace Nova::Core::Renderer::RHI {
                     if (combined) {
                         bi.m_Kind = RHI_ResourceKind::CombinedTextureSampler;
                     } else if (baseShape == SLANG_STRUCTURED_BUFFER || baseShape == SLANG_BYTE_ADDRESS_BUFFER) {
-                        bi.m_Kind = (access == SLANG_RESOURCE_ACCESS_READ_WRITE) ? RHI_ResourceKind::RWBuffer : RHI_ResourceKind::StorageBuffer;
+                        bi.m_Kind = (access == SLANG_RESOURCE_ACCESS_READ_WRITE) ? RHI_ResourceKind::RWStructuredBuffer : RHI_ResourceKind::StructuredBuffer;
                     } else if (baseShape == SLANG_ACCELERATION_STRUCTURE) {
                         bi.m_Kind = RHI_ResourceKind::AccelStruct;
                     } else if (baseShape == SLANG_TEXTURE_1D || baseShape == SLANG_TEXTURE_2D || baseShape == SLANG_TEXTURE_3D ||

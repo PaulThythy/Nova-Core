@@ -1,6 +1,7 @@
 #include "Renderer/RHI/RHI_ShaderResourceSet.h"
 
 #include "Renderer/RHI/RHI_Shaders.h"
+#include "Renderer/RHI/RHI_Renderer.h"
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -15,11 +16,17 @@ namespace Nova::Core::Renderer::RHI {
     bool RHI_ShaderResourceSet::SetBuffer(const std::string& name, uint64_t handle, uint64_t offset, uint64_t range) {
         const auto* info = FindBindingInfo(name);
         if (!info) return false;
-        if (info->m_Kind != RHI_ResourceKind::ConstantBuffer && info->m_Kind != RHI_ResourceKind::StorageBuffer &&
-            info->m_Kind != RHI_ResourceKind::RWBuffer)
+        if (info->m_Kind != RHI_ResourceKind::ConstantBuffer && info->m_Kind != RHI_ResourceKind::StructuredBuffer &&
+            info->m_Kind != RHI_ResourceKind::RWStructuredBuffer)
             return false;
         m_Bindings[name] = RHI_BufferBinding{ handle, offset, range };
         return true;
+    }
+
+    bool RHI_ShaderResourceSet::SetBuffer(const std::string& name, RHI_GpuBufferHandle handle, const IRenderer& renderer, uint32_t elementIndex) {
+        if (!handle.IsValid()) return false;
+        const RHI_BufferBinding binding = renderer.ResolveGpuBufferBinding(handle, elementIndex);
+        return SetBuffer(name, binding.m_Handle, binding.m_Offset, binding.m_Range);
     }
 
     bool RHI_ShaderResourceSet::SetTexture(const std::string& name, uint64_t textureHandle, uint32_t imageLayout) {
@@ -43,7 +50,7 @@ namespace Nova::Core::Renderer::RHI {
 
     bool RHI_ShaderResourceSet::Apply(void* shader) const {
         if (!m_Reflection || !shader) return false;
-        auto* rhiShader = static_cast<RHI_Shaders*>(shader);
+        auto* rhiShader = static_cast<IShaders*>(shader);
 
         for (const auto& [name, value] : m_Bindings) {
             auto itKey = m_Reflection->m_NameToBinding.find(name);

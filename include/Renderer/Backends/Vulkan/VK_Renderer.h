@@ -3,7 +3,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <unordered_map>
 
 #include <vulkan/vulkan.h>
 
@@ -15,7 +14,9 @@
 #include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
 #include "Renderer/Backends/Vulkan/VK_Swapchain.h"
 #include "Renderer/Backends/Vulkan/VK_Mesh.h"
+#include "Renderer/Backends/Vulkan/VK_Texture.h"
 #include "Renderer/Backends/Vulkan/VK_RenderGraph.h"
+#include "Renderer/Backends/Vulkan/VK_GpuBufferPool.h"
 
 #include "Api.h"
 
@@ -45,10 +46,24 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;
 
         void* GetTextureImGuiID(RHI::RHI_TextureHandle handle) const override;
+        void* GetTextureImGuiID(const std::shared_ptr<RHI::RHI_Texture>& texture) const override;
+
+        // -- GPU buffers (ConstantBuffer<T> / StructuredBuffer<T> / RWStructuredBuffer<T>) --
+        RHI::RHI_GpuBufferHandle CreateConstantBuffer(const RHI::RHI_GpuBufferDesc& desc) override;
+        RHI::RHI_GpuBufferHandle CreateStructuredBuffer(const RHI::RHI_GpuBufferDesc& desc) override;
+        RHI::RHI_GpuBufferHandle CreateRWStructuredBuffer(const RHI::RHI_GpuBufferDesc& desc) override;
+        void DestroyGpuBuffer(RHI::RHI_GpuBufferHandle handle) override;
+        void UpdateGpuBuffer(RHI::RHI_GpuBufferHandle handle, const void* data, size_t size, uint32_t elementIndex = 0) override;
+        RHI::RHI_BufferBinding ResolveGpuBufferBinding(RHI::RHI_GpuBufferHandle handle, uint32_t elementIndex = 0) const override;
+
+        /** Internal backend access (engine-only per-draw dynamic ring allocation); not part of IRenderer. */
+        VK_GpuBufferPool& GetGpuBufferPool() { return m_GpuBuffers; }
 
         bool IsFrameActive() const { return m_FrameActive; }
         VkCommandBuffer GetCurrentCommandBuffer();
-        std::shared_ptr<VK_Mesh> GetOrUploadMesh(const std::shared_ptr<Renderer::RHI::RHI_Mesh>& cpuMesh);
+        
+        std::shared_ptr<RHI::RHI_Mesh> GetOrUploadMesh(const std::shared_ptr<RHI::RHI_Mesh>& cpuMesh) override;
+        std::shared_ptr<RHI::RHI_Texture> GetOrUploadTexture(const std::shared_ptr<RHI::RHI_Texture>& cpuTexture) override;
 
         VkInstance GetVkInstance() const { return m_VKInstance.GetInstance(); }
         VkDevice GetDevice() const { return m_VKDevice.GetDevice(); }
@@ -75,10 +90,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_Device            m_VKDevice;
         VK_MemoryAllocator   m_MemoryAllocator;
         VK_Swapchain         m_VKSwapchain;
+        VK_GpuBufferPool     m_GpuBuffers;
         RHI::RHI_SwapchainDesc m_SwapchainDesc{};
 
         std::unique_ptr<RHI::IRenderGraph> m_RenderGraph;
-        std::unordered_map<const Renderer::RHI::RHI_Mesh*, std::shared_ptr<VK_Mesh>> m_MeshCache;
 
         bool m_FramebufferResized = false;
         bool m_FrameActive = false;

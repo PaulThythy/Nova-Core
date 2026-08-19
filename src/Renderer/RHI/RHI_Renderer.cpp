@@ -26,4 +26,18 @@ namespace Nova::Core::Renderer::RHI {
         return renderer;
     }
 
+    void IRenderer::ClearMeshCache() {
+        for (auto& [key, mesh] : m_MeshCache) {
+            if (mesh) mesh->Release();
+        }
+        m_MeshCache.clear();
+    }
+
+    void IRenderer::ClearTextureCache() {
+        for (auto& [key, texture] : m_TextureCache) {
+            if (texture) texture->Release();
+        }
+        m_TextureCache.clear();
+    }
+
 } // namespace Nova::Core::Renderer::RHI

@@ -2,7 +2,6 @@
 #define RHI_SHADERS_H
 
 #include <string>
-#include <vector>
 #include <unordered_map>
 #include <variant>
 
@@ -21,23 +20,13 @@ namespace Nova::Core::Renderer::RHI {
     >;
     
     /**
-     * Base class for a linked shader program (e.g. vertex + fragment).
-     * Holds a map of uniform names to values; backends implement Bind() then ApplyParameters(),
-     * which uploads the engine uniform blocks (frame, MVP, material) from those values. User-defined
-     * resources (buffers/textures/samplers) are bound by reflection name through Resources().
-     * Descriptor sets and bindings are always assigned by Slang reflection, never hardcoded.
+     * Abstract linked shader program (e.g. vertex + fragment). Backend implements Bind /
+     * ApplyParameters / GetNativeHandle. Holds SetParameter() values and named Resources().
+     * Descriptor sets/bindings always come from Slang reflection.
      */
-    class NV_API RHI_Shaders {
+    class NV_API IShaders {
     public:
-        virtual ~RHI_Shaders() = default;
-
-        /**
-         * Set the per-instance data (model matrix + color) for GPU instancing. Uploaded by the
-         * backend during ApplyParameters() into the engine instance buffer (`nova.instances`).
-         * Drive the draw with RHI_DrawIndexedCommand::m_InstanceCount and the `u_UseInstancing` flag.
-         */
-        void SetInstances(std::vector<Instance> instances) { m_Instances = std::move(instances); }
-        const std::vector<Instance>& GetInstances() const { return m_Instances; }
+        virtual ~IShaders() = default;
 
         /** Store a uniform by name. Same API for all backends. */
         void SetParameter(const std::string& name, int value);
@@ -80,7 +69,6 @@ namespace Nova::Core::Renderer::RHI {
         virtual bool ApplyResourceBinding(const RHI_BindingInfo& info, const RHI_ResourceBinding& value) = 0;
 
         std::unordered_map<std::string, UniformValue> m_Parameters;
-        std::vector<Instance> m_Instances;
 
         RHI_ProgramReflection m_Reflection{};
         RHI_ShaderResourceSet m_Resources{ &m_Reflection };

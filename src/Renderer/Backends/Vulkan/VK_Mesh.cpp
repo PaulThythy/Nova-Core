@@ -1,6 +1,6 @@
 #include "Renderer/Backends/Vulkan/VK_Mesh.h"
 #include "Renderer/Backends/Vulkan/VK_Common.h"
-#include "Renderer/Graphics/Vertex.h"
+#include "Math/Vertex.h"
 
 #include "Core/Log.h"
 
@@ -27,7 +27,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         // ---- Vertex buffer ----
         {
-            const VkDeviceSize size = vertices.size() * sizeof(Renderer::Graphics::Vertex);
+            const VkDeviceSize size = vertices.size() * sizeof(Math::Vertex);
 
             VK_BufferAllocation staging;
             if (!m_Allocator->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MemoryLocation::CpuReadWrite, staging)) {

@@ -13,15 +13,17 @@
 
 namespace Nova::Core::Renderer::RHI {
 
+    // Mirrors the resource kinds available in Slang shaders (see NovaUniforms.slang):
+    // ConstantBuffer<T>, StructuredBuffer<T>, RWStructuredBuffer<T>, Texture*, Sampler*, etc.
     enum class RHI_ResourceKind : uint8_t {
         Unknown = 0,
-        ConstantBuffer,
-        StorageBuffer,
+        ConstantBuffer,     // ConstantBuffer<T>
+        StructuredBuffer,   // StructuredBuffer<T>
         Texture,
         Sampler,
         CombinedTextureSampler,
         RWTexture,
-        RWBuffer,
+        RWStructuredBuffer, // RWStructuredBuffer<T>
         AccelStruct,
     };
 

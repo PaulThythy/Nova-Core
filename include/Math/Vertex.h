@@ -5,7 +5,7 @@
 
 #include "Api.h"
 
-namespace Nova::Core::Renderer::Graphics {
+namespace Nova::Core::Math {
 
 	struct NV_API Vertex {
 		glm::vec3 m_Position{ 0.0f, 0.0f, 0.0f };
@@ -16,6 +16,6 @@ namespace Nova::Core::Renderer::Graphics {
 		glm::vec3 m_Bitangent{ 0.0f, 0.0f, 1.0f };
 	};
 
-} // namespace Nova::Core::Renderer::Graphics
+} // namespace Nova::Core::Math
 
 #endif // VERTEX_H

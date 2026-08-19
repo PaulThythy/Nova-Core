@@ -3,13 +3,17 @@
 
 #include <memory>
 #include <cstdint>
+#include <unordered_map>
 
 #include "Api.h"
 #include "Core/GraphicsAPI.h"
 #include "Renderer/RHI/RHI_Mesh.h"
+#include "Renderer/RHI/RHI_Texture.h"
 #include "Renderer/RHI/RHI_ShaderCompiler.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/RHI/RHI_RenderGraph.h"
+#include "Renderer/RHI/RHI_GpuBuffer.h"
+#include "Renderer/RHI/RHI_ShaderResourceSet.h"
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -26,12 +30,6 @@ namespace Nova::Core::Renderer::RHI {
         uint32_t m_Width = 0;
         uint32_t m_Height = 0;
         RHI_PresentMode m_PreferredPresentMode = RHI_PresentMode::LowLatency;
-    };
-
-    enum class RHI_PrimitiveTopology {
-        Triangles,
-        Lines,
-        Points
     };
 
     enum class RHI_IndexType {
@@ -85,9 +83,91 @@ namespace Nova::Core::Renderer::RHI {
         virtual void Draw(const RHI_DrawCommand& cmd) = 0;
         virtual void DrawIndexed(const RHI_DrawIndexedCommand& cmd) = 0;
 
+        /** Upload a CPU mesh to GPU (or return a cached GPU mesh). Backend-specific. */
+        virtual std::shared_ptr<RHI_Mesh> GetOrUploadMesh(const std::shared_ptr<RHI_Mesh>& cpuMesh) = 0;
+
+        /** Upload a CPU texture to GPU (or return a cached GPU texture). Backend-specific. */
+        virtual std::shared_ptr<RHI_Texture> GetOrUploadTexture(const std::shared_ptr<RHI_Texture>& cpuTexture) = 0;
+
         /** Returns an ImGui texture identifier for a sampled render graph texture. */
         virtual void* GetTextureImGuiID(RHI_TextureHandle handle) const = 0;
+
+        /**
+         * ImGui ID for a persistent texture uploaded via `GetOrUploadTexture`.
+         * Prefer calling this (or `texture->GetImGuiID()` on the returned GPU object)
+         * rather than storing ImGui IDs on assets.
+         */
+        virtual void* GetTextureImGuiID(const std::shared_ptr<RHI_Texture>& texture) const = 0;
+
+        // -------------------------------------------------------------------
+        // GPU buffers — mirrors Slang's ConstantBuffer<T> / StructuredBuffer<T> / RWStructuredBuffer<T>.
+        //
+        // These are the buffers actually uploaded to the GPU (unlike RHI_RenderGraphBuilder::CreateBuffer,
+        // which only *declares* transient render-graph resources for barrier tracking). The engine uses
+        // them to create its own ParameterBlock<NovaEngine> buffers (see VK_PipelineCache::CreateEngineBuffers),
+        // and any App code can call the same functions to send custom data to a shader as a ConstantBuffer,
+        // StructuredBuffer or RWStructuredBuffer.
+        // -------------------------------------------------------------------
+
+        /** Create a buffer meant to back a Slang `ConstantBuffer<T>`. */
+        virtual RHI_GpuBufferHandle CreateConstantBuffer(const RHI_GpuBufferDesc& desc) = 0;
+        /** Create a buffer meant to back a Slang `StructuredBuffer<T>` (read-only array). */
+        virtual RHI_GpuBufferHandle CreateStructuredBuffer(const RHI_GpuBufferDesc& desc) = 0;
+        /** Create a buffer meant to back a Slang `RWStructuredBuffer<T>` (read-write array). */
+        virtual RHI_GpuBufferHandle CreateRWStructuredBuffer(const RHI_GpuBufferDesc& desc) = 0;
+        /** Destroy a buffer created by one of the `Create*Buffer` functions above. */
+        virtual void DestroyGpuBuffer(RHI_GpuBufferHandle handle) = 0;
+
+        /** Write `size` bytes of `data` into `elementIndex`, in the current frame-in-flight's region. */
+        virtual void UpdateGpuBuffer(RHI_GpuBufferHandle handle, const void* data, size_t size, uint32_t elementIndex = 0) = 0;
+
+        /**
+         * Resolve a created buffer to a bindable (buffer handle/offset/range) for the current
+         * frame-in-flight, to be fed into `RHI_ShaderResourceSet::SetBuffer`.
+         */
+        virtual RHI_BufferBinding ResolveGpuBufferBinding(RHI_GpuBufferHandle handle, uint32_t elementIndex = 0) const = 0;
+
+    protected:
+        std::unordered_map<const RHI_Mesh*, std::shared_ptr<RHI_Mesh>> m_MeshCache;
+        std::unordered_map<const RHI_Texture*, std::shared_ptr<RHI_Texture>> m_TextureCache;
+
+        void ClearMeshCache();
+        void ClearTextureCache();
     };
+
+    // -------------------------------------------------------------------------
+    // Typed convenience helpers — explicit, Slang-vocabulary GPU buffer creation.
+    //
+    // These are the functions app/engine code should reach for: `RHI::CreateConstantBuffer<T>(...)`
+    // reads exactly like declaring `ConstantBuffer<T>` in a shader. They forward to the untyped
+    // `IRenderer::Create*Buffer` virtuals above, computed from `sizeof(T)`.
+    // -------------------------------------------------------------------------
+
+    template<typename T>
+    RHI_GpuBufferHandle CreateConstantBuffer(IRenderer& renderer, uint32_t elementCount = 1, const char* debugName = nullptr) {
+        return renderer.CreateConstantBuffer({ sizeof(T), elementCount, true, debugName });
+    }
+
+    template<typename T>
+    RHI_GpuBufferHandle CreateStructuredBuffer(IRenderer& renderer, uint32_t elementCount, const char* debugName = nullptr) {
+        return renderer.CreateStructuredBuffer({ sizeof(T), elementCount, true, debugName });
+    }
+
+    template<typename T>
+    RHI_GpuBufferHandle CreateRWStructuredBuffer(IRenderer& renderer, uint32_t elementCount, const char* debugName = nullptr) {
+        return renderer.CreateRWStructuredBuffer({ sizeof(T), elementCount, true, debugName });
+    }
+
+    /** Update a single element of a buffer created by one of the `Create*Buffer` helpers above. */
+    template<typename T>
+    void UpdateConstantBuffer(IRenderer& renderer, RHI_GpuBufferHandle handle, const T& value, uint32_t elementIndex = 0) {
+        renderer.UpdateGpuBuffer(handle, &value, sizeof(T), elementIndex);
+    }
+
+    template<typename T>
+    void UpdateStructuredBuffer(IRenderer& renderer, RHI_GpuBufferHandle handle, const T& value, uint32_t elementIndex = 0) {
+        renderer.UpdateGpuBuffer(handle, &value, sizeof(T), elementIndex);
+    }
 
 } // namespace Nova::Core::Renderer::RHI
 

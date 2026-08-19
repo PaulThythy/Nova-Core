@@ -10,6 +10,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include <algorithm>
 #include <vector>
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
@@ -91,6 +92,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             NV_LOG_WARN("Swapchain requested but no surface is available; skipping swapchain creation.");
         }
 
+        // Frames-in-flight is only final once the swapchain has clamped it, so the pool is
+        // initialized here rather than earlier (it needs an accurate frame count to size buffers).
+        m_GpuBuffers.Init(m_VKDevice.GetPhysicalDevice(), &m_MemoryAllocator, std::max(1u, GetFramesInFlight()));
+
         m_FrameActive = false;
         NV_LOG_INFO("Vulkan renderer core created.");
         return true;
@@ -106,17 +111,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // (RemoveTexture needs the backend + descriptor pool still alive).
         if (auto* vkGraph = GetVKRenderGraph())
             vkGraph->ReleaseImGuiTextures();
+        ClearTextureCache();
 
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
         imguiLayer.DestroyImGuiBackend(GraphicsAPI::Vulkan);
 
-        for (auto& [key, mesh] : m_MeshCache) {
-            if (mesh) mesh->Release();
-        }
-        m_MeshCache.clear();
+        ClearMeshCache();
 
         m_RenderGraph.reset();
 
+        m_GpuBuffers.DestroyAll();
         m_VKSwapchain.Destroy();
         m_MemoryAllocator.Destroy();
         m_VKDevice.Destroy();
@@ -124,6 +128,30 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_FrameActive = false;
         NV_LOG_INFO("Vulkan renderer destroyed.");
+    }
+
+    RHI::RHI_GpuBufferHandle VK_Renderer::CreateConstantBuffer(const RHI::RHI_GpuBufferDesc& desc) {
+        return m_GpuBuffers.Create(RHI::RHI_ResourceKind::ConstantBuffer, desc);
+    }
+
+    RHI::RHI_GpuBufferHandle VK_Renderer::CreateStructuredBuffer(const RHI::RHI_GpuBufferDesc& desc) {
+        return m_GpuBuffers.Create(RHI::RHI_ResourceKind::StructuredBuffer, desc);
+    }
+
+    RHI::RHI_GpuBufferHandle VK_Renderer::CreateRWStructuredBuffer(const RHI::RHI_GpuBufferDesc& desc) {
+        return m_GpuBuffers.Create(RHI::RHI_ResourceKind::RWStructuredBuffer, desc);
+    }
+
+    void VK_Renderer::DestroyGpuBuffer(RHI::RHI_GpuBufferHandle handle) {
+        m_GpuBuffers.Destroy(handle);
+    }
+
+    void VK_Renderer::UpdateGpuBuffer(RHI::RHI_GpuBufferHandle handle, const void* data, size_t size, uint32_t elementIndex) {
+        m_GpuBuffers.Update(handle, data, size, elementIndex, GetCurrentFrameInFlight());
+    }
+
+    RHI::RHI_BufferBinding VK_Renderer::ResolveGpuBufferBinding(RHI::RHI_GpuBufferHandle handle, uint32_t elementIndex) const {
+        return m_GpuBuffers.ResolveBinding(handle, elementIndex, GetCurrentFrameInFlight());
     }
 
     void VK_Renderer::SetRenderGraph(std::unique_ptr<RHI::IRenderGraph> graph) {
@@ -249,7 +277,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     void VK_Renderer::Draw(const RHI::RHI_DrawCommand& cmd) {
         if (!m_FrameActive || !cmd.m_Mesh) return;
 
-        auto vkMesh = GetOrUploadMesh(cmd.m_Mesh);
+        auto vkMesh = std::static_pointer_cast<VK_Mesh>(GetOrUploadMesh(cmd.m_Mesh));
         if (!vkMesh) return;
 
         VkCommandBuffer vkCmd = GetCurrentCommandBuffer();
@@ -261,7 +289,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     void VK_Renderer::DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) {
         if (!m_FrameActive || !cmd.m_Mesh) return;
 
-        auto vkMesh = GetOrUploadMesh(cmd.m_Mesh);
+        auto vkMesh = std::static_pointer_cast<VK_Mesh>(GetOrUploadMesh(cmd.m_Mesh));
         if (!vkMesh) return;
 
         if (cmd.m_IndexType != RHI::RHI_IndexType::UInt32) {
@@ -279,6 +307,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (m_RenderGraph)
             return m_RenderGraph->GetTextureImGuiID(handle);
         return nullptr;
+    }
+
+    void* VK_Renderer::GetTextureImGuiID(const std::shared_ptr<RHI::RHI_Texture>& texture) const {
+        if (!texture)
+            return nullptr;
+        // Resolve through cache so callers can pass either the CPU or GPU shared_ptr.
+        auto it = m_TextureCache.find(texture.get());
+        if (it != m_TextureCache.end() && it->second)
+            return it->second->GetImGuiID();
+        return texture->GetImGuiID();
     }
 
     void VK_Renderer::EndFrame() {
@@ -352,7 +390,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_VKSwapchain.AdvanceFrame();
     }
 
-    std::shared_ptr<VK_Mesh> VK_Renderer::GetOrUploadMesh(const std::shared_ptr<Renderer::RHI::RHI_Mesh>& cpuMesh) {
+    std::shared_ptr<RHI::RHI_Mesh> VK_Renderer::GetOrUploadMesh(const std::shared_ptr<RHI::RHI_Mesh>& cpuMesh) {
         NV_ASSERT_MSG(cpuMesh, "VK_Renderer::GetOrUploadMesh received a null mesh.");
         if (!cpuMesh) return nullptr;
 
@@ -370,6 +408,26 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_MeshCache[cpuMesh.get()] = vkMesh;
         return vkMesh;
+    }
+
+    std::shared_ptr<RHI::RHI_Texture> VK_Renderer::GetOrUploadTexture(const std::shared_ptr<RHI::RHI_Texture>& cpuTexture) {
+        NV_ASSERT_MSG(cpuTexture, "VK_Renderer::GetOrUploadTexture received a null texture.");
+        if (!cpuTexture) return nullptr;
+
+        auto it = m_TextureCache.find(cpuTexture.get());
+        if (it != m_TextureCache.end())
+            return it->second;
+
+        auto vkTexture = std::make_shared<VK_Texture>(*cpuTexture);
+        vkTexture->Init(
+            &m_MemoryAllocator,
+            m_VKDevice.GetDevice(),
+            m_VKSwapchain.GetCommandPool(),
+            m_VKDevice.GetGraphicsQueue());
+        vkTexture->Upload(*cpuTexture);
+
+        m_TextureCache[cpuTexture.get()] = vkTexture;
+        return vkTexture;
     }
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

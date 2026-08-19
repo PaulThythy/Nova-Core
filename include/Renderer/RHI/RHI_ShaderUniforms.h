@@ -17,17 +17,26 @@
 #include <unordered_map>
 
 #include "Api.h"
+#include "Renderer/RHI/RHI_GpuBuffer.h"
 
 namespace Nova::Core::Renderer::RHI {
+
+    static constexpr uint32_t MAX_LIGHTS = 16;
+    static constexpr uint32_t MAX_SHADOW_MAPS = 4;
+    static constexpr uint32_t SHADOW_MAP_RESOLUTION = 2048;
+    /** Half-extent of the directional light ortho frustum (world units). Smaller = sharper shadows. */
+    static constexpr float SHADOW_DIR_ORTHO_HALF_EXTENT = 10.0f;
 
     // Stable reflection names for the engine resources declared in NovaUniforms.slang
     // (`ParameterBlock<NovaEngine> nova;`). The descriptor set and binding for each are
     // assigned by Slang reflection and looked up by these names at runtime.
     namespace EngineResourceName {
-        inline constexpr const char* Frame     = "nova.frame";
-        inline constexpr const char* Mvp       = "nova.mvp";
-        inline constexpr const char* Instances = "nova.instances";
-        inline constexpr const char* Material  = "nova.material";
+        inline constexpr const char* Frame         = "nova.frame";
+        inline constexpr const char* Mvp           = "nova.mvp";
+        inline constexpr const char* Material      = "nova.material";
+        inline constexpr const char* Lights        = "nova.lights";
+        inline constexpr const char* ShadowMaps    = "nova.shadowMaps";
+        inline constexpr const char* ShadowSampler = "nova.shadowSampler";
     }
 
     struct NV_API FrameUniforms {
@@ -37,10 +46,8 @@ namespace Nova::Core::Renderer::RHI {
         alignas(4)  float     m_ITimeDelta{ 0.0f };
         alignas(4)  float     m_IFrameRate{ 0.0f };
         alignas(4)  int       m_IFrame{ 0 };
-        alignas(4)  int       m_UUseInstancing{ 0 };
-        alignas(8)  glm::ivec2 m_Offset0{ 0, 0 };
         alignas(16) glm::vec3 m_UCameraPos{ 0.0f, 0.0f, 0.0f };
-        alignas(4)  float     m_PadAfterCameraPos{ 0.0f };
+        alignas(4)  int       m_LightCount{ 0 };
         alignas(16) glm::vec4 m_IMouse{ 0.0f, 0.0f, 0.0f, 0.0f };
         alignas(16) glm::vec4 m_IDate{ 0.0f, 0.0f, 0.0f, 0.0f };
     };
@@ -53,9 +60,23 @@ namespace Nova::Core::Renderer::RHI {
         alignas(16) glm::mat4 m_InvViewProj{ 1.0f };
     };
 
-    struct NV_API Instance {
-        alignas(16) glm::mat4 m_Model{ 1.0f };
-        alignas(16) glm::vec4 m_Color{ 1.0f, 1.0f, 1.0f, 1.0f };
+    /** GPU light element for `StructuredBuffer<LightGPU> nova.lights` (std430). */
+    struct NV_API LightGPU {
+        alignas(4)  int       m_Type{ 0 };           // 0=Directional, 1=Point, 2=Spot
+        alignas(4)  int       m_CastShadow{ 0 };
+        alignas(4)  int       m_ShadowMapIndex{ -1 };
+        alignas(4)  float     m_Intensity{ 1.0f };
+        alignas(16) glm::vec3 m_Color{ 1.0f };
+        alignas(4)  float     m_Range{ 10.0f };
+        alignas(16) glm::vec3 m_Direction{ 0.0f, -1.0f, 0.0f };
+        alignas(4)  float     m_InnerConeCos{ 0.0f };
+        alignas(16) glm::vec3 m_Position{ 0.0f };
+        alignas(4)  float     m_OuterConeCos{ 0.0f };
+        alignas(4)  float     m_ShadowBiasConstant{ 0.5f };
+        alignas(4)  float     m_ShadowBiasSlope{ 1.0f };
+        alignas(4)  float     m_ShadowNormalBias{ 0.012f };
+        alignas(4)  float     m_PadBias{ 0.0f };
+        alignas(16) glm::mat4 m_LightViewProj{ 1.0f };
     };
 
     struct NV_API Material {
@@ -94,6 +115,26 @@ namespace Nova::Core::Renderer::RHI {
         alignas(4)  int         m_ThinWalled{ 0 };
         alignas(4)  int         m_IsOpaque{ 1 };
         alignas(8)  glm::uvec2  m_PadCbufferAlign{ 0u, 0u };
+    };
+
+    /**
+     * C++ mirror of `ParameterBlock<NovaEngine> nova;` (NovaUniforms.slang): one GPU buffer handle
+     * per buffer field of `NovaEngine`. Shadow map texture/sampler are render-graph resources bound
+     * by reflection name after texture creation.
+     *
+     * `m_Frame` holds a single `FrameUniforms` value (one region per frame-in-flight). `m_Mvp` and
+     * `m_Material` are arrays (one element per draw call this frame) — see MAX_MODEL_DRAWS in
+     * VK_PipelineCache. `m_Lights` is a StructuredBuffer of up to MAX_LIGHTS elements.
+     */
+    struct NV_API RHI_EngineParameterBlock {
+        RHI_GpuBufferHandle m_Frame;    // ConstantBuffer<FrameUniforms> frame;
+        RHI_GpuBufferHandle m_Mvp;      // ConstantBuffer<MVP> mvp;
+        RHI_GpuBufferHandle m_Material; // ConstantBuffer<Material> material;
+        RHI_GpuBufferHandle m_Lights;   // StructuredBuffer<LightGPU> lights;
+
+        bool IsValid() const {
+            return m_Frame.IsValid() && m_Mvp.IsValid() && m_Material.IsValid() && m_Lights.IsValid();
+        }
     };
 
     // name -> byte offset maps describing how SetParameter() values are packed into the engine
@@ -140,15 +181,15 @@ namespace Nova::Core::Renderer::RHI {
 
     inline const std::unordered_map<std::string, size_t>& GetFrameLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
-            { "iResolution",     offsetof(FrameUniforms, m_IResolution) },
-            { "iTime",           offsetof(FrameUniforms, m_ITime) },
-            { "iTimeDelta",      offsetof(FrameUniforms, m_ITimeDelta) },
-            { "iFrameRate",      offsetof(FrameUniforms, m_IFrameRate) },
-            { "iFrame",          offsetof(FrameUniforms, m_IFrame) },
-            { "u_UseInstancing", offsetof(FrameUniforms, m_UUseInstancing) },
-            { "u_CameraPos",     offsetof(FrameUniforms, m_UCameraPos) },
-            { "iMouse",          offsetof(FrameUniforms, m_IMouse) },
-            { "iDate",           offsetof(FrameUniforms, m_IDate) },
+            { "iResolution", offsetof(FrameUniforms, m_IResolution) },
+            { "iTime",       offsetof(FrameUniforms, m_ITime) },
+            { "iTimeDelta",  offsetof(FrameUniforms, m_ITimeDelta) },
+            { "iFrameRate",  offsetof(FrameUniforms, m_IFrameRate) },
+            { "iFrame",      offsetof(FrameUniforms, m_IFrame) },
+            { "u_CameraPos", offsetof(FrameUniforms, m_UCameraPos) },
+            { "lightCount",  offsetof(FrameUniforms, m_LightCount) },
+            { "iMouse",      offsetof(FrameUniforms, m_IMouse) },
+            { "iDate",       offsetof(FrameUniforms, m_IDate) },
         };
         return kLayout;
     }
@@ -160,14 +201,6 @@ namespace Nova::Core::Renderer::RHI {
             { "proj",        offsetof(MVP, m_Proj) },
             { "viewProj",    offsetof(MVP, m_ViewProj) },
             { "invViewProj", offsetof(MVP, m_InvViewProj) },
-        };
-        return kLayout;
-    }
-
-    inline const std::unordered_map<std::string, size_t>& GetInstancesLayout() {
-        static const std::unordered_map<std::string, size_t> kLayout = {
-            { "model", offsetof(Instance, m_Model) },
-            { "color", offsetof(Instance, m_Color) },
         };
         return kLayout;
     }
