@@ -2,7 +2,7 @@
 
 #include "Renderer/Backends/Vulkan/VK_Renderer.h"
 #include "Renderer/Backends/Vulkan/VK_Common.h"
-#include "Renderer/Graphics/Vertex.h"
+#include "Math/Vertex.h"
 #include "Renderer/RHI/RHI_ShaderCompiler.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
 #include "Core/Application.h"
@@ -586,14 +586,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             vertexAttrCount = 2;
         } else if (isMesh) {
             vertexBinding.binding = 0;
-            vertexBinding.stride = sizeof(Renderer::Graphics::Vertex);
+            vertexBinding.stride = sizeof(Math::Vertex);
             vertexBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-            vertexAttrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Position) };
-            vertexAttrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Normal) };
-            vertexAttrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(Renderer::Graphics::Vertex, m_TexCoord) };
-            vertexAttrs[3] = { 3, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Color) };
-            vertexAttrs[4] = { 4, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Tangent) };
-            vertexAttrs[5] = { 5, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Renderer::Graphics::Vertex, m_Bitangent) };
+            vertexAttrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Math::Vertex, m_Position) };
+            vertexAttrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Math::Vertex, m_Normal) };
+            vertexAttrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(Math::Vertex, m_TexCoord) };
+            vertexAttrs[3] = { 3, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Math::Vertex, m_Color) };
+            vertexAttrs[4] = { 4, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Math::Vertex, m_Tangent) };
+            vertexAttrs[5] = { 5, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Math::Vertex, m_Bitangent) };
             vertexAttrCount = 6;
         }
 

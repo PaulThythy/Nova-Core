@@ -15,7 +15,7 @@ namespace Nova::Core::Renderer::RHI {
     void RHI_Mesh::Unbind() const {}
 
     std::shared_ptr<RHI_Mesh> RHI_Mesh::CreatePlane() {
-        std::vector<Graphics::Vertex> vertices;
+        std::vector<Math::Vertex> vertices;
         vertices.reserve(6); // 2 triangles * 3 vertices
 
         std::vector<uint32_t> indices;
@@ -35,38 +35,38 @@ namespace Nova::Core::Renderer::RHI {
         };
 
         // --- Triangle 0 vertices (p0, p1, p2) ---
-        Graphics::Vertex v0; // yellow
+        Math::Vertex v0; // yellow
         v0.m_Position = p0;
         v0.m_Normal = normal;
         v0.m_TexCoord = { 0.0f, 0.0f };
         v0.m_Color = triColors[0];
 
-        Graphics::Vertex v1; // magenta
+        Math::Vertex v1; // magenta
         v1.m_Position = p1;
         v1.m_Normal = normal;
         v1.m_TexCoord = { 1.0f, 0.0f };
         v1.m_Color = triColors[1];
 
-        Graphics::Vertex v2; // cyan
+        Math::Vertex v2; // cyan
         v2.m_Position = p2;
         v2.m_Normal = normal;
         v2.m_TexCoord = { 1.0f, 1.0f };
         v2.m_Color = triColors[2];
 
         // --- Triangle 1 vertices (p0, p2, p3) ---
-        Graphics::Vertex v3; // yellow
+        Math::Vertex v3; // yellow
         v3.m_Position = p0;
         v3.m_Normal = normal;
         v3.m_TexCoord = { 0.0f, 0.0f };
         v3.m_Color = triColors[0];
 
-        Graphics::Vertex v4; // magenta
+        Math::Vertex v4; // magenta
         v4.m_Position = p2;
         v4.m_Normal = normal;
         v4.m_TexCoord = { 1.0f, 1.0f };
         v4.m_Color = triColors[1];
 
-        Graphics::Vertex v5; // cyan
+        Math::Vertex v5; // cyan
         v5.m_Position = p3;
         v5.m_Normal = normal;
         v5.m_TexCoord = { 0.0f, 1.0f };
@@ -91,7 +91,7 @@ namespace Nova::Core::Renderer::RHI {
     }
 
     std::shared_ptr<RHI_Mesh> RHI_Mesh::CreateCube(float halfExtent) {
-        std::vector<Graphics::Vertex> vertices;
+        std::vector<Math::Vertex> vertices;
         std::vector<uint32_t>    indices;
 
         // 6 faces * 2 triangles * 3 vertices
@@ -118,7 +118,7 @@ namespace Nova::Core::Renderer::RHI {
                 // Add one triangle (3 unique vertices)
                 uint32_t baseIndex = static_cast<uint32_t>(vertices.size());
 
-                Graphics::Vertex v0, v1, v2;
+                Math::Vertex v0, v1, v2;
                 v0.m_Position = p0;
                 v1.m_Position = p1;
                 v2.m_Position = p2;
@@ -273,7 +273,7 @@ namespace Nova::Core::Renderer::RHI {
         }
 
         // Final mesh data: each triangle has its own 3 vertices
-        std::vector<Graphics::Vertex> vertices;
+        std::vector<Math::Vertex> vertices;
         std::vector<uint32_t>    indices;
 
         const glm::vec3 triColors[3] = {
@@ -286,7 +286,7 @@ namespace Nova::Core::Renderer::RHI {
         indices.reserve(latitudeSegments * longitudeSegments * 6);
 
         auto makeVertex = [&](uint32_t gridIndex, const glm::vec3& color) {
-            Graphics::Vertex v;
+            Math::Vertex v;
             v.m_Position = positions[gridIndex];
             v.m_Normal = normals[gridIndex];
             v.m_TexCoord = uvs[gridIndex];
@@ -339,7 +339,7 @@ namespace Nova::Core::Renderer::RHI {
         if (radialSegments < 3) radialSegments = 3;
         if (heightSegments < 1) heightSegments = 1;
  
-        std::vector<Graphics::Vertex> vertices;
+        std::vector<Math::Vertex> vertices;
         std::vector<uint32_t>         indices;
  
         const float halfH = height * 0.5f;
@@ -352,7 +352,7 @@ namespace Nova::Core::Renderer::RHI {
         };
  
         // ---- Helper: push one triangle ----
-        auto pushTri = [&](const Graphics::Vertex& a, const Graphics::Vertex& b, const Graphics::Vertex& c)
+        auto pushTri = [&](const Math::Vertex& a, const Math::Vertex& b, const Math::Vertex& c)
         {
             uint32_t base = static_cast<uint32_t>(vertices.size());
             vertices.push_back(a);
@@ -364,7 +364,7 @@ namespace Nova::Core::Renderer::RHI {
         };
  
         // ---- Helper: build a vertex on the cylinder barrel ----
-        auto barrelVertex = [&](float u, float v, const glm::vec3& color) -> Graphics::Vertex
+        auto barrelVertex = [&](float u, float v, const glm::vec3& color) -> Math::Vertex
         {
             float phi = u * twoPi;
             float cosPhi = std::cos(phi);
@@ -377,7 +377,7 @@ namespace Nova::Core::Renderer::RHI {
             glm::vec3 tangent   = { -sinPhi, 0.0f,  cosPhi };
             glm::vec3 bitangent = {  0.0f,   1.0f,  0.0f   };
  
-            Graphics::Vertex vert;
+            Math::Vertex vert;
             vert.m_Position  = pos;
             vert.m_Normal    = normal;
             vert.m_TexCoord  = { u, 1.0f - v };
@@ -398,10 +398,10 @@ namespace Nova::Core::Renderer::RHI {
                 float u0 = static_cast<float>(x)     / static_cast<float>(radialSegments);
                 float u1 = static_cast<float>(x + 1) / static_cast<float>(radialSegments);
  
-                Graphics::Vertex bl = barrelVertex(u0, v0, triColors[0]);
-                Graphics::Vertex br = barrelVertex(u1, v0, triColors[1]);
-                Graphics::Vertex tr = barrelVertex(u1, v1, triColors[2]);
-                Graphics::Vertex tl = barrelVertex(u0, v1, triColors[0]);
+                Math::Vertex bl = barrelVertex(u0, v0, triColors[0]);
+                Math::Vertex br = barrelVertex(u1, v0, triColors[1]);
+                Math::Vertex tr = barrelVertex(u1, v1, triColors[2]);
+                Math::Vertex tl = barrelVertex(u0, v1, triColors[0]);
  
                 // CCW triangles
                 pushTri(bl, br, tr);
@@ -418,7 +418,7 @@ namespace Nova::Core::Renderer::RHI {
             glm::vec3 tang   = { 1.0f, 0.0f, 0.0f };
             glm::vec3 bitang = { 0.0f, 0.0f, 1.0f };
  
-            Graphics::Vertex centre;
+            Math::Vertex centre;
             centre.m_Position  = { 0.0f, yPos, 0.0f };
             centre.m_Normal    = nrm;
             centre.m_TexCoord  = { 0.5f, 0.5f };
@@ -433,10 +433,10 @@ namespace Nova::Core::Renderer::RHI {
                 float phi0 = u0 * twoPi;
                 float phi1 = u1 * twoPi;
  
-                auto rimVertex = [&](float phi, const glm::vec3& col) -> Graphics::Vertex
+                auto rimVertex = [&](float phi, const glm::vec3& col) -> Math::Vertex
                 {
                     float c = std::cos(phi), s = std::sin(phi);
-                    Graphics::Vertex v;
+                    Math::Vertex v;
                     v.m_Position  = { radius * c, yPos, radius * s };
                     v.m_Normal    = nrm;
                     v.m_TexCoord  = { 0.5f + 0.5f * c, 0.5f + 0.5f * s };
@@ -446,8 +446,8 @@ namespace Nova::Core::Renderer::RHI {
                     return v;
                 };
  
-                Graphics::Vertex r0 = rimVertex(phi0, triColors[1]);
-                Graphics::Vertex r1 = rimVertex(phi1, triColors[2]);
+                Math::Vertex r0 = rimVertex(phi0, triColors[1]);
+                Math::Vertex r1 = rimVertex(phi1, triColors[2]);
  
                 // Wind CCW for top (yNormal > 0) and bottom (yNormal < 0)
                 if (yNormal > 0.0f)
@@ -468,7 +468,7 @@ namespace Nova::Core::Renderer::RHI {
         if (heightSegments  < 1) heightSegments  = 1;
         if (hemisphereRings < 1) hemisphereRings = 1;
  
-        std::vector<Graphics::Vertex> vertices;
+        std::vector<Math::Vertex> vertices;
         std::vector<uint32_t>         indices;
  
         const float halfH  = height * 0.5f;
@@ -481,7 +481,7 @@ namespace Nova::Core::Renderer::RHI {
             { 0.0f, 1.0f, 1.0f }
         };
  
-        auto pushTri = [&](const Graphics::Vertex& a, const Graphics::Vertex& b, const Graphics::Vertex& c)
+        auto pushTri = [&](const Math::Vertex& a, const Math::Vertex& b, const Math::Vertex& c)
         {
             uint32_t base = static_cast<uint32_t>(vertices.size());
             vertices.push_back(a);
@@ -527,7 +527,7 @@ namespace Nova::Core::Renderer::RHI {
                     float cosPhi0 = std::cos(phi0), sinPhi0 = std::sin(phi0);
                     float cosPhi1 = std::cos(phi1), sinPhi1 = std::sin(phi1);
  
-                    auto makeHV = [&](float sinT, float cosT, float cosPhi, float sinPhi, float u, float t, const glm::vec3& col) -> Graphics::Vertex
+                    auto makeHV = [&](float sinT, float cosT, float cosPhi, float sinPhi, float u, float t, const glm::vec3& col) -> Math::Vertex
                     {
                         glm::vec3 n = { cosPhi * sinT, cosT, sinPhi * sinT };
                         glm::vec3 pos = n * radius;
@@ -540,7 +540,7 @@ namespace Nova::Core::Renderer::RHI {
                         // Map V to [0.5,1] for top or [0,0.5] for bottom
                         float vCoord = (ySign > 0.0f) ? 0.5f + 0.5f * t : 0.5f * (1.0f - t);
  
-                        Graphics::Vertex v;
+                        Math::Vertex v;
                         v.m_Position  = pos;
                         v.m_Normal    = n;
                         v.m_TexCoord  = { u, vCoord };
@@ -551,10 +551,10 @@ namespace Nova::Core::Renderer::RHI {
                     };
  
                     // 4 corners of the quad (ring × seg)
-                    Graphics::Vertex bl = makeHV(sinT0, cosT0, cosPhi0, sinPhi0, u0, t0, triColors[0]);
-                    Graphics::Vertex br = makeHV(sinT0, cosT0, cosPhi1, sinPhi1, u1, t0, triColors[1]);
-                    Graphics::Vertex tr = makeHV(sinT1, cosT1, cosPhi1, sinPhi1, u1, t1, triColors[2]);
-                    Graphics::Vertex tl = makeHV(sinT1, cosT1, cosPhi0, sinPhi0, u0, t1, triColors[0]);
+                    Math::Vertex bl = makeHV(sinT0, cosT0, cosPhi0, sinPhi0, u0, t0, triColors[0]);
+                    Math::Vertex br = makeHV(sinT0, cosT0, cosPhi1, sinPhi1, u1, t0, triColors[1]);
+                    Math::Vertex tr = makeHV(sinT1, cosT1, cosPhi1, sinPhi1, u1, t1, triColors[2]);
+                    Math::Vertex tl = makeHV(sinT1, cosT1, cosPhi0, sinPhi0, u0, t1, triColors[0]);
  
                     pushTri(bl, tr, br);
                     pushTri(bl, tl, tr);
@@ -580,14 +580,14 @@ namespace Nova::Core::Renderer::RHI {
                 float c0 = std::cos(phi0), s0 = std::sin(phi0);
                 float c1 = std::cos(phi1), s1 = std::sin(phi1);
  
-                auto barrelV = [&](float c, float s, float yPos, float u, float vCoord, const glm::vec3& col) -> Graphics::Vertex
+                auto barrelV = [&](float c, float s, float yPos, float u, float vCoord, const glm::vec3& col) -> Math::Vertex
                 {
                     glm::vec3 n    = glm::normalize(glm::vec3{ c, 0.0f, s });
                     glm::vec3 tang = { -s, 0.0f, c };
                     glm::vec3 bit  = {  0.0f, 1.0f, 0.0f };
  
                     // Remap barrel v to [0, 1] so UVs span the full cylinder portion
-                    Graphics::Vertex v;
+                    Math::Vertex v;
                     v.m_Position  = { c * radius, yPos, s * radius };
                     v.m_Normal    = n;
                     v.m_TexCoord  = { u, vCoord };
@@ -597,10 +597,10 @@ namespace Nova::Core::Renderer::RHI {
                     return v;
                 };
  
-                Graphics::Vertex bl = barrelV(c0, s0, y0, u0, v0, triColors[0]);
-                Graphics::Vertex br = barrelV(c1, s1, y0, u1, v0, triColors[1]);
-                Graphics::Vertex tr = barrelV(c1, s1, y1, u1, v1, triColors[2]);
-                Graphics::Vertex tl = barrelV(c0, s0, y1, u0, v1, triColors[0]);
+                Math::Vertex bl = barrelV(c0, s0, y0, u0, v0, triColors[0]);
+                Math::Vertex br = barrelV(c1, s1, y0, u1, v0, triColors[1]);
+                Math::Vertex tr = barrelV(c1, s1, y1, u1, v1, triColors[2]);
+                Math::Vertex tl = barrelV(c0, s0, y1, u0, v1, triColors[0]);
  
                 pushTri(bl, br, tr);
                 pushTri(bl, tr, tl);
@@ -618,7 +618,7 @@ namespace Nova::Core::Renderer::RHI {
         if (majorSegments < 3) majorSegments = 3;
         if (minorSegments < 3) minorSegments = 3;
 
-        std::vector<Graphics::Vertex> vertices;
+        std::vector<Math::Vertex> vertices;
         std::vector<uint32_t> indices;
 
         const float twoPi = glm::two_pi<float>();
@@ -629,7 +629,7 @@ namespace Nova::Core::Renderer::RHI {
             {0.0f, 1.0f, 1.0f}  // cyan
         };
 
-        auto pushTri = [&](const Graphics::Vertex& a, const Graphics::Vertex& b, const Graphics::Vertex& c)
+        auto pushTri = [&](const Math::Vertex& a, const Math::Vertex& b, const Math::Vertex& c)
         {
             uint32_t base = static_cast<uint32_t>(vertices.size());
 
@@ -642,7 +642,7 @@ namespace Nova::Core::Renderer::RHI {
             indices.push_back(base + 2);
         };
 
-        auto makeVertex = [&](float majorU, float minorV, const glm::vec3& color) -> Graphics::Vertex
+        auto makeVertex = [&](float majorU, float minorV, const glm::vec3& color) -> Math::Vertex
         {
             float phi   = majorU * twoPi;
             float theta = minorV * twoPi;
@@ -692,7 +692,7 @@ namespace Nova::Core::Renderer::RHI {
 
             bitangent = glm::normalize(bitangent);
 
-            Graphics::Vertex v;
+            Math::Vertex v;
             v.m_Position   = position;
             v.m_Normal     = glm::normalize(normal);
             v.m_TexCoord   = { majorU, minorV };
@@ -713,10 +713,10 @@ namespace Nova::Core::Renderer::RHI {
                 float v0 = static_cast<float>(minor) / minorSegments;
                 float v1 = static_cast<float>(minor + 1) / minorSegments;
 
-                Graphics::Vertex bl = makeVertex(u0, v0, triColors[0]);
-                Graphics::Vertex br = makeVertex(u1, v0, triColors[1]);
-                Graphics::Vertex tr = makeVertex(u1, v1, triColors[2]);
-                Graphics::Vertex tl = makeVertex(u0, v1, triColors[0]);
+                Math::Vertex bl = makeVertex(u0, v0, triColors[0]);
+                Math::Vertex br = makeVertex(u1, v0, triColors[1]);
+                Math::Vertex tr = makeVertex(u1, v1, triColors[2]);
+                Math::Vertex tl = makeVertex(u0, v1, triColors[0]);
 
                 // Same winding as cylinder/capsule barrel
                 pushTri(bl, br, tr);

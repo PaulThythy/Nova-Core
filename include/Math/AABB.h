@@ -8,7 +8,7 @@
 #include <glm/glm.hpp>
 
 #include "Api.h"
-#include "Renderer/Graphics/Vertex.h"
+#include "Math/Vertex.h"
 
 namespace Nova::Core::Renderer::RHI {
 	struct RHI_Mesh;
@@ -40,7 +40,7 @@ namespace Nova::Core::Math {
 
 	class NV_API AABBTree {
 	public:
-		void Build(const std::vector<Renderer::Graphics::Vertex>& vertices,
+		void Build(const std::vector<Vertex>& vertices,
 		           const std::vector<uint32_t>& indices,
 		           uint32_t maxDepth);
 
@@ -52,11 +52,11 @@ namespace Nova::Core::Math {
 		               std::vector<uint32_t>& triangleIndices,
 		               uint32_t depth,
 		               uint32_t maxDepth,
-		               const std::vector<Renderer::Graphics::Vertex>& vertices,
+		               const std::vector<Vertex>& vertices,
 		               const std::vector<uint32_t>& indices);
 
 		static AABB ComputeBounds(const std::vector<uint32_t>& triangleIndices,
-		                          const std::vector<Renderer::Graphics::Vertex>& vertices,
+		                          const std::vector<Vertex>& vertices,
 		                          const std::vector<uint32_t>& indices);
 
 		std::vector<AABBNode> m_Nodes;

@@ -8,7 +8,7 @@
 
 #include "Api.h"
 
-namespace Nova::Core::Renderer::Graphics {
+namespace Nova::Core::Math {
 
     enum class NV_API LightType {
         Directional = 0,
@@ -93,6 +93,6 @@ namespace Nova::Core::Renderer::Graphics {
         return proj * view;
     }
 
-} // namespace Nova::Core::Renderer::Graphics
+} // namespace Nova::Core::Math
 
 #endif // LIGHT_H

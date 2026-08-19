@@ -4,18 +4,17 @@
 #include <memory>
 
 #include "Api.h"
-#include "Renderer/Graphics/Camera.h"
+#include "Math/Camera.h"
 
 namespace Nova::Core::ECS::Components {
 
     struct NV_API CameraComponent {
-        std::shared_ptr<Renderer::Graphics::Camera> m_Camera;
+        std::shared_ptr<Math::Camera> m_Camera;
         bool m_IsPrimary = false;
 
         CameraComponent() = default;
 
-        CameraComponent(const std::shared_ptr<Renderer::Graphics::Camera>& camera,
-                        bool isPrimary = false)
+        CameraComponent(const std::shared_ptr<Math::Camera>& camera, bool isPrimary = false)
             : m_Camera(camera), m_IsPrimary(isPrimary)
         {}
     };

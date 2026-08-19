@@ -31,7 +31,7 @@ namespace Nova::Core::Math {
 	}
 
 	AABB AABBTree::ComputeBounds(const std::vector<uint32_t>& triangleIndices,
-	                             const std::vector<Renderer::Graphics::Vertex>& vertices,
+	                             const std::vector<Vertex>& vertices,
 	                             const std::vector<uint32_t>& indices) {
 		AABB bounds;
 		const float inf = std::numeric_limits<float>::infinity();
@@ -54,7 +54,7 @@ namespace Nova::Core::Math {
 	                         std::vector<uint32_t>& triangleIndices,
 	                         uint32_t depth,
 	                         uint32_t maxDepth,
-	                         const std::vector<Renderer::Graphics::Vertex>& vertices,
+	                         const std::vector<Vertex>& vertices,
 	                         const std::vector<uint32_t>& indices) {
 		auto& node = m_Nodes[static_cast<size_t>(nodeIndex)];
 		node.m_Bounds = ComputeBounds(triangleIndices, vertices, indices);
@@ -103,7 +103,7 @@ namespace Nova::Core::Math {
 		BuildNode(node.m_RightChild, right, depth + 1, maxDepth, vertices, indices);
 	}
 
-	void AABBTree::Build(const std::vector<Renderer::Graphics::Vertex>& vertices,
+	void AABBTree::Build(const std::vector<Vertex>& vertices,
 	                     const std::vector<uint32_t>& indices,
 	                     uint32_t maxDepth) {
 		m_Nodes.clear();
@@ -137,14 +137,14 @@ namespace Nova::Core::Math {
 			{ 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 },
 		};
 
-		std::vector<Renderer::Graphics::Vertex> vertices;
+		std::vector<Vertex> vertices;
 		std::vector<uint32_t> lineIndices;
 		vertices.reserve(24);
 		lineIndices.reserve(24);
 
 		for (const auto& edge : edges) {
 			for (int end = 0; end < 2; ++end) {
-				Renderer::Graphics::Vertex v{};
+				Vertex v{};
 				v.m_Position = corners[edge[end]];
 				v.m_Normal = glm::vec3(0.0f, 1.0f, 0.0f);
 				v.m_Color = color;

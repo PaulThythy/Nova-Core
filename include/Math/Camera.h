@@ -6,14 +6,14 @@
 
 #include "Api.h"
 
-namespace Nova::Core::Renderer::Graphics {
+namespace Nova::Core::Math {
 
     struct NV_API Camera {
         Camera() = default;
 
-        Camera(const glm::vec3& lookFrom, const glm::vec3& lookAt, const glm::vec3& up,
+        Camera(const glm::vec3& lookFrom, const glm::vec3& lookAt, const glm::vec3& up, 
             float fov, float aspectRatio, float nearPlane, float farPlane, bool isPerspective = true) :
-
+            
             m_LookFrom(lookFrom), m_LookAt(lookAt), m_Up(up), m_FOV(fov), m_AspectRatio(aspectRatio),
             m_NearPlane(nearPlane), m_FarPlane(farPlane), m_IsPerspective(isPerspective) {}
 
@@ -48,6 +48,6 @@ namespace Nova::Core::Renderer::Graphics {
         bool  m_IsPerspective = true;
     };
 
-} // namespace Nova::Core::Renderer::Graphics
+} // namespace Nova::Core::Math
 
 #endif // CAMERA_H

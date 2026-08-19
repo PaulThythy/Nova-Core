@@ -5,7 +5,6 @@
 
 #include "Api.h"
 #include "Asset/Assets/MeshAsset.h"
-//#include "Renderer/Graphics/Material.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
 
 namespace Nova::Core::ECS::Components {
