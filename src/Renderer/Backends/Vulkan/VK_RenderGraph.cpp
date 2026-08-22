@@ -636,7 +636,20 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencil.depthTestEnable = entry.desc.m_DepthTest ? VK_TRUE : VK_FALSE;
         depthStencil.depthWriteEnable = entry.desc.m_DepthWrite ? VK_TRUE : VK_FALSE;
-        depthStencil.depthCompareOp = isFullscreen ? VK_COMPARE_OP_LESS_OR_EQUAL : VK_COMPARE_OP_LESS;
+        if (isFullscreen) {
+            depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        } else {
+            switch (entry.desc.m_DepthCompare) {
+                case RHI::RHI_DepthCompare::LessOrEqual:    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL; break;
+                case RHI::RHI_DepthCompare::Greater:         depthStencil.depthCompareOp = VK_COMPARE_OP_GREATER; break;
+                case RHI::RHI_DepthCompare::GreaterOrEqual:  depthStencil.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL; break;
+                case RHI::RHI_DepthCompare::Always:          depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS; break;
+                case RHI::RHI_DepthCompare::Never:           depthStencil.depthCompareOp = VK_COMPARE_OP_NEVER; break;
+                case RHI::RHI_DepthCompare::Equal:           depthStencil.depthCompareOp = VK_COMPARE_OP_EQUAL; break;
+                case RHI::RHI_DepthCompare::Less:
+                default:                                    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS; break;
+            }
+        }
 
         VkPipelineColorBlendAttachmentState blendAttachment{};
         blendAttachment.colorWriteMask =

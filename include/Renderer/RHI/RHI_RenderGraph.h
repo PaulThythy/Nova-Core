@@ -161,6 +161,16 @@ namespace Nova::Core::Renderer::RHI {
         Back,
     };
 
+    enum class RHI_DepthCompare : uint8_t {
+        Less = 0,
+        LessOrEqual,
+        Greater,
+        GreaterOrEqual,
+        Always,
+        Never,
+        Equal,
+    };
+
     struct NV_API RHI_ShaderDesc {
         std::string m_Name;
 
@@ -179,6 +189,7 @@ namespace Nova::Core::Renderer::RHI {
         /** Depth-only pipeline (no color attachments, fragment stage optional). */
         bool m_DepthOnly = false;
         RHI_CullMode m_CullMode = RHI_CullMode::Back;
+        RHI_DepthCompare m_DepthCompare = RHI_DepthCompare::Less;
         float m_DepthBiasConstant = 0.0f;
         float m_DepthBiasSlope = 0.0f;
 
