@@ -63,6 +63,8 @@ namespace Nova::Core::Renderer::RHI {
         bool m_ResizeWithViewport = true;
         /** When true, create a comparison sampler suitable for shadow SampleCmp. */
         bool m_ComparisonSampler = false;
+        /** When true, register a sampled view with ImGui (editor viewport debug). */
+        bool m_RegisterImGui = true;
     };
 
     enum class RHI_BufferFormat : uint8_t {
@@ -184,6 +186,8 @@ namespace Nova::Core::Renderer::RHI {
         RHI_VertexLayout m_VertexLayout = RHI_VertexLayout::Mesh;
         RHI_PrimitiveTopology m_PrimitiveTopology = RHI_PrimitiveTopology::Triangles;
         bool m_AlphaBlend = false;
+        /** When true (and m_AlphaBlend), use additive ONE/ONE blending — for glow overlays. */
+        bool m_AdditiveBlend = false;
         bool m_DepthTest = true;
         bool m_DepthWrite = true;
         /** Depth-only pipeline (no color attachments, fragment stage optional). */
@@ -304,6 +308,19 @@ namespace Nova::Core::Renderer::RHI {
          * `nova.shadowSampler` on every built pipeline that reflects those names.
          */
         virtual bool BindEngineShadowMaps(RHI_TextureHandle shadowMaps) { (void)shadowMaps; return false; }
+
+        /**
+         * Resolve a graph texture to backend-native sampled image + sampler handles
+         * for `IShaders::BindSampledTexture` (VkImageView / VkSampler as uint64_t).
+         */
+        virtual bool GetSampledTextureNativeHandles(
+            RHI_TextureHandle texture,
+            uint64_t& outImageView,
+            uint64_t& outSampler) const
+        {
+            (void)texture; outImageView = 0; outSampler = 0;
+            return false;
+        }
 
         const std::vector<RHI_RenderGraphPassDesc>& GetPasses() const { return m_Passes; }
         const std::vector<size_t>& GetExecutionOrder() const { return m_ExecutionOrder; }

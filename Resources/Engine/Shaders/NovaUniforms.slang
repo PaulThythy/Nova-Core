@@ -6,8 +6,8 @@
 //
 // Custom shaders: #include this file, then declare a second block *after* `nova`
 // (same file or later in link order) so it gets the next descriptor space (set 1), e.g.:
-//   struct MyData { Texture2D albedo; }
-//   ParameterBlock<MyData> user;
+//   struct OutlineData { Texture2D selectionMask; SamplerState selectionMaskSampler; }
+//   ParameterBlock<OutlineData> outline;
 //
 // Do not `import glsl` here: the GLSL module reserves descriptor set 0 for its own
 // resources, which would shift this ParameterBlock to set 1 and break Vulkan layouts
