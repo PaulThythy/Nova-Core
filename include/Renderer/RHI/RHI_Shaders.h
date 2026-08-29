@@ -52,6 +52,23 @@ namespace Nova::Core::Renderer::RHI {
         /** Apply `Resources()` to the backend shader object. */
         bool CommitResources() { return m_Resources.Apply(this); }
 
+        /**
+         * Bind a sampled image + sampler by reflection name (e.g. `outline.source` /
+         * `outline.sourceSampler`). `imageView` / `sampler` are backend-native handles
+         * (VkImageView / VkSampler cast to uint64_t). Prefer resolving them via
+         * `IRenderGraph::GetSampledTextureNativeHandles`.
+         */
+        virtual bool BindSampledTexture(
+            const std::string& textureName,
+            const std::string& samplerName,
+            uint64_t imageView,
+            uint64_t sampler,
+            uint32_t imageLayout = 0)
+        {
+            (void)textureName; (void)samplerName; (void)imageView; (void)sampler; (void)imageLayout;
+            return false;
+        }
+
         /** Bind the shader for drawing (e.g. vkCmdBindPipeline). apiContext: Vulkan = VkCommandBuffer*. */
         virtual void Bind(void* apiContext = nullptr) = 0;
         /**

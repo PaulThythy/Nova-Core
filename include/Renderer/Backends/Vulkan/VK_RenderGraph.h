@@ -15,6 +15,7 @@
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
 #include "Renderer/Backends/Vulkan/VK_Shaders.h"
 #include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
+#include "Renderer/Backends/Vulkan/VK_Texture.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -111,6 +112,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         bool Resize(uint32_t width, uint32_t height) override;
         const RHI::RHI_EngineParameterBlock* GetEngineParameterBlock() const override { return &m_PipelineCache.GetEngine(); }
         bool BindEngineShadowMaps(RHI::RHI_TextureHandle shadowMaps) override;
+        bool GetSampledTextureNativeHandles(RHI::RHI_TextureHandle texture, uint64_t& outImageView, uint64_t& outSampler) const override;
 
         bool InitSwapchainResources();
         void DestroySwapchainResources();
@@ -121,22 +123,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkFormat GetDepthFormat() const { return m_DepthFormat; }
 
     private:
-        struct TextureResource {
-            RHI::RHI_RenderGraphTextureResource desc;
-            VK_ImageAllocation image{};
-            /** Identity-swizzle view — full resource (2D or 2D array). */
-            VkImageView view = VK_NULL_HANDLE;
-            /** Sampling view (array for Texture2DArray; R→RGB for single depth ImGui). */
-            VkImageView sampledView = VK_NULL_HANDLE;
-            /** Per-layer 2D views for framebuffer attachments (Texture2DArray). */
-            std::vector<VkImageView> layerViews;
-            std::vector<VkFramebuffer> layerFramebuffers;
-            VkSampler sampler = VK_NULL_HANDLE;
-            void* imguiTextureId = nullptr;
-            VkFramebuffer framebuffer = VK_NULL_HANDLE;
-            RHI::RHI_ResourceState state = RHI::RHI_ResourceState::Undefined;
-        };
-
         struct PassRenderTarget {
             VkRenderPass renderPassClear = VK_NULL_HANDLE;
             VkRenderPass renderPassLoad = VK_NULL_HANDLE;
@@ -171,8 +157,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         bool CreateTransientResources();
         void DestroyTransientResources();
-        bool CreateTexture(TextureResource& texture, uint32_t width, uint32_t height);
-        void DestroyTexture(TextureResource& texture);
         void DestroyPassRenderTargets();
 
         VkFormat ToVkFormat(RHI::RHI_TextureFormat format) const;
@@ -193,7 +177,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         bool EnsurePassRenderTarget(PassRenderTarget& rt, const RHI::RHI_RenderGraphPassDesc& pass);
         bool ExecutePass(size_t passIndex, bool presentPhase, bool leaveRenderPassOpen);
-        void TransitionTextureForSampling(VkCommandBuffer cmd, TextureResource& texture);
+        void TransitionTextureForSampling(VkCommandBuffer cmd, VK_Texture& texture);
         void SetViewportScissor(VkCommandBuffer cmd, uint32_t width, uint32_t height);
         void DrawFullscreenQuad(VkCommandBuffer cmd);
 
@@ -211,10 +195,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_Renderer* m_Renderer = nullptr;
         VK_PipelineCache m_PipelineCache;
 
-        std::vector<TextureResource> m_Textures;
+        std::vector<VK_Texture> m_Textures;
         std::vector<PassRenderTarget> m_PassRenderTargets;
 
         bool m_ResourcesInitialized = false;
+        bool m_ShadersReloaded = false;
         bool m_InsideRenderPass = false;
         bool m_SwapchainColorWritten = false;
 

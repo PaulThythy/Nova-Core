@@ -142,6 +142,42 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return false;
     }
 
+    bool VK_Shaders::BindSampledTexture(
+        const std::string& textureName,
+        const std::string& samplerName,
+        uint64_t imageView,
+        uint64_t sampler,
+        uint32_t imageLayout)
+    {
+        if (imageView == 0 || sampler == 0 || m_Renderer == nullptr)
+            return false;
+
+        const RHI::RHI_BindingInfo* texInfo = m_Reflection.FindBindingByName(textureName);
+        const RHI::RHI_BindingInfo* sampInfo = m_Reflection.FindBindingByName(samplerName);
+        if (!texInfo || !sampInfo)
+            return false;
+
+        const VkImageLayout layout = (imageLayout == 0)
+            ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            : static_cast<VkImageLayout>(imageLayout);
+
+        VkDescriptorImageInfo texII{};
+        texII.imageView = reinterpret_cast<VkImageView>(imageView);
+        texII.imageLayout = layout;
+        WriteDescriptor(
+            texInfo->m_Key.m_Set, texInfo->m_Key.m_Binding,
+            ToVkDescriptorType(texInfo->m_Kind), nullptr, &texII);
+
+        VkDescriptorImageInfo sampII{};
+        sampII.sampler = reinterpret_cast<VkSampler>(sampler);
+        WriteDescriptor(
+            sampInfo->m_Key.m_Set, sampInfo->m_Key.m_Binding,
+            ToVkDescriptorType(sampInfo->m_Kind), nullptr, &sampII);
+
+        return FindDescriptorSet(texInfo->m_Key.m_Set) != VK_NULL_HANDLE
+            && FindDescriptorSet(sampInfo->m_Key.m_Set) != VK_NULL_HANDLE;
+    }
+
     void VK_Shaders::Bind(void* apiContext) {
         if (!apiContext || m_Pipeline == VK_NULL_HANDLE) return;
         VkCommandBuffer cmd = static_cast<VkCommandBuffer>(apiContext);
@@ -218,21 +254,38 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const uint32_t frameIdx = m_Renderer->GetCurrentFrameInFlight();
         VK_GpuBufferPool& pool = m_Renderer->GetGpuBufferPool();
 
-        // FrameUniforms: one region per frame, addressed by its dynamic offset.
-        RHI::FrameUniforms frame{};
-        CopyParametersIntoStruct(m_Parameters, RHI::GetFrameLayout(), &frame);
-        pool.Update(m_Engine.m_Frame, &frame, sizeof frame, /*elementIndex*/ 0, frameIdx);
-        const VkDeviceSize frameOffsetThisFrame = static_cast<VkDeviceSize>(
-            pool.ResolveBinding(m_Engine.m_Frame, 0, frameIdx).m_Offset);
+        // Frame / MVP / Material: only touch engine buffers this shader actually reflects.
+        // Post-process passes that omit `nova` must not clobber the frame UBO after Scene —
+        // the GPU still reads that memory when executing earlier draws in the same CB.
+        const bool usesFrame = m_Reflection.FindBindingByName(RHI::EngineResourceName::Frame) != nullptr;
+        const bool usesMvp = m_Reflection.FindBindingByName(RHI::EngineResourceName::Mvp) != nullptr;
+        const bool usesMaterial = m_Reflection.FindBindingByName(RHI::EngineResourceName::Material) != nullptr;
 
-        // MVP / Material: one ring element per draw call this frame (auto-incrementing cursor).
-        RHI::MVP mvp{};
-        CopyParametersIntoStruct(m_Parameters, RHI::GetMvpLayout(), &mvp);
-        const VkDeviceSize mvpOffsetThisDraw = pool.WriteNextDynamicElement(m_Engine.m_Mvp, &mvp, sizeof mvp, frameIdx);
+        VkDeviceSize frameOffsetThisFrame = 0;
+        if (usesFrame) {
+            RHI::FrameUniforms frame{};
+            CopyParametersIntoStruct(m_Parameters, RHI::GetFrameLayout(), &frame);
+            pool.Update(m_Engine.m_Frame, &frame, sizeof frame, /*elementIndex*/ 0, frameIdx);
+            frameOffsetThisFrame = static_cast<VkDeviceSize>(
+                pool.ResolveBinding(m_Engine.m_Frame, 0, frameIdx).m_Offset);
+        } else if (m_Engine.m_Frame.IsValid()) {
+            frameOffsetThisFrame = static_cast<VkDeviceSize>(
+                pool.ResolveBinding(m_Engine.m_Frame, 0, frameIdx).m_Offset);
+        }
 
-        RHI::Material material{};
-        CopyParametersIntoStruct(m_Parameters, RHI::GetMaterialLayout(), &material);
-        const VkDeviceSize materialOffsetThisDraw = pool.WriteNextDynamicElement(m_Engine.m_Material, &material, sizeof material, frameIdx);
+        VkDeviceSize mvpOffsetThisDraw = 0;
+        if (usesMvp) {
+            RHI::MVP mvp{};
+            CopyParametersIntoStruct(m_Parameters, RHI::GetMvpLayout(), &mvp);
+            mvpOffsetThisDraw = pool.WriteNextDynamicElement(m_Engine.m_Mvp, &mvp, sizeof mvp, frameIdx);
+        }
+
+        VkDeviceSize materialOffsetThisDraw = 0;
+        if (usesMaterial) {
+            RHI::Material material{};
+            CopyParametersIntoStruct(m_Parameters, RHI::GetMaterialLayout(), &material);
+            materialOffsetThisDraw = pool.WriteNextDynamicElement(m_Engine.m_Material, &material, sizeof material, frameIdx);
+        }
 
         // Lights SSBO: App uploads the array; bind the current frame region.
         const VkDeviceSize lightsOffsetThisFrame = m_Engine.m_Lights.IsValid()

@@ -636,7 +636,20 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencil.depthTestEnable = entry.desc.m_DepthTest ? VK_TRUE : VK_FALSE;
         depthStencil.depthWriteEnable = entry.desc.m_DepthWrite ? VK_TRUE : VK_FALSE;
-        depthStencil.depthCompareOp = isFullscreen ? VK_COMPARE_OP_LESS_OR_EQUAL : VK_COMPARE_OP_LESS;
+        if (isFullscreen) {
+            depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        } else {
+            switch (entry.desc.m_DepthCompare) {
+                case RHI::RHI_DepthCompare::LessOrEqual:    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL; break;
+                case RHI::RHI_DepthCompare::Greater:         depthStencil.depthCompareOp = VK_COMPARE_OP_GREATER; break;
+                case RHI::RHI_DepthCompare::GreaterOrEqual:  depthStencil.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL; break;
+                case RHI::RHI_DepthCompare::Always:          depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS; break;
+                case RHI::RHI_DepthCompare::Never:           depthStencil.depthCompareOp = VK_COMPARE_OP_NEVER; break;
+                case RHI::RHI_DepthCompare::Equal:           depthStencil.depthCompareOp = VK_COMPARE_OP_EQUAL; break;
+                case RHI::RHI_DepthCompare::Less:
+                default:                                    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS; break;
+            }
+        }
 
         VkPipelineColorBlendAttachmentState blendAttachment{};
         blendAttachment.colorWriteMask =
@@ -644,12 +657,21 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         if (entry.desc.m_AlphaBlend) {
             blendAttachment.blendEnable = VK_TRUE;
-            blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-            blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+            if (entry.desc.m_AdditiveBlend) {
+                blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+                blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+                blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+                blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+                blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+                blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+            } else {
+                blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+                blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+                blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+                blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+                blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+                blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+            }
         }
 
         VkPipelineColorBlendStateCreateInfo blend{};
@@ -877,16 +899,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_PipelineCache.Destroy();
         m_Renderer = nullptr;
         m_Compiled = false;
+        m_ShadersReloaded = false;
     }
 
     void VK_RenderGraph::ReleaseImGuiTextures() {
-        for (auto& texture : m_Textures) {
-            if (texture.imguiTextureId == nullptr)
-                continue;
-            if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().BackendRendererUserData != nullptr)
-                ImGui_ImplVulkan_RemoveTexture(static_cast<VkDescriptorSet>(texture.imguiTextureId));
-            texture.imguiTextureId = nullptr;
-        }
+        for (auto& texture : m_Textures)
+            texture.UnregisterImGui();
     }
 
     VkFormat VK_RenderGraph::ToVkFormat(RHI::RHI_TextureFormat format) const {
@@ -913,7 +931,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_SceneHeight = 0;
 
         for (size_t i = 0; i < m_Data.m_Textures.size(); ++i) {
-            m_Textures[i].desc = m_Data.m_Textures[i];
+            m_Textures[i].GetGraphDesc() = m_Data.m_Textures[i];
             const auto& res = m_Data.m_Textures[i];
 
             if (res.m_IsSwapchain || res.m_Imported)
@@ -928,7 +946,20 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 m_SceneHeight = std::max(m_SceneHeight, h);
             }
 
-            if (!CreateTexture(m_Textures[i], w, h))
+            if (!m_Renderer)
+                return false;
+
+            const VkFormat format = IsDepthFormat(res.m_Desc.m_Format)
+                ? m_DepthFormat
+                : ToVkFormat(res.m_Desc.m_Format);
+
+            if (!m_Textures[i].CreateAsRenderTarget(
+                    m_Renderer->GetMemoryAllocator(),
+                    m_Renderer->GetDevice(),
+                    res.m_Desc,
+                    w,
+                    h,
+                    format))
                 return false;
         }
         return true;
@@ -936,170 +967,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_RenderGraph::DestroyTransientResources() {
         for (auto& tex : m_Textures)
-            DestroyTexture(tex);
+            tex.Release();
         m_Textures.clear();
-    }
-
-    bool VK_RenderGraph::CreateTexture(TextureResource& texture, uint32_t width, uint32_t height) {
-        if (!m_Renderer) return false;
-
-        const auto& desc = texture.desc.m_Desc;
-        const VkFormat format = IsDepthFormat(desc.m_Format) ? m_DepthFormat : ToVkFormat(desc.m_Format);
-        if (format == VK_FORMAT_UNDEFINED) return false;
-
-        const uint32_t layers = std::max(1u, desc.m_Layers);
-        const bool isArray = layers > 1;
-
-        VkImageUsageFlags usage = 0;
-        if (HasTextureUsage(desc.m_Usage, RHI::RHI_TextureUsage::ColorAttachment))
-            usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        if (HasTextureUsage(desc.m_Usage, RHI::RHI_TextureUsage::DepthAttachment))
-            usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        if (HasTextureUsage(desc.m_Usage, RHI::RHI_TextureUsage::Sampled))
-            usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-        if (HasTextureUsage(desc.m_Usage, RHI::RHI_TextureUsage::Storage))
-            usage |= VK_IMAGE_USAGE_STORAGE_BIT;
-
-        if (usage == 0)
-            usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent = { width, height, 1 };
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = layers;
-        imageInfo.format = format;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = usage;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-
-        if (!m_Renderer->GetMemoryAllocator().CreateImage(imageInfo, VK_MemoryLocation::GpuOnly, texture.image))
-            return false;
-
-        VkDevice device = m_Renderer->GetDevice();
-        const VkImageAspectFlags aspect = IsDepthFormat(desc.m_Format)
-            ? VK_IMAGE_ASPECT_DEPTH_BIT
-            : VK_IMAGE_ASPECT_COLOR_BIT;
-
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = texture.image.image;
-        viewInfo.viewType = isArray ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = format;
-        viewInfo.components = {
-            VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
-            VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY
-        };
-        viewInfo.subresourceRange.aspectMask = aspect;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = layers;
-
-        if (vkCreateImageView(device, &viewInfo, nullptr, &texture.view) != VK_SUCCESS)
-            return false;
-
-        texture.sampledView = texture.view;
-
-        // Per-layer 2D views for framebuffer attachments when using Texture2DArray.
-        if (isArray) {
-            texture.layerViews.resize(layers, VK_NULL_HANDLE);
-            for (uint32_t layer = 0; layer < layers; ++layer) {
-                VkImageViewCreateInfo layerViewInfo = viewInfo;
-                layerViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-                layerViewInfo.subresourceRange.baseArrayLayer = layer;
-                layerViewInfo.subresourceRange.layerCount = 1;
-                if (vkCreateImageView(device, &layerViewInfo, nullptr, &texture.layerViews[layer]) != VK_SUCCESS)
-                    return false;
-            }
-        }
-
-        // Depth sampled in ImGui: separate R→RGB view (single-layer only).
-        if (!isArray && IsDepthFormat(desc.m_Format) && HasTextureUsage(desc.m_Usage, RHI::RHI_TextureUsage::Sampled)
-            && !desc.m_ComparisonSampler) {
-            viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-            viewInfo.components.g = VK_COMPONENT_SWIZZLE_R;
-            viewInfo.components.b = VK_COMPONENT_SWIZZLE_R;
-            viewInfo.components.a = VK_COMPONENT_SWIZZLE_ONE;
-            if (vkCreateImageView(device, &viewInfo, nullptr, &texture.sampledView) != VK_SUCCESS)
-                return false;
-        }
-
-        if (HasTextureUsage(desc.m_Usage, RHI::RHI_TextureUsage::Sampled)) {
-            const bool isDepth = IsDepthFormat(desc.m_Format);
-            VkSamplerCreateInfo samplerInfo{};
-            samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-            samplerInfo.magFilter = (isDepth && !desc.m_ComparisonSampler) ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
-            samplerInfo.minFilter = (isDepth && !desc.m_ComparisonSampler) ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
-            samplerInfo.addressModeU = desc.m_ComparisonSampler
-                ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER
-                : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-            samplerInfo.addressModeV = samplerInfo.addressModeU;
-            samplerInfo.addressModeW = samplerInfo.addressModeU;
-            if (desc.m_ComparisonSampler) {
-                samplerInfo.compareEnable = VK_TRUE;
-                samplerInfo.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-                samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-            }
-
-            if (vkCreateSampler(device, &samplerInfo, nullptr, &texture.sampler) != VK_SUCCESS)
-                return false;
-
-            if (!isArray && !desc.m_ComparisonSampler) {
-                texture.imguiTextureId = ImGui_ImplVulkan_AddTexture(
-                    texture.sampler, texture.sampledView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            }
-        }
-
-        texture.state = RHI::RHI_ResourceState::Undefined;
-        return true;
-    }
-
-    void VK_RenderGraph::DestroyTexture(TextureResource& texture) {
-        if (!m_Renderer) return;
-        VkDevice device = m_Renderer->GetDevice();
-
-        if (texture.imguiTextureId != nullptr) {
-            if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().BackendRendererUserData != nullptr)
-                ImGui_ImplVulkan_RemoveTexture(static_cast<VkDescriptorSet>(texture.imguiTextureId));
-            texture.imguiTextureId = nullptr;
-        }
-
-        for (VkFramebuffer& fb : texture.layerFramebuffers) {
-            if (fb != VK_NULL_HANDLE) {
-                vkDestroyFramebuffer(device, fb, nullptr);
-                fb = VK_NULL_HANDLE;
-            }
-        }
-        texture.layerFramebuffers.clear();
-
-        for (VkImageView& lv : texture.layerViews) {
-            if (lv != VK_NULL_HANDLE) {
-                vkDestroyImageView(device, lv, nullptr);
-                lv = VK_NULL_HANDLE;
-            }
-        }
-        texture.layerViews.clear();
-
-        if (texture.framebuffer != VK_NULL_HANDLE) {
-            vkDestroyFramebuffer(device, texture.framebuffer, nullptr);
-            texture.framebuffer = VK_NULL_HANDLE;
-        }
-        if (texture.sampler != VK_NULL_HANDLE) {
-            vkDestroySampler(device, texture.sampler, nullptr);
-            texture.sampler = VK_NULL_HANDLE;
-        }
-        if (texture.sampledView != VK_NULL_HANDLE && texture.sampledView != texture.view) {
-            vkDestroyImageView(device, texture.sampledView, nullptr);
-            texture.sampledView = VK_NULL_HANDLE;
-        }
-        if (texture.view != VK_NULL_HANDLE) {
-            vkDestroyImageView(device, texture.view, nullptr);
-            texture.view = VK_NULL_HANDLE;
-        }
-        texture.sampledView = VK_NULL_HANDLE;
-        m_Renderer->GetMemoryAllocator().DestroyImage(texture.image);
     }
 
     void VK_RenderGraph::DestroyPassRenderTargets() {
@@ -1142,22 +1011,40 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             texRes.m_Desc.m_Height = height;
         }
 
-        return CreateTransientResources();
+        if (!CreateTransientResources())
+            return false;
+
+        return true;
     }
 
     bool VK_RenderGraph::BindEngineShadowMaps(RHI::RHI_TextureHandle shadowMaps) {
         if (!shadowMaps.IsValid() || shadowMaps.m_Index >= m_Textures.size())
             return false;
-        TextureResource& tex = m_Textures[shadowMaps.m_Index];
-        if (tex.view == VK_NULL_HANDLE || tex.sampler == VK_NULL_HANDLE)
+        VK_Texture& tex = m_Textures[shadowMaps.m_Index];
+        if (tex.GetImageView() == VK_NULL_HANDLE || tex.GetSampler() == VK_NULL_HANDLE)
             return false;
-        return m_PipelineCache.BindEngineShadowMaps(tex.view, tex.sampler);
+        return m_PipelineCache.BindEngineShadowMaps(tex.GetImageView(), tex.GetSampler());
+    }
+
+    bool VK_RenderGraph::GetSampledTextureNativeHandles(RHI::RHI_TextureHandle textureHandle, uint64_t& outImageView, uint64_t& outSampler) const {
+        outImageView = 0;
+        outSampler = 0;
+        if (!textureHandle.IsValid() || textureHandle.m_Index >= m_Textures.size())
+            return false;
+
+        const VK_Texture& tex = m_Textures[textureHandle.m_Index];
+        if (tex.GetSampledView() == VK_NULL_HANDLE || tex.GetSampler() == VK_NULL_HANDLE)
+            return false;
+
+        outImageView = reinterpret_cast<uint64_t>(tex.GetSampledView());
+        outSampler = reinterpret_cast<uint64_t>(tex.GetSampler());
+        return true;
     }
 
     void* VK_RenderGraph::GetTextureImGuiID(RHI::RHI_TextureHandle handle) const {
         if (!handle.IsValid() || handle.m_Index >= m_Textures.size())
             return nullptr;
-        return m_Textures[handle.m_Index].imguiTextureId;
+        return m_Textures[handle.m_Index].GetImGuiID();
     }
 
     VkCommandBuffer VK_RenderGraph::GetCurrentCommandBuffer() const {
@@ -1197,7 +1084,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     bool VK_RenderGraph::ReloadChangedShaders() {
-        return m_PipelineCache.ReloadChangedShaders();
+        const bool changed = m_PipelineCache.ReloadChangedShaders();
+        if (changed)
+            m_ShadersReloaded = true;
+        return changed;
     }
 
     bool VK_RenderGraph::EnsurePassRenderTarget(PassRenderTarget& rt, const RHI::RHI_RenderGraphPassDesc& pass) {
@@ -1210,8 +1100,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         for (RHI::RHI_TextureHandle handle : pass.m_WriteTextures) {
             if (!handle.IsValid() || handle.m_Index >= m_Textures.size())
                 continue;
-            const auto& texDesc = m_Textures[handle.m_Index].desc.m_Desc;
-            if (m_Textures[handle.m_Index].desc.m_IsSwapchain)
+            const auto& graphDesc = m_Textures[handle.m_Index].GetGraphDesc();
+            const auto& texDesc = graphDesc.m_Desc;
+            if (graphDesc.m_IsSwapchain)
                 continue;
 
             if (IsDepthFormat(texDesc.m_Format))
@@ -1225,26 +1116,27 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (rt.colorAttachments.empty() && !rt.depthAttachment.IsValid())
             return true;
 
-        const bool readsColor = [&]() {
-            for (RHI::RHI_TextureHandle h : pass.m_ReadTextures) {
-                if (!h.IsValid() || h.m_Index >= m_Textures.size()) continue;
-                if (!IsDepthFormat(m_Textures[h.m_Index].desc.m_Desc.m_Format))
+        // LOAD only when the *written* attachment is also declared as a read.
+        // Sampling a different color texture (post-process) must not force LOAD on the output.
+        const bool loadsWrittenColor = [&]() {
+            for (RHI::RHI_TextureHandle written : rt.colorAttachments) {
+                if (std::find(pass.m_ReadTextures.begin(), pass.m_ReadTextures.end(), written)
+                    != pass.m_ReadTextures.end())
                     return true;
             }
             return false;
         }();
 
-        const bool readsDepth = [&]() {
-            for (RHI::RHI_TextureHandle h : pass.m_ReadTextures) {
-                if (!h.IsValid() || h.m_Index >= m_Textures.size()) continue;
-                if (IsDepthFormat(m_Textures[h.m_Index].desc.m_Desc.m_Format))
-                    return true;
-            }
-            return false;
-        }();
+        const bool loadsWrittenDepth = rt.depthAttachment.IsValid()
+            && std::find(pass.m_ReadTextures.begin(), pass.m_ReadTextures.end(), rt.depthAttachment)
+                != pass.m_ReadTextures.end();
 
-        const VkAttachmentLoadOp colorLoad = readsColor ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-        const VkAttachmentLoadOp depthLoad = readsDepth ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+        const VkAttachmentLoadOp colorLoad = loadsWrittenColor
+            ? VK_ATTACHMENT_LOAD_OP_LOAD
+            : VK_ATTACHMENT_LOAD_OP_CLEAR;
+        const VkAttachmentLoadOp depthLoad = loadsWrittenDepth
+            ? VK_ATTACHMENT_LOAD_OP_LOAD
+            : VK_ATTACHMENT_LOAD_OP_CLEAR;
 
         if (rt.depthOnly) {
             if (rt.renderPassClear == VK_NULL_HANDLE)
@@ -1252,27 +1144,30 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             if (rt.renderPassLoad == VK_NULL_HANDLE)
                 rt.renderPassLoad = CreateDepthOnlyRenderPass(VK_ATTACHMENT_LOAD_OP_LOAD);
 
-            TextureResource& depthTex = m_Textures[rt.depthAttachment.m_Index];
-            const uint32_t layers = std::max(1u, depthTex.desc.m_Desc.m_Layers);
-            if (depthTex.layerFramebuffers.size() != layers) {
-                for (VkFramebuffer fb : depthTex.layerFramebuffers) {
+            VK_Texture& depthTex = m_Textures[rt.depthAttachment.m_Index];
+            const auto& depthDesc = depthTex.GetGraphDesc().m_Desc;
+            const uint32_t layers = std::max(1u, depthDesc.m_Layers);
+            auto& layerFbs = depthTex.GetLayerFramebuffers();
+            const auto& layerViews = depthTex.GetLayerViews();
+            if (layerFbs.size() != layers) {
+                for (VkFramebuffer fb : layerFbs) {
                     if (fb != VK_NULL_HANDLE)
                         vkDestroyFramebuffer(m_Renderer->GetDevice(), fb, nullptr);
                 }
-                depthTex.layerFramebuffers.assign(layers, VK_NULL_HANDLE);
+                layerFbs.assign(layers, VK_NULL_HANDLE);
                 for (uint32_t layer = 0; layer < layers; ++layer) {
-                    VkImageView attachView = (layers > 1 && layer < depthTex.layerViews.size())
-                        ? depthTex.layerViews[layer]
-                        : depthTex.view;
+                    VkImageView attachView = (layers > 1 && layer < layerViews.size())
+                        ? layerViews[layer]
+                        : depthTex.GetImageView();
                     VkFramebufferCreateInfo fbInfo{};
                     fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
                     fbInfo.renderPass = rt.renderPassClear;
                     fbInfo.attachmentCount = 1;
                     fbInfo.pAttachments = &attachView;
-                    fbInfo.width = depthTex.desc.m_Desc.m_Width;
-                    fbInfo.height = depthTex.desc.m_Desc.m_Height;
+                    fbInfo.width = depthDesc.m_Width;
+                    fbInfo.height = depthDesc.m_Height;
                     fbInfo.layers = 1;
-                    vkCreateFramebuffer(m_Renderer->GetDevice(), &fbInfo, nullptr, &depthTex.layerFramebuffers[layer]);
+                    vkCreateFramebuffer(m_Renderer->GetDevice(), &fbInfo, nullptr, &layerFbs[layer]);
                 }
             }
             return true;
@@ -1280,38 +1175,42 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkFormat colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
         if (!rt.colorAttachments.empty()) {
-            const auto& first = m_Textures[rt.colorAttachments[0].m_Index].desc.m_Desc;
+            const auto& first = m_Textures[rt.colorAttachments[0].m_Index].GetGraphDesc().m_Desc;
             colorFormat = ToVkFormat(first.m_Format);
         }
 
         if (rt.renderPassClear == VK_NULL_HANDLE) {
             rt.renderPassClear = CreateColorDepthRenderPass(
                 colorFormat, colorLoad, depthLoad, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            if (readsColor) {
+            if (loadsWrittenColor || loadsWrittenDepth) {
                 rt.renderPassLoad = CreateColorDepthRenderPass(
-                    colorFormat, VK_ATTACHMENT_LOAD_OP_LOAD, depthLoad,
+                    colorFormat, VK_ATTACHMENT_LOAD_OP_LOAD,
+                    loadsWrittenDepth ? VK_ATTACHMENT_LOAD_OP_LOAD : depthLoad,
                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             }
         }
 
         if (!rt.colorAttachments.empty() && rt.colorAttachments[0].IsValid()) {
-            TextureResource& colorTex = m_Textures[rt.colorAttachments[0].m_Index];
-            if (colorTex.framebuffer == VK_NULL_HANDLE) {
+            VK_Texture& colorTex = m_Textures[rt.colorAttachments[0].m_Index];
+            if (colorTex.GetFramebuffer() == VK_NULL_HANDLE) {
                 std::vector<VkImageView> views;
-                views.push_back(colorTex.view);
+                views.push_back(colorTex.GetImageView());
                 if (rt.depthAttachment.IsValid())
-                    views.push_back(m_Textures[rt.depthAttachment.m_Index].view);
+                    views.push_back(m_Textures[rt.depthAttachment.m_Index].GetImageView());
 
+                const auto& colorDesc = colorTex.GetGraphDesc().m_Desc;
                 VkFramebufferCreateInfo fbInfo{};
                 fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
                 fbInfo.renderPass = rt.renderPassClear;
                 fbInfo.attachmentCount = static_cast<uint32_t>(views.size());
                 fbInfo.pAttachments = views.data();
-                fbInfo.width = colorTex.desc.m_Desc.m_Width;
-                fbInfo.height = colorTex.desc.m_Desc.m_Height;
+                fbInfo.width = colorDesc.m_Width;
+                fbInfo.height = colorDesc.m_Height;
                 fbInfo.layers = 1;
 
-                vkCreateFramebuffer(m_Renderer->GetDevice(), &fbInfo, nullptr, &colorTex.framebuffer);
+                VkFramebuffer fb = VK_NULL_HANDLE;
+                vkCreateFramebuffer(m_Renderer->GetDevice(), &fbInfo, nullptr, &fb);
+                colorTex.SetFramebuffer(fb);
             }
         }
 
@@ -1337,7 +1236,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             uint32_t width = m_SceneWidth;
             uint32_t height = m_SceneHeight;
             if (rt.depthAttachment.IsValid()) {
-                const auto& d = m_Textures[rt.depthAttachment.m_Index].desc.m_Desc;
+                const auto& d = m_Textures[rt.depthAttachment.m_Index].GetGraphDesc().m_Desc;
                 width = d.m_Width;
                 height = d.m_Height;
             }
@@ -1348,8 +1247,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
             for (RHI::RHI_TextureHandle handle : pass.m_WriteTextures) {
                 if (!handle.IsValid() || handle.m_Index >= m_Textures.size()) continue;
-                TextureResource& tex = m_Textures[handle.m_Index];
-                if (!HasTextureUsage(tex.desc.m_Desc.m_Usage, RHI::RHI_TextureUsage::Sampled))
+                VK_Texture& tex = m_Textures[handle.m_Index];
+                if (!HasTextureUsage(tex.GetGraphDesc().m_Desc.m_Usage, RHI::RHI_TextureUsage::Sampled))
                     continue;
                 TransitionTextureForSampling(cmd, tex);
             }
@@ -1377,10 +1276,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             }
         } else if (!rt.colorAttachments.empty()) {
             const RHI::RHI_TextureHandle colorHandle = rt.colorAttachments[0];
-            TextureResource& colorTex = m_Textures[colorHandle.m_Index];
-            width = colorTex.desc.m_Desc.m_Width;
-            height = colorTex.desc.m_Desc.m_Height;
-            framebuffer = colorTex.framebuffer;
+            VK_Texture& colorTex = m_Textures[colorHandle.m_Index];
+            const auto& colorDesc = colorTex.GetGraphDesc().m_Desc;
+            width = colorDesc.m_Width;
+            height = colorDesc.m_Height;
+            framebuffer = colorTex.GetFramebuffer();
 
             const bool readsColor = std::find(pass.m_ReadTextures.begin(), pass.m_ReadTextures.end(), colorHandle)
                 != pass.m_ReadTextures.end();
@@ -1439,9 +1339,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
             for (RHI::RHI_TextureHandle handle : pass.m_WriteTextures) {
                 if (!handle.IsValid() || handle.m_Index >= m_Textures.size()) continue;
-                TextureResource& tex = m_Textures[handle.m_Index];
-                if (tex.desc.m_IsSwapchain) continue;
-                if (!HasTextureUsage(tex.desc.m_Desc.m_Usage, RHI::RHI_TextureUsage::Sampled))
+                VK_Texture& tex = m_Textures[handle.m_Index];
+                if (tex.GetGraphDesc().m_IsSwapchain) continue;
+                if (!HasTextureUsage(tex.GetGraphDesc().m_Desc.m_Usage, RHI::RHI_TextureUsage::Sampled))
                     continue;
                 if (!isLastWriter(handle))
                     continue;
@@ -1455,8 +1355,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     void VK_RenderGraph::PassContext::BeginDepthLayer(RHI::RHI_TextureHandle depth, uint32_t layer, bool clear) {
         if (!m_Rt || !depth.IsValid() || depth.m_Index >= m_Graph.m_Textures.size())
             return;
-        TextureResource& tex = m_Graph.m_Textures[depth.m_Index];
-        if (layer >= tex.layerFramebuffers.size())
+        VK_Texture& tex = m_Graph.m_Textures[depth.m_Index];
+        const auto& layerFbs = tex.GetLayerFramebuffers();
+        if (layer >= layerFbs.size())
             return;
 
         VkCommandBuffer cmd = m_Graph.GetCurrentCommandBuffer();
@@ -1473,21 +1374,22 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (rp == VK_NULL_HANDLE)
             return;
 
+        const auto& depthDesc = tex.GetGraphDesc().m_Desc;
         VkClearValue clearValue{};
         clearValue.depthStencil = { 1.0f, 0 };
 
         VkRenderPassBeginInfo rpBegin{};
         rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         rpBegin.renderPass = rp;
-        rpBegin.framebuffer = tex.layerFramebuffers[layer];
-        rpBegin.renderArea = { { 0, 0 }, { tex.desc.m_Desc.m_Width, tex.desc.m_Desc.m_Height } };
+        rpBegin.framebuffer = layerFbs[layer];
+        rpBegin.renderArea = { { 0, 0 }, { depthDesc.m_Width, depthDesc.m_Height } };
         rpBegin.clearValueCount = 1;
         rpBegin.pClearValues = &clearValue;
 
         vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
         m_Graph.m_InsideRenderPass = true;
-        m_Width = tex.desc.m_Desc.m_Width;
-        m_Height = tex.desc.m_Desc.m_Height;
+        m_Width = depthDesc.m_Width;
+        m_Height = depthDesc.m_Height;
         m_Graph.SetViewportScissor(cmd, m_Width, m_Height);
     }
 
@@ -1499,11 +1401,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_Graph.m_InsideRenderPass = false;
     }
 
-    void VK_RenderGraph::TransitionTextureForSampling(VkCommandBuffer cmd, TextureResource& texture) {
-        if (texture.image.image == VK_NULL_HANDLE) return;
+    void VK_RenderGraph::TransitionTextureForSampling(VkCommandBuffer cmd, VK_Texture& texture) {
+        if (texture.GetImage() == VK_NULL_HANDLE) return;
 
-        const bool isDepth = IsDepthFormat(texture.desc.m_Desc.m_Format);
-        const uint32_t layers = std::max(1u, texture.desc.m_Desc.m_Layers);
+        const auto& desc = texture.GetGraphDesc().m_Desc;
+        const bool isDepth = IsDepthFormat(desc.m_Format);
+        const uint32_t layers = std::max(1u, desc.m_Layers);
 
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1517,7 +1420,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = texture.image.image;
+        barrier.image = texture.GetImage();
         barrier.subresourceRange.aspectMask = isDepth
             ? VK_IMAGE_ASPECT_DEPTH_BIT
             : VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1534,7 +1437,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             0, 0, nullptr, 0, nullptr, 1, &barrier);
 
-        texture.state = RHI::RHI_ResourceState::ShaderRead;
+        texture.SetResourceState(RHI::RHI_ResourceState::ShaderRead);
     }
 
     void VK_RenderGraph::SetViewportScissor(VkCommandBuffer cmd, uint32_t width, uint32_t height) {

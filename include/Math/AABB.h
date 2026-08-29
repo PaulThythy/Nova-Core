@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 
 #include "Api.h"
+#include "Math/Ray.h"
 #include "Math/Vertex.h"
 
 namespace Nova::Core::Renderer::RHI {
@@ -27,6 +28,10 @@ namespace Nova::Core::Math {
 		glm::vec3 GetExtents() const;
 		void Expand(const glm::vec3& point);
 		void Merge(const AABB& other);
+
+		/** Slab test. outTMin / outTMax are entry/exit distances along the ray. */
+		bool IntersectRay(const Ray& ray, float& outTMin, float& outTMax) const;
+		bool IntersectRay(const Ray& ray) const;
 	};
 
 	struct NV_API AABBNode {
@@ -38,6 +43,13 @@ namespace Nova::Core::Math {
 		bool IsLeaf() const { return m_LeftChild < 0 && m_RightChild < 0; }
 	};
 
+	struct NV_API AABBTreeHit {
+		float m_T = 0.0f;
+		glm::vec3 m_Point{ 0.0f };
+		glm::vec3 m_Normal{ 0.0f };
+		uint32_t m_TriangleIndex = 0;
+	};
+
 	class NV_API AABBTree {
 	public:
 		void Build(const std::vector<Vertex>& vertices,
@@ -47,6 +59,16 @@ namespace Nova::Core::Math {
 		const std::vector<AABBNode>& GetNodes() const { return m_Nodes; }
 		bool IsBuilt() const { return !m_Nodes.empty(); }
 
+		/**
+		 * Closest triangle hit in local mesh space.
+		 * Requires the same vertices/indices used to Build().
+		 */
+		bool Raycast(const Ray& ray,
+		             const std::vector<Vertex>& vertices,
+		             const std::vector<uint32_t>& indices,
+		             AABBTreeHit& outHit,
+		             float maxDistance = 1e30f) const;
+
 	private:
 		void BuildNode(int nodeIndex,
 		               std::vector<uint32_t>& triangleIndices,
@@ -54,6 +76,13 @@ namespace Nova::Core::Math {
 		               uint32_t maxDepth,
 		               const std::vector<Vertex>& vertices,
 		               const std::vector<uint32_t>& indices);
+
+		bool RaycastNode(int nodeIndex,
+		                 const Ray& ray,
+		                 const std::vector<Vertex>& vertices,
+		                 const std::vector<uint32_t>& indices,
+		                 AABBTreeHit& outHit,
+		                 float& closestT) const;
 
 		static AABB ComputeBounds(const std::vector<uint32_t>& triangleIndices,
 		                          const std::vector<Vertex>& vertices,

@@ -83,6 +83,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             const VkDescriptorBufferInfo* bufferInfo,
             const VkDescriptorImageInfo* imageInfo);
 
+        bool BindSampledTexture(
+            const std::string& textureName,
+            const std::string& samplerName,
+            uint64_t imageView,
+            uint64_t sampler,
+            uint32_t imageLayout = 0) override;
+
         VkPipeline GetPipeline() const { return m_Pipeline; }
         VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
         bool IsValid() const { return m_Pipeline != VK_NULL_HANDLE && m_PipelineLayout != VK_NULL_HANDLE; }
