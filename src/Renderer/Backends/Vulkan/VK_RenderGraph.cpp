@@ -610,7 +610,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkPipelineRasterizationStateCreateInfo raster{};
         raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        raster.polygonMode = VK_POLYGON_MODE_FILL;
+        switch (entry.desc.m_PolygonMode) {
+            case RHI::RHI_PolygonMode::Line:  raster.polygonMode = VK_POLYGON_MODE_LINE; break;
+            case RHI::RHI_PolygonMode::Fill:
+            default:                            raster.polygonMode = VK_POLYGON_MODE_FILL; break;
+        }
         switch (entry.desc.m_CullMode) {
             case RHI::RHI_CullMode::None:  raster.cullMode = VK_CULL_MODE_NONE; break;
             case RHI::RHI_CullMode::Front: raster.cullMode = VK_CULL_MODE_FRONT_BIT; break;

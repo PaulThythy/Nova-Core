@@ -340,6 +340,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         }
 
         VkPhysicalDeviceFeatures features{};
+        features.fillModeNonSolid = VK_TRUE;
 
         VkDeviceCreateInfo dci{};
         dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
