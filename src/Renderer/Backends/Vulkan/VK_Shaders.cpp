@@ -1,5 +1,6 @@
 #include "Renderer/Backends/Vulkan/VK_Shaders.h"
 #include "Renderer/Backends/Vulkan/VK_Renderer.h"
+#include "Renderer/Backends/Vulkan/VK_Common.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
 #include "Core/Log.h"
 
@@ -206,7 +207,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Shaders::BindDescriptorSets(VkCommandBuffer cmd,
-        VkDeviceSize frameDynamicOffset, VkDeviceSize sceneDynamicOffset,
+        VkDeviceSize sceneDynamicOffset,
         VkDeviceSize mvpDynamicOffset, VkDeviceSize materialDynamicOffset,
         VkDeviceSize lightsDynamicOffset)
     {
@@ -217,7 +218,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // descriptor in the set, in ascending binding order.
         struct EngineDynamic { const char* name; VkDeviceSize offset; };
         const EngineDynamic engineDynamics[] = {
-            { RHI::EngineResourceName::Frame,    frameDynamicOffset },
             { RHI::EngineResourceName::Scene,    sceneDynamicOffset },
             { RHI::EngineResourceName::Mvp,      mvpDynamicOffset },
             { RHI::EngineResourceName::Material, materialDynamicOffset },
@@ -256,25 +256,24 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const uint32_t frameIdx = m_Renderer->GetCurrentFrameInFlight();
         VK_GpuBufferPool& pool = m_Renderer->GetGpuBufferPool();
 
-        // Frame / MVP / Material: only touch engine buffers this shader actually reflects.
-        // Post-process passes that omit `nova` must not clobber the frame UBO after Scene —
+        // FrameUniforms: push constants when the linked program reflects them.
+        if (m_Reflection.m_PushConstants && m_Reflection.m_PushConstants->m_SizeBytes > 0) {
+            RHI::FrameUniforms frame{};
+            CopyParametersIntoStruct(m_Parameters, RHI::GetFrameLayout(), &frame);
+            const uint32_t pushSize = static_cast<uint32_t>(std::min(
+                m_Reflection.m_PushConstants->m_SizeBytes, sizeof(frame)));
+            VkShaderStageFlags stages = ToVkStageFlags(m_Reflection.m_PushConstants->m_Stages);
+            if (stages == 0)
+                stages = VK_SHADER_STAGE_ALL_GRAPHICS;
+            vkCmdPushConstants(cmd, m_PipelineLayout, stages, 0, pushSize, &frame);
+        }
+
+        // Scene / MVP / Material: only touch engine buffers this shader actually reflects.
+        // Post-process passes that omit `nova` must not clobber shared UBOs after Scene —
         // the GPU still reads that memory when executing earlier draws in the same CB.
-        const bool usesFrame = m_Reflection.FindBindingByName(RHI::EngineResourceName::Frame) != nullptr;
         const bool usesScene = m_Reflection.FindBindingByName(RHI::EngineResourceName::Scene) != nullptr;
         const bool usesMvp = m_Reflection.FindBindingByName(RHI::EngineResourceName::Mvp) != nullptr;
         const bool usesMaterial = m_Reflection.FindBindingByName(RHI::EngineResourceName::Material) != nullptr;
-
-        VkDeviceSize frameOffsetThisFrame = 0;
-        if (usesFrame) {
-            RHI::FrameUniforms frame{};
-            CopyParametersIntoStruct(m_Parameters, RHI::GetFrameLayout(), &frame);
-            pool.Update(m_Engine.m_Frame, &frame, sizeof frame, /*elementIndex*/ 0, frameIdx);
-            frameOffsetThisFrame = static_cast<VkDeviceSize>(
-                pool.ResolveBinding(m_Engine.m_Frame, 0, frameIdx).m_Offset);
-        } else if (m_Engine.m_Frame.IsValid()) {
-            frameOffsetThisFrame = static_cast<VkDeviceSize>(
-                pool.ResolveBinding(m_Engine.m_Frame, 0, frameIdx).m_Offset);
-        }
 
         VkDeviceSize sceneOffsetThisFrame = 0;
         if (usesScene) {
@@ -307,7 +306,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             ? static_cast<VkDeviceSize>(pool.ResolveBinding(m_Engine.m_Lights, 0, frameIdx).m_Offset)
             : 0;
 
-        BindDescriptorSets(cmd, frameOffsetThisFrame, sceneOffsetThisFrame, mvpOffsetThisDraw, materialOffsetThisDraw, lightsOffsetThisFrame);
+        BindDescriptorSets(cmd, sceneOffsetThisFrame, mvpOffsetThisDraw, materialOffsetThisDraw, lightsOffsetThisFrame);
     }
 
     void* VK_Shaders::GetNativeHandle() const {

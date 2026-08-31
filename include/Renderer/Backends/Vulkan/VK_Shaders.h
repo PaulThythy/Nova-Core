@@ -61,9 +61,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void SetPipeline(VkPipeline pipeline, VkPipelineLayout layout);
 
         /**
-         * Engine `ConstantBuffer<T>` handles (`ParameterBlock<NovaEngine> nova;`: frame/mvp/material)
-         * + the descriptor sets to bind. `descriptorSets` lists every descriptor set allocated for the
-         * pipeline as (set index, set) pairs; the set indices and bindings come from Slang reflection.
+         * Engine `ConstantBuffer<T>` handles (`ParameterBlock<NovaEngine> nova;`: scene/mvp/material/lights)
+         * + the descriptor sets to bind. `FrameUniforms` is pushed via vkCmdPushConstants (not a buffer).
+         * `descriptorSets` lists every descriptor set allocated for the pipeline as (set index, set) pairs;
+         * the set indices and bindings come from Slang reflection.
          * Per-frame/per-draw regions are resolved lazily every `ApplyParameters` call through `renderer`'s
          * GPU buffer pool — this class stores no buffer/stride/offset bookkeeping of its own.
          */
@@ -99,7 +100,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         /** Bind all descriptor sets, supplying dynamic offsets in reflection (set, binding) order. */
         void BindDescriptorSets(VkCommandBuffer cmd,
-            VkDeviceSize frameDynamicOffset, VkDeviceSize sceneDynamicOffset,
+            VkDeviceSize sceneDynamicOffset,
             VkDeviceSize mvpDynamicOffset, VkDeviceSize materialDynamicOffset,
             VkDeviceSize lightsDynamicOffset);
         /** Resolve the descriptor set allocated for a given reflection set index (VK_NULL_HANDLE if none). */

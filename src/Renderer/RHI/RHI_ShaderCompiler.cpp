@@ -386,6 +386,26 @@ namespace Nova::Core::Renderer::RHI {
             auto* fieldTypeLayout = field->getTypeLayout();
             auto* fieldType = field->getType();
 
+            // Push constants are not descriptor bindings — record size/stages and skip.
+            if (fieldTypeLayout &&
+                fieldTypeLayout->getParameterCategory() == slang::ParameterCategory::PushConstantBuffer)
+            {
+                size_t size = fieldTypeLayout->getSize(slang::ParameterCategory::Uniform);
+                if (size == SLANG_UNKNOWN_SIZE || size == SLANG_UNBOUNDED_SIZE)
+                    size = fieldTypeLayout->getSize();
+                if ((size == SLANG_UNKNOWN_SIZE || size == SLANG_UNBOUNDED_SIZE) && fieldTypeLayout->getElementTypeLayout())
+                    size = fieldTypeLayout->getElementTypeLayout()->getSize(slang::ParameterCategory::Uniform);
+                if (size != SLANG_UNKNOWN_SIZE && size != SLANG_UNBOUNDED_SIZE && size > 0) {
+                    if (!out.m_PushConstants) {
+                        out.m_PushConstants = RHI_PushConstantInfo{ size, stageMask };
+                    } else {
+                        out.m_PushConstants->m_SizeBytes = std::max(out.m_PushConstants->m_SizeBytes, size);
+                        out.m_PushConstants->m_Stages |= stageMask;
+                    }
+                }
+                continue;
+            }
+
             // Slang reflection uses binding index + binding space for register(set)/binding.
             uint32_t binding = 0;
             uint32_t set = 0;

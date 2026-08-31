@@ -30,8 +30,8 @@ namespace Nova::Core::Renderer::RHI {
     // Stable reflection names for the engine resources declared in NovaUniforms.slang
     // (`ParameterBlock<NovaEngine> nova;`). The descriptor set and binding for each are
     // assigned by Slang reflection and looked up by these names at runtime.
+    // `frame` is a push constant (not a descriptor) — see FrameUniforms below.
     namespace EngineResourceName {
-        inline constexpr const char* Frame         = "nova.frame";
         inline constexpr const char* Scene         = "nova.scene";
         inline constexpr const char* Mvp           = "nova.mvp";
         inline constexpr const char* Material      = "nova.material";
@@ -40,7 +40,11 @@ namespace Nova::Core::Renderer::RHI {
         inline constexpr const char* ShadowSampler = "nova.shadowSampler";
     }
 
-    /** Per-frame globals (time, resolution, inputs). Uploaded by Nova-Core every frame. */
+    /**
+     * Per-frame globals (time, resolution, inputs). Vulkan push constants (std430 layout).
+     * Uploaded via vkCmdPushConstants every ApplyParameters when the shader reflects them.
+     * Must stay within the Vulkan minimum maxPushConstantsSize (128 bytes).
+     */
     struct NV_API FrameUniforms {
         alignas(16) glm::vec3 m_Resolution{ 0.0f, 0.0f, 0.0f };
         alignas(4)  float     m_PadAfterRes{ 0.0f };
@@ -52,6 +56,7 @@ namespace Nova::Core::Renderer::RHI {
         alignas(16) glm::vec4 m_Mouse{ 0.0f, 0.0f, 0.0f, 0.0f };
         alignas(16) glm::vec4 m_Date{ 0.0f, 0.0f, 0.0f, 0.0f };
     };
+    static_assert(sizeof(FrameUniforms) <= 128, "FrameUniforms exceeds Vulkan min maxPushConstantsSize");
 
     /** Scene-level data (camera, light count). Set by the app via shader SetParameter. */
     struct NV_API SceneUniforms {
@@ -127,23 +132,22 @@ namespace Nova::Core::Renderer::RHI {
 
     /**
      * C++ mirror of `ParameterBlock<NovaEngine> nova;` (NovaUniforms.slang): one GPU buffer handle
-     * per buffer field of `NovaEngine`. Shadow map texture/sampler are render-graph resources bound
-     * by reflection name after texture creation.
+     * per buffer field of `NovaEngine`. `FrameUniforms` is a push constant (not a descriptor
+     * buffer). Shadow map texture/sampler are render-graph resources bound by reflection name
+     * after texture creation.
      *
-     * `m_Frame` / `m_Scene` hold a single value (one region per frame-in-flight). `m_Mvp` and
-     * `m_Material` are arrays (one element per draw call this frame) — see MAX_MODEL_DRAWS in
-     * VK_PipelineCache. `m_Lights` is a StructuredBuffer of up to MAX_LIGHTS elements.
+     * `m_Scene` holds a single value (one region per frame-in-flight). `m_Mvp` and `m_Material`
+     * are arrays (one element per draw call this frame) — see MAX_MODEL_DRAWS in VK_PipelineCache.
+     * `m_Lights` is a StructuredBuffer of up to MAX_LIGHTS elements.
      */
     struct NV_API RHI_EngineParameterBlock {
-        RHI_GpuBufferHandle m_Frame;    // ConstantBuffer<FrameUniforms> frame;
         RHI_GpuBufferHandle m_Scene;    // ConstantBuffer<SceneUniforms> scene;
         RHI_GpuBufferHandle m_Mvp;      // ConstantBuffer<MVP> mvp;
         RHI_GpuBufferHandle m_Material; // ConstantBuffer<Material> material;
         RHI_GpuBufferHandle m_Lights;   // StructuredBuffer<LightGPU> lights;
 
         bool IsValid() const {
-            return m_Frame.IsValid() && m_Scene.IsValid()
-                && m_Mvp.IsValid() && m_Material.IsValid() && m_Lights.IsValid();
+            return m_Scene.IsValid() && m_Mvp.IsValid() && m_Material.IsValid() && m_Lights.IsValid();
         }
     };
 

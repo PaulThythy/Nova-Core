@@ -39,7 +39,7 @@ namespace Nova::Core::Renderer::RHI {
         RHI_ResourceKind m_Kind = RHI_ResourceKind::Unknown;
         uint32_t m_ArrayCount = 1;              // 1 for non-arrays; 0 can mean unknown/runtime sized
         size_t m_ByteSizeIfKnown = 0;           // for constant buffers / structured buffers when reflectable
-        std::string m_FullName;                 // e.g. "nova.frame" or "user.albedo"
+        std::string m_FullName;                 // e.g. "nova.scene" or "user.albedo"
         RHI_ShaderStageMask m_Stages = RHI_ShaderStageMask::None;
         bool m_IsDynamicUniformBuffer = false;  // Vulkan: descriptorType = UNIFORM_BUFFER_DYNAMIC
     };
@@ -59,13 +59,13 @@ namespace Nova::Core::Renderer::RHI {
         std::optional<RHI_PushConstantInfo> m_PushConstants;
 
         // Maps a stable reflection name to a binding key.
-        // Convention: we use dot-separated paths, e.g. "nova.frame", "user.myCBuffer".
+        // Convention: we use dot-separated paths, e.g. "nova.scene", "user.myCBuffer".
         std::unordered_map<std::string, RHI_BindingKey> m_NameToBinding;
 
         const RHI_DescriptorSetLayoutInfo* FindSet(uint32_t setIndex) const;
         const RHI_BindingInfo* FindBinding(uint32_t setIndex, uint32_t binding) const;
 
-        // Resolve a reflection name (e.g. "nova.frame") to its (set, binding) as assigned by Slang.
+        // Resolve a reflection name (e.g. "nova.scene") to its (set, binding) as assigned by Slang.
         const RHI_BindingKey* FindBindingKeyByName(const std::string& name) const;
         // Convenience: resolve a reflection name directly to its binding info.
         const RHI_BindingInfo* FindBindingByName(const std::string& name) const;

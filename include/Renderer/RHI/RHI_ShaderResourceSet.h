@@ -34,7 +34,7 @@ namespace Nova::Core::Renderer::RHI {
     /**
      * Backend-agnostic shader resource binder: set resources by reflection name.
      *
-     * - Names come from `RHI_ProgramReflection::m_NameToBinding`, e.g. "nova.frame" or "user.albedo".
+     * - Names come from `RHI_ProgramReflection::m_NameToBinding`, e.g. "nova.scene" or "user.albedo".
      * - Engine resources (set 0) are typically owned/bound by the renderer; this class is intended
      *   primarily for user resources in set 1.
      */

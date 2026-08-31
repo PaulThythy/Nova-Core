@@ -18,18 +18,6 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    VkShaderStageFlags ToVkStageFlags(RHI::RHI_ShaderStageMask mask) {
-        VkShaderStageFlags out = 0;
-        const uint32_t m = static_cast<uint32_t>(mask);
-        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Vertex)) out |= VK_SHADER_STAGE_VERTEX_BIT;
-        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Fragment)) out |= VK_SHADER_STAGE_FRAGMENT_BIT;
-        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Geometry)) out |= VK_SHADER_STAGE_GEOMETRY_BIT;
-        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessCtrl)) out |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::TessEval)) out |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-        if (m & static_cast<uint32_t>(RHI::RHI_ShaderStageMask::Compute)) out |= VK_SHADER_STAGE_COMPUTE_BIT;
-        return out;
-    }
-
     VkDescriptorType ToVkDescriptorType(const RHI::RHI_BindingInfo& b) {
         using RK = RHI::RHI_ResourceKind;
         switch (b.m_Kind) {
@@ -46,7 +34,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void MarkEngineDynamicBuffers(RHI::RHI_ProgramReflection& refl) {
         const char* dynamicNames[] = {
-            RHI::EngineResourceName::Frame,
             RHI::EngineResourceName::Scene,
             RHI::EngineResourceName::Mvp,
             RHI::EngineResourceName::Material,
@@ -325,7 +312,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (m_Engine.IsValid())
             return true;
 
-        m_Engine.m_Frame = RHI::CreateConstantBuffer<RHI::FrameUniforms>(*m_Renderer, 1, RHI::EngineResourceName::Frame);
         m_Engine.m_Scene = RHI::CreateConstantBuffer<RHI::SceneUniforms>(*m_Renderer, 1, RHI::EngineResourceName::Scene);
         m_Engine.m_Mvp = RHI::CreateConstantBuffer<RHI::MVP>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Mvp);
         m_Engine.m_Material = RHI::CreateConstantBuffer<RHI::Material>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Material);
@@ -340,7 +326,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_Renderer->DestroyGpuBuffer(m_Engine.m_Material);
         m_Renderer->DestroyGpuBuffer(m_Engine.m_Mvp);
         m_Renderer->DestroyGpuBuffer(m_Engine.m_Scene);
-        m_Renderer->DestroyGpuBuffer(m_Engine.m_Frame);
         m_Engine = RHI::RHI_EngineParameterBlock{};
     }
 
@@ -443,7 +428,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             write.pBufferInfo = &bufferInfo;
             vkUpdateDescriptorSets(m_Renderer->GetDevice(), 1, &write, 0, nullptr);
         };
-        writeEngineBuffer(RHI::EngineResourceName::Frame, m_Engine.m_Frame);
         writeEngineBuffer(RHI::EngineResourceName::Scene, m_Engine.m_Scene);
         writeEngineBuffer(RHI::EngineResourceName::Mvp, m_Engine.m_Mvp);
         writeEngineBuffer(RHI::EngineResourceName::Material, m_Engine.m_Material);
@@ -759,7 +743,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             write.pBufferInfo = &bufferInfo;
             vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
         };
-        writeEngineBuffer(RHI::EngineResourceName::Frame, m_Engine.m_Frame);
         writeEngineBuffer(RHI::EngineResourceName::Scene, m_Engine.m_Scene);
         writeEngineBuffer(RHI::EngineResourceName::Mvp, m_Engine.m_Mvp);
         writeEngineBuffer(RHI::EngineResourceName::Material, m_Engine.m_Material);
@@ -769,10 +752,25 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         setLayouts.reserve(entry.setLayouts.size());
         for (const auto& [setIndex, layout] : entry.setLayouts) setLayouts.push_back(layout);
 
+        VkPushConstantRange pushRange{};
+        const bool hasPushConstants = reflForVk.m_PushConstants.has_value()
+            && reflForVk.m_PushConstants->m_SizeBytes > 0;
+        if (hasPushConstants) {
+            pushRange.stageFlags = ToVkStageFlags(reflForVk.m_PushConstants->m_Stages);
+            if (pushRange.stageFlags == 0)
+                pushRange.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
+            pushRange.offset = 0;
+            pushRange.size = static_cast<uint32_t>(reflForVk.m_PushConstants->m_SizeBytes);
+        }
+
         VkPipelineLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
         layoutInfo.pSetLayouts = setLayouts.data();
+        if (hasPushConstants) {
+            layoutInfo.pushConstantRangeCount = 1;
+            layoutInfo.pPushConstantRanges = &pushRange;
+        }
         if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &entry.pipelineLayout) != VK_SUCCESS) {
             vertModule.Destroy();
             fragModule.Destroy();

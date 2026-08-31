@@ -4,6 +4,10 @@
 // As the first (and usually only) top-level block in engine shaders, it maps to Vulkan
 // set 0; fields inside `NovaEngine` get bindings 0, 1, 2, … in field order.
 //
+// `FrameUniforms` is a Vulkan push constant (small, updated every frame). It lives
+// outside the ParameterBlock so it does not consume a descriptor binding.
+// Access as `frame.m_Time`, etc. — not `nova.frame`.
+//
 // Custom shaders: #include this file, then declare a second block *after* `nova`
 // (same file or later in link order) so it gets the next descriptor space (set 1), e.g.:
 //   struct OutlineData { Texture2D selectionMask; SamplerState selectionMaskSampler; }
@@ -17,7 +21,7 @@
 #include "Material.slang"
 #include "Light.slang"
 
-// Per-frame globals (time, resolution, inputs)
+// Per-frame globals (time, resolution, inputs) — push constants (std430).
 struct FrameUniforms {
     float3 m_Resolution;
     float _padAfterRes;
@@ -29,6 +33,9 @@ struct FrameUniforms {
     float4 m_Mouse;
     float4 m_Date;
 };
+
+[[vk::push_constant]]
+ConstantBuffer<FrameUniforms> frame;
 
 // Scene-level data (camera, light count)
 struct SceneUniforms {
@@ -46,7 +53,6 @@ struct MVP {
 };
 
 struct NovaEngine {
-    ConstantBuffer<FrameUniforms> frame;
     ConstantBuffer<SceneUniforms> scene;
     ConstantBuffer<MVP> mvp;
     ConstantBuffer<Material> material;
