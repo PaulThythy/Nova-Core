@@ -32,6 +32,7 @@ namespace Nova::Core::Renderer::RHI {
     // assigned by Slang reflection and looked up by these names at runtime.
     namespace EngineResourceName {
         inline constexpr const char* Frame         = "nova.frame";
+        inline constexpr const char* Scene         = "nova.scene";
         inline constexpr const char* Mvp           = "nova.mvp";
         inline constexpr const char* Material      = "nova.material";
         inline constexpr const char* Lights        = "nova.lights";
@@ -39,17 +40,24 @@ namespace Nova::Core::Renderer::RHI {
         inline constexpr const char* ShadowSampler = "nova.shadowSampler";
     }
 
+    /** Per-frame globals (time, resolution, inputs). Uploaded by Nova-Core every frame. */
     struct NV_API FrameUniforms {
-        alignas(16) glm::vec3 m_IResolution{ 0.0f, 0.0f, 0.0f };
+        alignas(16) glm::vec3 m_Resolution{ 0.0f, 0.0f, 0.0f };
         alignas(4)  float     m_PadAfterRes{ 0.0f };
-        alignas(4)  float     m_ITime{ 0.0f };
-        alignas(4)  float     m_ITimeDelta{ 0.0f };
-        alignas(4)  float     m_IFrameRate{ 0.0f };
-        alignas(4)  int       m_IFrame{ 0 };
-        alignas(16) glm::vec3 m_UCameraPos{ 0.0f, 0.0f, 0.0f };
+        alignas(4)  float     m_Time{ 0.0f };
+        alignas(4)  float     m_TimeDelta{ 0.0f };
+        alignas(4)  float     m_FrameRate{ 0.0f };
+        alignas(4)  int       m_Frame{ 0 };
+        alignas(4)  int       m_PadAfterFrame{ 0 };
+        alignas(16) glm::vec4 m_Mouse{ 0.0f, 0.0f, 0.0f, 0.0f };
+        alignas(16) glm::vec4 m_Date{ 0.0f, 0.0f, 0.0f, 0.0f };
+    };
+
+    /** Scene-level data (camera, light count). Set by the app via shader SetParameter. */
+    struct NV_API SceneUniforms {
+        alignas(16) glm::vec3 m_CameraPos{ 0.0f, 0.0f, 0.0f };
         alignas(4)  int       m_LightCount{ 0 };
-        alignas(16) glm::vec4 m_IMouse{ 0.0f, 0.0f, 0.0f, 0.0f };
-        alignas(16) glm::vec4 m_IDate{ 0.0f, 0.0f, 0.0f, 0.0f };
+        alignas(4)  float     m_PadAfterLightCount{ 0.0f };
     };
 
     struct NV_API MVP {
@@ -122,18 +130,20 @@ namespace Nova::Core::Renderer::RHI {
      * per buffer field of `NovaEngine`. Shadow map texture/sampler are render-graph resources bound
      * by reflection name after texture creation.
      *
-     * `m_Frame` holds a single `FrameUniforms` value (one region per frame-in-flight). `m_Mvp` and
+     * `m_Frame` / `m_Scene` hold a single value (one region per frame-in-flight). `m_Mvp` and
      * `m_Material` are arrays (one element per draw call this frame) — see MAX_MODEL_DRAWS in
      * VK_PipelineCache. `m_Lights` is a StructuredBuffer of up to MAX_LIGHTS elements.
      */
     struct NV_API RHI_EngineParameterBlock {
         RHI_GpuBufferHandle m_Frame;    // ConstantBuffer<FrameUniforms> frame;
+        RHI_GpuBufferHandle m_Scene;    // ConstantBuffer<SceneUniforms> scene;
         RHI_GpuBufferHandle m_Mvp;      // ConstantBuffer<MVP> mvp;
         RHI_GpuBufferHandle m_Material; // ConstantBuffer<Material> material;
         RHI_GpuBufferHandle m_Lights;   // StructuredBuffer<LightGPU> lights;
 
         bool IsValid() const {
-            return m_Frame.IsValid() && m_Mvp.IsValid() && m_Material.IsValid() && m_Lights.IsValid();
+            return m_Frame.IsValid() && m_Scene.IsValid()
+                && m_Mvp.IsValid() && m_Material.IsValid() && m_Lights.IsValid();
         }
     };
 
@@ -141,66 +151,72 @@ namespace Nova::Core::Renderer::RHI {
     // CPU mirror structs above. Padding fields are intentionally absent: they are never set.
     inline const std::unordered_map<std::string, size_t>& GetMaterialLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
-            { "base",                 offsetof(Material, m_Base) },
-            { "baseColor",            offsetof(Material, m_BaseColor) },
-            { "diffuseRoughness",     offsetof(Material, m_DiffuseRoughness) },
-            { "metalness",            offsetof(Material, m_Metalness) },
-            { "metalColor",           offsetof(Material, m_MetalColor) },
-            { "specular",             offsetof(Material, m_Specular) },
-            { "specularColor",        offsetof(Material, m_SpecularColor) },
-            { "specularRoughness",    offsetof(Material, m_SpecularRoughness) },
-            { "specularIOR",          offsetof(Material, m_SpecularIOR) },
-            { "specularAnisotropy",   offsetof(Material, m_SpecularAnisotropy) },
-            { "specularRotation",     offsetof(Material, m_SpecularRotation) },
-            { "transmission",         offsetof(Material, m_Transmission) },
-            { "transmissionColor",    offsetof(Material, m_TransmissionColor) },
-            { "subsurface",           offsetof(Material, m_Subsurface) },
-            { "subsurfaceColor",      offsetof(Material, m_SubsurfaceColor) },
-            { "subsurfaceRadius",     offsetof(Material, m_SubsurfaceRadius) },
-            { "subsurfaceScale",      offsetof(Material, m_SubsurfaceScale) },
-            { "subsurfaceAnisotropy", offsetof(Material, m_SubsurfaceAnisotropy) },
-            { "sheen",                offsetof(Material, m_Sheen) },
-            { "sheenColor",           offsetof(Material, m_SheenColor) },
-            { "sheenRoughness",       offsetof(Material, m_SheenRoughness) },
-            { "coat",                 offsetof(Material, m_Coat) },
-            { "coatColor",            offsetof(Material, m_CoatColor) },
-            { "coatRoughness",        offsetof(Material, m_CoatRoughness) },
-            { "coatAnisotropy",       offsetof(Material, m_CoatAnisotropy) },
-            { "coatRotation",         offsetof(Material, m_CoatRotation) },
-            { "coatIOR",              offsetof(Material, m_CoatIOR) },
-            { "coatAffectColor",      offsetof(Material, m_CoatAffectColor) },
-            { "coatAffectRoughness",  offsetof(Material, m_CoatAffectRoughness) },
-            { "emission",             offsetof(Material, m_Emission) },
-            { "emissionColor",        offsetof(Material, m_EmissionColor) },
-            { "opacity",              offsetof(Material, m_Opacity) },
-            { "thinWalled",           offsetof(Material, m_ThinWalled) },
-            { "isOpaque",             offsetof(Material, m_IsOpaque) },
+            { "m_Base",                 offsetof(Material, m_Base) },
+            { "m_BaseColor",            offsetof(Material, m_BaseColor) },
+            { "m_DiffuseRoughness",     offsetof(Material, m_DiffuseRoughness) },
+            { "m_Metalness",            offsetof(Material, m_Metalness) },
+            { "m_MetalColor",           offsetof(Material, m_MetalColor) },
+            { "m_Specular",             offsetof(Material, m_Specular) },
+            { "m_SpecularColor",        offsetof(Material, m_SpecularColor) },
+            { "m_SpecularRoughness",    offsetof(Material, m_SpecularRoughness) },
+            { "m_SpecularIOR",          offsetof(Material, m_SpecularIOR) },
+            { "m_SpecularAnisotropy",   offsetof(Material, m_SpecularAnisotropy) },
+            { "m_SpecularRotation",     offsetof(Material, m_SpecularRotation) },
+            { "m_Transmission",         offsetof(Material, m_Transmission) },
+            { "m_TransmissionColor",    offsetof(Material, m_TransmissionColor) },
+            { "m_Subsurface",           offsetof(Material, m_Subsurface) },
+            { "m_SubsurfaceColor",      offsetof(Material, m_SubsurfaceColor) },
+            { "m_SubsurfaceRadius",     offsetof(Material, m_SubsurfaceRadius) },
+            { "m_SubsurfaceScale",      offsetof(Material, m_SubsurfaceScale) },
+            { "m_SubsurfaceAnisotropy", offsetof(Material, m_SubsurfaceAnisotropy) },
+            { "m_Sheen",                offsetof(Material, m_Sheen) },
+            { "m_SheenColor",           offsetof(Material, m_SheenColor) },
+            { "m_SheenRoughness",       offsetof(Material, m_SheenRoughness) },
+            { "m_Coat",                 offsetof(Material, m_Coat) },
+            { "m_CoatColor",            offsetof(Material, m_CoatColor) },
+            { "m_CoatRoughness",        offsetof(Material, m_CoatRoughness) },
+            { "m_CoatAnisotropy",       offsetof(Material, m_CoatAnisotropy) },
+            { "m_CoatRotation",         offsetof(Material, m_CoatRotation) },
+            { "m_CoatIOR",              offsetof(Material, m_CoatIOR) },
+            { "m_CoatAffectColor",      offsetof(Material, m_CoatAffectColor) },
+            { "m_CoatAffectRoughness",  offsetof(Material, m_CoatAffectRoughness) },
+            { "m_Emission",             offsetof(Material, m_Emission) },
+            { "m_EmissionColor",        offsetof(Material, m_EmissionColor) },
+            { "m_Opacity",              offsetof(Material, m_Opacity) },
+            { "m_ThinWalled",           offsetof(Material, m_ThinWalled) },
+            { "m_IsOpaque",             offsetof(Material, m_IsOpaque) },
         };
         return kLayout;
     }
 
     inline const std::unordered_map<std::string, size_t>& GetFrameLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
-            { "iResolution", offsetof(FrameUniforms, m_IResolution) },
-            { "iTime",       offsetof(FrameUniforms, m_ITime) },
-            { "iTimeDelta",  offsetof(FrameUniforms, m_ITimeDelta) },
-            { "iFrameRate",  offsetof(FrameUniforms, m_IFrameRate) },
-            { "iFrame",      offsetof(FrameUniforms, m_IFrame) },
-            { "u_CameraPos", offsetof(FrameUniforms, m_UCameraPos) },
-            { "lightCount",  offsetof(FrameUniforms, m_LightCount) },
-            { "iMouse",      offsetof(FrameUniforms, m_IMouse) },
-            { "iDate",       offsetof(FrameUniforms, m_IDate) },
+            { "m_Resolution", offsetof(FrameUniforms, m_Resolution) },
+            { "m_Time",       offsetof(FrameUniforms, m_Time) },
+            { "m_TimeDelta",  offsetof(FrameUniforms, m_TimeDelta) },
+            { "m_FrameRate",  offsetof(FrameUniforms, m_FrameRate) },
+            { "m_Frame",      offsetof(FrameUniforms, m_Frame) },
+            { "m_Mouse",      offsetof(FrameUniforms, m_Mouse) },
+            { "m_Date",       offsetof(FrameUniforms, m_Date) },
+        };
+        return kLayout;
+    }
+
+    inline const std::unordered_map<std::string, size_t>& GetSceneLayout() {
+        static const std::unordered_map<std::string, size_t> kLayout = {
+            { "m_CameraPos", offsetof(SceneUniforms, m_CameraPos) },
+            { "m_LightCount",  offsetof(SceneUniforms, m_LightCount) },
         };
         return kLayout;
     }
 
     inline const std::unordered_map<std::string, size_t>& GetMvpLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
-            { "model",       offsetof(MVP, m_Model) },
-            { "view",        offsetof(MVP, m_View) },
-            { "proj",        offsetof(MVP, m_Proj) },
-            { "viewProj",    offsetof(MVP, m_ViewProj) },
-            { "invViewProj", offsetof(MVP, m_InvViewProj) },
+            { "m_Model",       offsetof(MVP, m_Model) },
+            { "m_View",        offsetof(MVP, m_View) },
+            { "m_Proj",        offsetof(MVP, m_Proj) },
+            { "m_ViewProj",    offsetof(MVP, m_ViewProj) },
+            { "m_InvViewProj", offsetof(MVP, m_InvViewProj) },
         };
         return kLayout;
     }

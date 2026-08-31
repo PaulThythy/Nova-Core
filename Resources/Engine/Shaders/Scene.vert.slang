@@ -20,7 +20,7 @@ struct VSOut {
 
 [shader("vertex")]
 VSOut main(VSIn input) {
-    float4x4 model = nova.mvp.model;
+    float4x4 model = nova.mvp.m_Model;
 
     float3x3 m3 = (float3x3)model;
     float3x3 invT = transpose3x3(inverse3x3(m3));
@@ -31,7 +31,7 @@ VSOut main(VSIn input) {
     o.v_Color = float4(input.a_Color, 1.0);
     float4 world = mul(model, float4(input.a_Position, 1.0));
     o.v_Pos = world.xyz;
-    float4 viewPos = mul(nova.mvp.view, world);
-    o.sv_position = mul(nova.mvp.proj, viewPos);
+    float4 viewPos = mul(nova.mvp.m_View, world);
+    o.sv_position = mul(nova.mvp.m_Proj, viewPos);
     return o;
 }

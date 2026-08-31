@@ -206,8 +206,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Shaders::BindDescriptorSets(VkCommandBuffer cmd,
-        VkDeviceSize frameDynamicOffset, VkDeviceSize mvpDynamicOffset,
-        VkDeviceSize materialDynamicOffset, VkDeviceSize lightsDynamicOffset)
+        VkDeviceSize frameDynamicOffset, VkDeviceSize sceneDynamicOffset,
+        VkDeviceSize mvpDynamicOffset, VkDeviceSize materialDynamicOffset,
+        VkDeviceSize lightsDynamicOffset)
     {
         if (m_DescriptorSets.empty()) return;
 
@@ -217,6 +218,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         struct EngineDynamic { const char* name; VkDeviceSize offset; };
         const EngineDynamic engineDynamics[] = {
             { RHI::EngineResourceName::Frame,    frameDynamicOffset },
+            { RHI::EngineResourceName::Scene,    sceneDynamicOffset },
             { RHI::EngineResourceName::Mvp,      mvpDynamicOffset },
             { RHI::EngineResourceName::Material, materialDynamicOffset },
             { RHI::EngineResourceName::Lights,   lightsDynamicOffset },
@@ -258,6 +260,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         // Post-process passes that omit `nova` must not clobber the frame UBO after Scene —
         // the GPU still reads that memory when executing earlier draws in the same CB.
         const bool usesFrame = m_Reflection.FindBindingByName(RHI::EngineResourceName::Frame) != nullptr;
+        const bool usesScene = m_Reflection.FindBindingByName(RHI::EngineResourceName::Scene) != nullptr;
         const bool usesMvp = m_Reflection.FindBindingByName(RHI::EngineResourceName::Mvp) != nullptr;
         const bool usesMaterial = m_Reflection.FindBindingByName(RHI::EngineResourceName::Material) != nullptr;
 
@@ -271,6 +274,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         } else if (m_Engine.m_Frame.IsValid()) {
             frameOffsetThisFrame = static_cast<VkDeviceSize>(
                 pool.ResolveBinding(m_Engine.m_Frame, 0, frameIdx).m_Offset);
+        }
+
+        VkDeviceSize sceneOffsetThisFrame = 0;
+        if (usesScene) {
+            RHI::SceneUniforms scene{};
+            CopyParametersIntoStruct(m_Parameters, RHI::GetSceneLayout(), &scene);
+            pool.Update(m_Engine.m_Scene, &scene, sizeof scene, /*elementIndex*/ 0, frameIdx);
+            sceneOffsetThisFrame = static_cast<VkDeviceSize>(
+                pool.ResolveBinding(m_Engine.m_Scene, 0, frameIdx).m_Offset);
+        } else if (m_Engine.m_Scene.IsValid()) {
+            sceneOffsetThisFrame = static_cast<VkDeviceSize>(
+                pool.ResolveBinding(m_Engine.m_Scene, 0, frameIdx).m_Offset);
         }
 
         VkDeviceSize mvpOffsetThisDraw = 0;
@@ -292,7 +307,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             ? static_cast<VkDeviceSize>(pool.ResolveBinding(m_Engine.m_Lights, 0, frameIdx).m_Offset)
             : 0;
 
-        BindDescriptorSets(cmd, frameOffsetThisFrame, mvpOffsetThisDraw, materialOffsetThisDraw, lightsOffsetThisFrame);
+        BindDescriptorSets(cmd, frameOffsetThisFrame, sceneOffsetThisFrame, mvpOffsetThisDraw, materialOffsetThisDraw, lightsOffsetThisFrame);
     }
 
     void* VK_Shaders::GetNativeHandle() const {

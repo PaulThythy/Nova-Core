@@ -99,8 +99,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         /** Bind all descriptor sets, supplying dynamic offsets in reflection (set, binding) order. */
         void BindDescriptorSets(VkCommandBuffer cmd,
-            VkDeviceSize frameDynamicOffset, VkDeviceSize mvpDynamicOffset,
-            VkDeviceSize materialDynamicOffset, VkDeviceSize lightsDynamicOffset);
+            VkDeviceSize frameDynamicOffset, VkDeviceSize sceneDynamicOffset,
+            VkDeviceSize mvpDynamicOffset, VkDeviceSize materialDynamicOffset,
+            VkDeviceSize lightsDynamicOffset);
         /** Resolve the descriptor set allocated for a given reflection set index (VK_NULL_HANDLE if none). */
         VkDescriptorSet FindDescriptorSet(uint32_t set) const;
         VkDevice GetDevice() const;

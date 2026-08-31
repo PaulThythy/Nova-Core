@@ -11,6 +11,6 @@ struct VSIn {
 
 [shader("vertex")]
 float4 main(VSIn input) : SV_Position {
-    float4 world = mul(nova.mvp.model, float4(input.a_Position, 1.0));
-    return mul(nova.mvp.viewProj, world);
+    float4 world = mul(nova.mvp.m_Model, float4(input.a_Position, 1.0));
+    return mul(nova.mvp.m_ViewProj, world);
 }

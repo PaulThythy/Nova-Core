@@ -47,6 +47,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     void MarkEngineDynamicBuffers(RHI::RHI_ProgramReflection& refl) {
         const char* dynamicNames[] = {
             RHI::EngineResourceName::Frame,
+            RHI::EngineResourceName::Scene,
             RHI::EngineResourceName::Mvp,
             RHI::EngineResourceName::Material,
             RHI::EngineResourceName::Lights,
@@ -325,6 +326,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return true;
 
         m_Engine.m_Frame = RHI::CreateConstantBuffer<RHI::FrameUniforms>(*m_Renderer, 1, RHI::EngineResourceName::Frame);
+        m_Engine.m_Scene = RHI::CreateConstantBuffer<RHI::SceneUniforms>(*m_Renderer, 1, RHI::EngineResourceName::Scene);
         m_Engine.m_Mvp = RHI::CreateConstantBuffer<RHI::MVP>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Mvp);
         m_Engine.m_Material = RHI::CreateConstantBuffer<RHI::Material>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Material);
         m_Engine.m_Lights = RHI::CreateStructuredBuffer<RHI::LightGPU>(*m_Renderer, RHI::MAX_LIGHTS, RHI::EngineResourceName::Lights);
@@ -337,6 +339,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_Renderer->DestroyGpuBuffer(m_Engine.m_Lights);
         m_Renderer->DestroyGpuBuffer(m_Engine.m_Material);
         m_Renderer->DestroyGpuBuffer(m_Engine.m_Mvp);
+        m_Renderer->DestroyGpuBuffer(m_Engine.m_Scene);
         m_Renderer->DestroyGpuBuffer(m_Engine.m_Frame);
         m_Engine = RHI::RHI_EngineParameterBlock{};
     }
@@ -441,6 +444,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             vkUpdateDescriptorSets(m_Renderer->GetDevice(), 1, &write, 0, nullptr);
         };
         writeEngineBuffer(RHI::EngineResourceName::Frame, m_Engine.m_Frame);
+        writeEngineBuffer(RHI::EngineResourceName::Scene, m_Engine.m_Scene);
         writeEngineBuffer(RHI::EngineResourceName::Mvp, m_Engine.m_Mvp);
         writeEngineBuffer(RHI::EngineResourceName::Material, m_Engine.m_Material);
         writeEngineBuffer(RHI::EngineResourceName::Lights, m_Engine.m_Lights);
@@ -756,6 +760,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
         };
         writeEngineBuffer(RHI::EngineResourceName::Frame, m_Engine.m_Frame);
+        writeEngineBuffer(RHI::EngineResourceName::Scene, m_Engine.m_Scene);
         writeEngineBuffer(RHI::EngineResourceName::Mvp, m_Engine.m_Mvp);
         writeEngineBuffer(RHI::EngineResourceName::Material, m_Engine.m_Material);
         writeEngineBuffer(RHI::EngineResourceName::Lights, m_Engine.m_Lights);

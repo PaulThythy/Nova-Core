@@ -17,30 +17,37 @@
 #include "Material.slang"
 #include "Light.slang"
 
-// Frame uniforms (time, resolution, inputs)
+// Per-frame globals (time, resolution, inputs)
 struct FrameUniforms {
-    float3 iResolution;
+    float3 m_Resolution;
     float _padAfterRes;
-    float iTime;
-    float iTimeDelta;
-    float iFrameRate;
-    int iFrame;
-    float3 u_CameraPos;
-    int lightCount;
-    float4 iMouse;
-    float4 iDate;
+    float m_Time;
+    float m_TimeDelta;
+    float m_FrameRate;
+    int m_Frame;
+    int _padAfterFrame;
+    float4 m_Mouse;
+    float4 m_Date;
+};
+
+// Scene-level data (camera, light count)
+struct SceneUniforms {
+    float3 m_CameraPos;
+    int m_LightCount;
+    float _padAfterLightCount;
 };
 
 struct MVP {
-    float4x4 model;
-    float4x4 view;
-    float4x4 proj;
-    float4x4 viewProj;
-    float4x4 invViewProj;
+    float4x4 m_Model;
+    float4x4 m_View;
+    float4x4 m_Proj;
+    float4x4 m_ViewProj;
+    float4x4 m_InvViewProj;
 };
 
 struct NovaEngine {
     ConstantBuffer<FrameUniforms> frame;
+    ConstantBuffer<SceneUniforms> scene;
     ConstantBuffer<MVP> mvp;
     ConstantBuffer<Material> material;
     StructuredBuffer<LightGPU> lights;
