@@ -13,7 +13,6 @@
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/RHI/RHI_RenderGraph.h"
 #include "Renderer/RHI/RHI_GpuBuffer.h"
-#include "Renderer/RHI/RHI_ShaderResourceSet.h"
 
 namespace Nova::Core::Renderer::RHI {
 

@@ -10,7 +10,6 @@
 #include "Api.h"
 #include "Renderer/RHI/RHI_GpuBuffer.h"
 #include "Renderer/RHI/RHI_ShaderReflection.h"
-#include "Renderer/RHI/RHI_ShaderResourceSet.h"
 #include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {

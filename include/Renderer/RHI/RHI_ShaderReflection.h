@@ -1,15 +1,25 @@
-#ifndef RHI_SHADER_REFLECTION_H
-#define RHI_SHADER_REFLECTION_H
+#ifndef RHI_SHADERREFLECTION_H
+#define RHI_SHADERREFLECTION_H
 
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include "Api.h"
+#include "Renderer/RHI/RHI_GpuBuffer.h"
 #include "Renderer/RHI/RHI_ShaderTypes.h"
+
+namespace Nova::Core::Renderer::RHI {
+    class IRenderer;
+}
+
+namespace slang {
+    class IComponentType;
+}
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -74,6 +84,55 @@ namespace Nova::Core::Renderer::RHI {
     /** Merge multiple stage reflections (e.g. VS+FS) into a single program reflection. */
     NV_API RHI_ProgramReflection MergeProgramReflections(const std::vector<RHI_ProgramReflection>& perStage);
 
+    /** Extract backend-agnostic reflection from a linked Slang component. */
+    NV_API void ExtractProgramReflection(slang::IComponentType* linked, RHI_ShaderStage stage, RHI_ProgramReflection& out);
+
+    /** Append a truncated Slang reflection JSON excerpt to `log` (diagnostics). */
+    NV_API void AppendSlangReflectionJsonExcerpt(std::string& log, slang::IComponentType* linked, size_t maxBytes = 4096);
+
+    struct NV_API RHI_BufferBinding {
+        uint64_t m_Handle = 0;
+        uint64_t m_Offset = 0;
+        uint64_t m_Range = 0;
+    };
+
+    struct NV_API RHI_TextureBinding {
+        uint64_t m_TextureHandle = 0;
+        uint32_t m_ImageLayout = 0;
+    };
+
+    struct NV_API RHI_SamplerBinding {
+        uint64_t m_SamplerHandle = 0;
+    };
+
+    using RHI_ResourceBinding = std::variant<RHI_BufferBinding, RHI_TextureBinding, RHI_SamplerBinding>;
+
+    /**
+     * Backend-agnostic shader resource binder: set resources by reflection name.
+     *
+     * Names come from `RHI_ProgramReflection::m_NameToBinding`, e.g. "nova.scene" or "user.albedo".
+     */
+    class NV_API RHI_ShaderResourceSet {
+    public:
+        explicit RHI_ShaderResourceSet(const RHI_ProgramReflection* reflection = nullptr)
+            : m_Reflection(reflection) {}
+
+        void SetReflection(const RHI_ProgramReflection* reflection) { m_Reflection = reflection; }
+
+        bool SetBuffer(const std::string& name, uint64_t handle, uint64_t offset = 0, uint64_t range = 0);
+        bool SetBuffer(const std::string& name, RHI_GpuBufferHandle handle, const IRenderer& renderer, uint32_t elementIndex = 0);
+        bool SetTexture(const std::string& name, uint64_t textureHandle, uint32_t imageLayout = 0);
+        bool SetSampler(const std::string& name, uint64_t samplerHandle);
+
+        bool Apply(void* shader) const;
+
+    private:
+        const RHI_BindingInfo* FindBindingInfo(const std::string& name) const;
+
+        const RHI_ProgramReflection* m_Reflection = nullptr;
+        std::unordered_map<std::string, RHI_ResourceBinding> m_Bindings;
+    };
+
 } // namespace Nova::Core::Renderer::RHI
 
-#endif // RHI_SHADER_REFLECTION_H
+#endif // RHI_SHADERREFLECTION_H
