@@ -46,7 +46,7 @@ namespace Nova::Core::Scene {
 
 		void Clear();
 
-		std::string GetName() { return m_Name; }
+		std::string GetName() const { return m_Name; }
 
 	private:
 		struct NV_API EntityHash {
