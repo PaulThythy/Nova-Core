@@ -1,6 +1,7 @@
 #include "Renderer/Backends/Vulkan/VK_Swapchain.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <string>
 
@@ -13,6 +14,78 @@
 #include "Renderer/Backends/Vulkan/VK_Common.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
+
+	namespace {
+
+		VkRenderPass CreateColorDepthRenderPass(
+			VkDevice device,
+			VkFormat colorFormat,
+			VkFormat depthFormat,
+			VkAttachmentLoadOp colorLoad,
+			VkAttachmentLoadOp depthLoad,
+			VkImageLayout finalColorLayout,
+			VkImageLayout colorInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED)
+		{
+			VkAttachmentDescription attachments[2]{};
+			attachments[0].format = colorFormat;
+			attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+			attachments[0].loadOp = colorLoad;
+			attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			if (colorLoad == VK_ATTACHMENT_LOAD_OP_LOAD) {
+				attachments[0].initialLayout = (colorInitialLayout != VK_IMAGE_LAYOUT_UNDEFINED)
+					? colorInitialLayout
+					: VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			} else if (colorInitialLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
+				attachments[0].initialLayout = colorInitialLayout;
+			} else {
+				attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			}
+			attachments[0].finalLayout = finalColorLayout;
+
+			attachments[1].format = depthFormat;
+			attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+			attachments[1].loadOp = depthLoad;
+			attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			attachments[1].initialLayout = (depthLoad == VK_ATTACHMENT_LOAD_OP_LOAD)
+				? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+				: VK_IMAGE_LAYOUT_UNDEFINED;
+			attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+			VkAttachmentReference colorRef{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			VkAttachmentReference depthRef{ 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+			VkSubpassDescription subpass{};
+			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			subpass.colorAttachmentCount = 1;
+			subpass.pColorAttachments = &colorRef;
+			subpass.pDepthStencilAttachment = &depthRef;
+
+			VkSubpassDependency dependency{};
+			dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+			dependency.dstSubpass = 0;
+			dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+			VkRenderPassCreateInfo rpInfo{};
+			rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+			rpInfo.attachmentCount = 2;
+			rpInfo.pAttachments = attachments;
+			rpInfo.subpassCount = 1;
+			rpInfo.pSubpasses = &subpass;
+			rpInfo.dependencyCount = 1;
+			rpInfo.pDependencies = &dependency;
+
+			VkRenderPass renderPass = VK_NULL_HANDLE;
+			vkCreateRenderPass(device, &rpInfo, nullptr, &renderPass);
+			return renderPass;
+		}
+
+	} // namespace
+
 
 	const char* PresentModeName(VkPresentModeKHR mode) {
 		switch (mode) {
@@ -211,6 +284,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		vkDeviceWaitIdle(m_Device);
 
+		DestroyRenderTargets();
 		DestroySwapchain();
 		DestroySyncObjects();
 
@@ -309,6 +383,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			return false;
 
 		vkDeviceWaitIdle(m_Device);
+		// Framebuffers must be destroyed before swapchain image views.
+		DestroyFramebuffers();
+		DestroyDepthResources();
 		DestroySwapchain();
 
 		if (!CreateSwapchain())        return false;
@@ -327,6 +404,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		m_ImagesInFlight.assign(m_Images.size(), VK_NULL_HANDLE);
 		NV_LOG_INFO("VK_Swapchain recreated after resize.");
+
+		if (m_Allocator) {
+			if (!CreateDepthResources()) return false;
+			if (!CreateFramebuffers()) return false;
+		}
 		return true;
 	}
 
@@ -471,6 +553,195 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkResult res = vkAllocateCommandBuffers(m_Device, &allocInfo, m_CommandBuffers.data());
 		CheckVkResult(res);
 		return (res == VK_SUCCESS);
+	}
+
+
+	bool VK_Swapchain::InitRenderTargets(VK_MemoryAllocator& allocator) {
+		m_Allocator = &allocator;
+		if (!CreateDepthResources()) return false;
+		if (!CreateBackBufferRenderPasses()) return false;
+		if (!CreateFramebuffers()) return false;
+		return true;
+	}
+
+	void VK_Swapchain::DestroyRenderTargets() {
+		DestroyFramebuffers();
+		DestroyBackBufferRenderPasses();
+		DestroyDepthResources();
+		m_Allocator = nullptr;
+	}
+
+	bool VK_Swapchain::RecreateRenderTargets() {
+		if (!m_Allocator) return false;
+		DestroyFramebuffers();
+		DestroyDepthResources();
+		if (!CreateDepthResources()) return false;
+		return CreateFramebuffers();
+	}
+
+	bool VK_Swapchain::CreateDepthResources() {
+		if (!m_Allocator || m_Device == VK_NULL_HANDLE || m_PhysicalDevice == VK_NULL_HANDLE)
+			return false;
+
+		const std::vector<VkFormat> candidates = {
+			VK_FORMAT_D32_SFLOAT,
+			VK_FORMAT_D32_SFLOAT_S8_UINT,
+			VK_FORMAT_D24_UNORM_S8_UINT
+		};
+		m_DepthFormat = VK_FORMAT_UNDEFINED;
+
+		for (VkFormat format : candidates) {
+			VkFormatProperties props{};
+			vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, format, &props);
+			if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+				m_DepthFormat = format;
+				break;
+			}
+		}
+		if (m_DepthFormat == VK_FORMAT_UNDEFINED) return false;
+
+		const uint32_t imageCount = GetImageCount();
+		if (imageCount == 0) return false;
+
+		m_DepthImages.clear();
+		m_DepthImages.resize(imageCount);
+
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageInfo.extent = { m_SwapchainExtent.width, m_SwapchainExtent.height, 1 };
+		imageInfo.mipLevels = 1;
+		imageInfo.arrayLayers = 1;
+		imageInfo.format = m_DepthFormat;
+		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+		for (uint32_t i = 0; i < imageCount; ++i) {
+			auto& depth = m_DepthImages[i];
+			if (!m_Allocator->CreateImage(imageInfo, VK_MemoryLocation::GpuOnly, depth.m_Image))
+				return false;
+
+			VkImageViewCreateInfo viewInfo{};
+			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			viewInfo.image = depth.m_Image.image;
+			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			viewInfo.format = m_DepthFormat;
+			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			viewInfo.subresourceRange.levelCount = 1;
+			viewInfo.subresourceRange.layerCount = 1;
+
+			if (vkCreateImageView(m_Device, &viewInfo, nullptr, &depth.m_View) != VK_SUCCESS)
+				return false;
+		}
+		return true;
+	}
+
+	void VK_Swapchain::DestroyDepthResources() {
+		if (m_Device == VK_NULL_HANDLE) {
+			m_DepthImages.clear();
+			return;
+		}
+
+		for (auto& depth : m_DepthImages) {
+			if (depth.m_View != VK_NULL_HANDLE) {
+				vkDestroyImageView(m_Device, depth.m_View, nullptr);
+				depth.m_View = VK_NULL_HANDLE;
+			}
+			if (m_Allocator)
+				m_Allocator->DestroyImage(depth.m_Image);
+		}
+		m_DepthImages.clear();
+	}
+
+	bool VK_Swapchain::CreateBackBufferRenderPasses() {
+		if (m_PresentClearPass != VK_NULL_HANDLE) return true;
+
+		const VkFormat swapFormat = m_SwapchainImageFormat;
+
+		m_SceneClearPass = CreateColorDepthRenderPass(
+			m_Device, swapFormat, m_DepthFormat,
+			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		m_SceneLoadPass = CreateColorDepthRenderPass(
+			m_Device, swapFormat, m_DepthFormat,
+			VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+		m_PresentClearPass = CreateColorDepthRenderPass(
+			m_Device, swapFormat, m_DepthFormat,
+			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+		m_PresentLoadPass = CreateColorDepthRenderPass(
+			m_Device, swapFormat, m_DepthFormat,
+			VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+		return m_SceneClearPass != VK_NULL_HANDLE
+			&& m_SceneLoadPass != VK_NULL_HANDLE
+			&& m_PresentClearPass != VK_NULL_HANDLE
+			&& m_PresentLoadPass != VK_NULL_HANDLE;
+	}
+
+	void VK_Swapchain::DestroyBackBufferRenderPasses() {
+		if (m_Device == VK_NULL_HANDLE) return;
+		if (m_SceneLoadPass != VK_NULL_HANDLE) {
+			vkDestroyRenderPass(m_Device, m_SceneLoadPass, nullptr);
+			m_SceneLoadPass = VK_NULL_HANDLE;
+		}
+		if (m_SceneClearPass != VK_NULL_HANDLE) {
+			vkDestroyRenderPass(m_Device, m_SceneClearPass, nullptr);
+			m_SceneClearPass = VK_NULL_HANDLE;
+		}
+		if (m_PresentLoadPass != VK_NULL_HANDLE) {
+			vkDestroyRenderPass(m_Device, m_PresentLoadPass, nullptr);
+			m_PresentLoadPass = VK_NULL_HANDLE;
+		}
+		if (m_PresentClearPass != VK_NULL_HANDLE) {
+			vkDestroyRenderPass(m_Device, m_PresentClearPass, nullptr);
+			m_PresentClearPass = VK_NULL_HANDLE;
+		}
+	}
+
+	bool VK_Swapchain::CreateFramebuffers() {
+		m_Framebuffers.assign(m_Images.size(), VK_NULL_HANDLE);
+
+		if (m_DepthImages.size() != m_Images.size()) {
+			NV_LOG_ERROR("VK_Swapchain::CreateFramebuffers - depth image count mismatch");
+			return false;
+		}
+
+		for (size_t i = 0; i < m_Images.size(); ++i) {
+			std::array<VkImageView, 2> attachments = { m_Images[i].m_ImageView, m_DepthImages[i].m_View };
+
+			VkFramebufferCreateInfo framebufferInfo{};
+			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			framebufferInfo.renderPass = m_PresentClearPass;
+			framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+			framebufferInfo.pAttachments = attachments.data();
+			framebufferInfo.width = m_SwapchainExtent.width;
+			framebufferInfo.height = m_SwapchainExtent.height;
+			framebufferInfo.layers = 1;
+
+			if (vkCreateFramebuffer(m_Device, &framebufferInfo, nullptr, &m_Framebuffers[i]) != VK_SUCCESS)
+				return false;
+		}
+		return true;
+	}
+
+	void VK_Swapchain::DestroyFramebuffers() {
+		if (m_Device == VK_NULL_HANDLE) {
+			m_Framebuffers.clear();
+			return;
+		}
+		for (auto& fb : m_Framebuffers) {
+			if (fb != VK_NULL_HANDLE) {
+				vkDestroyFramebuffer(m_Device, fb, nullptr);
+				fb = VK_NULL_HANDLE;
+			}
+		}
+		m_Framebuffers.clear();
 	}
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

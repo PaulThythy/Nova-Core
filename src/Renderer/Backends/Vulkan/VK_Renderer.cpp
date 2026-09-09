@@ -25,11 +25,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     VkFramebuffer VK_Renderer::GetSwapchainFramebuffer(uint32_t imageIndex) const {
-        if (auto* graph = GetVKRenderGraph()) {
-            const auto& fbs = graph->GetSwapchainFramebuffers();
-            if (imageIndex < fbs.size()) return fbs[imageIndex];
-        }
-        return VK_NULL_HANDLE;
+        return m_VKSwapchain.GetFramebuffer(imageIndex);
     }
 
     VK_RenderGraph* VK_Renderer::GetVKRenderGraph() const {
@@ -86,6 +82,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                     m_VKDevice.GetPresentQueueFamily(),
                     desc)) {
                 NV_LOG_ERROR("Failed to create swapchain");
+                return false;
+            }
+            if (!m_VKSwapchain.InitRenderTargets(m_MemoryAllocator)) {
+                NV_LOG_ERROR("Failed to create swapchain render targets");
                 return false;
             }
         } else if (desc.m_EnableSwapchain) {
@@ -215,8 +215,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (m_FramebufferResized) {
             m_FramebufferResized = false;
             if (!m_VKSwapchain.RecreateSwapchain())
-                return;
-            if (!vkGraph->RecreateSwapchainRenderTargets())
                 return;
         }
 

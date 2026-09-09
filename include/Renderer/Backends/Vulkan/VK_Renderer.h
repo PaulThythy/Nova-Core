@@ -82,6 +82,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         std::vector<VkImageView> GetSwapchainImageViews() const;
         VkFramebuffer GetSwapchainFramebuffer(uint32_t imageIndex) const;
         uint32_t GetAcquiredImageIndex() const { return m_VKSwapchain.GetAcquiredImageIndex(); }
+        VK_Swapchain& GetSwapchain() { return m_VKSwapchain; }
+        const VK_Swapchain& GetSwapchain() const { return m_VKSwapchain; }
 
     private:
         void WarnIfNoRenderGraph(const char* operation) const;

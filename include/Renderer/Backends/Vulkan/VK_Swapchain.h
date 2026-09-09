@@ -4,11 +4,11 @@
 #include <vulkan/vulkan.h>
 
 #include <vector>
-#include <array>
 #include <cstdint>
 
 #include "Api.h"
 #include "Renderer/RHI/RHI_Renderer.h"
+#include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
@@ -28,6 +28,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			const RHI::RHI_SwapchainDesc& desc);
 
 		void Destroy();
+
+		/** Depth + color/depth render passes + framebuffers for graph presentation. */
+		bool InitRenderTargets(VK_MemoryAllocator& allocator);
+		void DestroyRenderTargets();
+		bool RecreateRenderTargets();
 
 		struct NV_API VK_FrameSync {
 			VkSemaphore m_ImageAvailableSemaphore = VK_NULL_HANDLE;
@@ -49,6 +54,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		const VkExtent2D& GetExtent() const { return m_SwapchainExtent; }
 		VkFormat GetImageFormat() const { return m_SwapchainImageFormat; }
 		VkPresentModeKHR GetPresentMode() const { return m_PresentMode; }
+		VkFormat GetDepthFormat() const { return m_DepthFormat; }
 
 		uint32_t GetFramesInFlight() const { return m_FramesInFlight; }
 		uint32_t GetImageCount() const { return static_cast<uint32_t>(m_Images.size()); }
@@ -76,6 +82,20 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			return VK_NULL_HANDLE;
 		}
 
+		const std::vector<VkFramebuffer>& GetFramebuffers() const { return m_Framebuffers; }
+		VkFramebuffer GetFramebuffer(uint32_t imageIndex) const {
+			if (imageIndex < m_Framebuffers.size())
+				return m_Framebuffers[imageIndex];
+			return VK_NULL_HANDLE;
+		}
+
+		/** Intermediate scene writes: stay in COLOR_ATTACHMENT_OPTIMAL. */
+		VkRenderPass GetSceneClearRenderPass() const { return m_SceneClearPass; }
+		VkRenderPass GetSceneLoadRenderPass() const { return m_SceneLoadPass; }
+		/** Present / ImGui: transition to PRESENT_SRC_KHR. */
+		VkRenderPass GetPresentClearRenderPass() const { return m_PresentClearPass; }
+		VkRenderPass GetPresentLoadRenderPass() const { return m_PresentLoadPass; }
+
 		bool RecreateSwapchain();
 
 	private:
@@ -88,6 +108,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		bool CreateSyncObjects();
 		void DestroySyncObjects();
+
+		bool CreateDepthResources();
+		void DestroyDepthResources();
+		bool CreateBackBufferRenderPasses();
+		void DestroyBackBufferRenderPasses();
+		bool CreateFramebuffers();
+		void DestroyFramebuffers();
 
 		void LogSwapchainConfiguration(uint32_t swapchainImageCount) const;
 
@@ -125,6 +152,21 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		uint32_t m_CurrentFrame = 0;
 		uint32_t m_AcquiredImage = 0;
+
+		VK_MemoryAllocator* m_Allocator = nullptr;
+		VkFormat m_DepthFormat = VK_FORMAT_D32_SFLOAT;
+
+		struct DepthImage {
+			VK_ImageAllocation m_Image{};
+			VkImageView m_View = VK_NULL_HANDLE;
+		};
+		std::vector<DepthImage> m_DepthImages;
+
+		VkRenderPass m_SceneClearPass = VK_NULL_HANDLE;
+		VkRenderPass m_SceneLoadPass = VK_NULL_HANDLE;
+		VkRenderPass m_PresentClearPass = VK_NULL_HANDLE;
+		VkRenderPass m_PresentLoadPass = VK_NULL_HANDLE;
+		std::vector<VkFramebuffer> m_Framebuffers;
 	};
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan
