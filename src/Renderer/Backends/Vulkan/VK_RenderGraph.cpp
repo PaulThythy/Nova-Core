@@ -15,7 +15,8 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    VK_RenderGraph::VK_RenderGraph(RHI::RHI_RenderGraphData data) : IRenderGraph(std::move(data)) {}
+    VK_RenderGraph::VK_RenderGraph(RHI::RHI_CompiledRenderGraph compiled)
+        : IRenderGraph(std::move(compiled)) {}
 
     bool VK_RenderGraph::Create(VK_Renderer& renderer) {
         Destroy();

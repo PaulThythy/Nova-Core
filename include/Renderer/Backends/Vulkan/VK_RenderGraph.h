@@ -27,7 +27,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     class NV_API VK_RenderGraph final : public RHI::IRenderGraph {
     public:
-        explicit VK_RenderGraph(RHI::RHI_RenderGraphData data);
+        explicit VK_RenderGraph(RHI::RHI_CompiledRenderGraph compiled);
         ~VK_RenderGraph() override { Destroy(); }
 
         bool Create(VK_Renderer& renderer);
