@@ -24,7 +24,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
      * - `Update()`: caller picks the element index explicitly (plain buffers, e.g. a single
      *   `ConstantBuffer<T>` or a `StructuredBuffer<T>` indexed by meaningful data). This is what
      *   `IRenderer::UpdateGpuBuffer` uses, for both engine and App-created buffers.
-     * - `WriteNextDynamicElement()`: engine-only per-draw ring allocation (used for `nova.mvp` /
+     * - `WriteNextDynamicElement()`: engine-only per-draw ring allocation (used for `nova.model` /
      *   `nova.material`, which get one element per draw call within the current frame). Not exposed
      *   on the abstract `IRenderer`; only `VK_Shaders`/`VK_PipelineCache` use it directly.
      */

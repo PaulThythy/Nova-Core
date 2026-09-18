@@ -10,15 +10,15 @@ struct PSIn {
 [shader("fragment")]
 float4 main(PSIn input) : SV_Target0 {
     float3 N = normalize(input.v_Normal);
-    float3 V = normalize(nova.scene.m_CameraPos - input.v_Pos);
+    float3 V = normalize(nova.scene.uniforms.m_Camera.m_Position - input.v_Pos);
     float3 base = nova.material.m_Base * nova.material.m_BaseColor;
 
     float3 ambient = 0.03 * base;
     float3 lighting = float3(0.0, 0.0, 0.0);
 
-    int numLights = clamp(nova.scene.m_LightCount, 0, MAX_LIGHTS);
+    int numLights = clamp(nova.scene.uniforms.m_LightCount, 0, MAX_LIGHTS);
     for (int i = 0; i < numLights; ++i) {
-        LightGPU light = nova.lights[i];
+        LightGPU light = nova.scene.lights[i];
         float3 L;
         float atten;
         EvalLightVector(light, input.v_Pos, L, atten);

@@ -278,6 +278,22 @@ namespace Nova::Core::Renderer::RHI {
                 continue;
             }
 
+            // Nested struct that groups resources (e.g. SceneParameterBlock inside NovaEngine).
+            // Slang may assign a descriptor-table offset to the parent field; we must still
+            // recurse into children or the pipeline layout will miss those bindings while
+            // SPIR-V still references them (VUID-VkGraphicsPipelineCreateInfo-layout-07988).
+            if (fieldType && fieldType->getKind() == slang::TypeReflection::Kind::Struct) {
+                slang::TypeLayoutReflection* structLayout = fieldTypeLayout;
+                if (structLayout && structLayout->getFieldCount() <= 0) {
+                    if (auto* elem = structLayout->getElementTypeLayout())
+                        structLayout = elem;
+                }
+                if (structLayout && structLayout->getFieldCount() > 0) {
+                    ExtractBindingsFromTypeLayout(structLayout, fullName, stageMask, out, setOverride, nextAutoSpace);
+                    continue;
+                }
+            }
+
             if (!hasAnyBinding && fieldTypeLayout && fieldTypeLayout->getFieldCount() > 0) {
                 ExtractBindingsFromTypeLayout(fieldTypeLayout, fullName, stageMask, out, setOverride, nextAutoSpace);
                 continue;

@@ -32,10 +32,10 @@ namespace Nova::Core::Renderer::RHI {
     // assigned by Slang reflection and looked up by these names at runtime.
     // `frame` is a push constant (not a descriptor) — see FrameUniforms below.
     namespace EngineResourceName {
-        inline constexpr const char* Scene         = "nova.scene";
-        inline constexpr const char* Mvp           = "nova.mvp";
+        inline constexpr const char* SceneUniforms = "nova.scene.uniforms";
+        inline constexpr const char* Lights        = "nova.scene.lights";
+        inline constexpr const char* Model         = "nova.model";
         inline constexpr const char* Material      = "nova.material";
-        inline constexpr const char* Lights        = "nova.lights";
         inline constexpr const char* ShadowMaps    = "nova.shadowMaps";
         inline constexpr const char* ShadowSampler = "nova.shadowSampler";
     }
@@ -58,22 +58,33 @@ namespace Nova::Core::Renderer::RHI {
     };
     static_assert(sizeof(FrameUniforms) <= 128, "FrameUniforms exceeds Vulkan min maxPushConstantsSize");
 
-    /** Scene-level data (camera, light count). Set by the app via shader SetParameter. */
-    struct NV_API SceneUniforms {
-        alignas(16) glm::vec3 m_CameraPos{ 0.0f, 0.0f, 0.0f };
-        alignas(4)  int       m_LightCount{ 0 };
-        alignas(4)  float     m_PadAfterLightCount{ 0.0f };
-    };
-
-    struct NV_API MVP {
-        alignas(16) glm::mat4 m_Model{ 1.0f };
+    /** Camera matrices + world-space position (`CameraGPU` in NovaUniforms.slang). */
+    struct NV_API CameraGPU {
         alignas(16) glm::mat4 m_View{ 1.0f };
         alignas(16) glm::mat4 m_Proj{ 1.0f };
         alignas(16) glm::mat4 m_ViewProj{ 1.0f };
         alignas(16) glm::mat4 m_InvViewProj{ 1.0f };
+        alignas(16) glm::vec3 m_Position{ 0.0f, 0.0f, 0.0f };
+        alignas(4)  float     m_Pad{ 0.0f };
     };
 
-    /** GPU light element for `StructuredBuffer<LightGPU> nova.lights` (std430). */
+    /** Scene-level data: camera + light count. Uploaded by AppRenderer::PushSceneUniforms. */
+    struct NV_API SceneUniforms {
+        CameraGPU m_Camera{};
+        alignas(4) int   m_LightCount{ 0 };
+        alignas(4) float m_PadAfterLightCount{ 0.0f };
+    };
+
+    /** Per-draw model transform. Shadow pass also sets `m_LightIndex` to read `lightViewProj`. */
+    struct NV_API ModelUniforms {
+        alignas(16) glm::mat4 m_Model{ 1.0f };
+        alignas(4)  int       m_LightIndex{ 0 };
+        alignas(4)  float     m_PadLightIndex0{ 0.0f };
+        alignas(4)  float     m_PadLightIndex1{ 0.0f };
+        alignas(4)  float     m_PadLightIndex2{ 0.0f };
+    };
+
+    /** GPU light element for `StructuredBuffer<LightGPU> nova.scene.lights` (std430). */
     struct NV_API LightGPU {
         alignas(4)  int       m_Type{ 0 };           // 0=Directional, 1=Point, 2=Spot
         alignas(4)  int       m_CastShadow{ 0 };
@@ -131,23 +142,34 @@ namespace Nova::Core::Renderer::RHI {
     };
 
     /**
+     * GPU handles for `SceneParameterBlock` (`nova.scene.*`): scene UBO + lights SSBO.
+     * Uploaded by the app (`PushSceneUniforms` / `UploadLights`), not rewritten per draw.
+     */
+    struct NV_API RHI_SceneParameterBlock {
+        RHI_GpuBufferHandle m_Uniforms; // ConstantBuffer<SceneUniforms> scene.uniforms;
+        RHI_GpuBufferHandle m_Lights;   // StructuredBuffer<LightGPU> scene.lights;
+
+        bool IsValid() const {
+            return m_Uniforms.IsValid() && m_Lights.IsValid();
+        }
+    };
+
+    /**
      * C++ mirror of `ParameterBlock<NovaEngine> nova;` (NovaUniforms.slang): one GPU buffer handle
      * per buffer field of `NovaEngine`. `FrameUniforms` is a push constant (not a descriptor
      * buffer). Shadow map texture/sampler are render-graph resources bound by reflection name
      * after texture creation.
-     *
-     * `m_Scene` holds a single value (one region per frame-in-flight). `m_Mvp` and `m_Material`
-     * are arrays (one element per draw call this frame) — see MAX_MODEL_DRAWS in VK_PipelineCache.
-     * `m_Lights` is a StructuredBuffer of up to MAX_LIGHTS elements.
+     * `m_Scene.m_Uniforms` holds a single value (one region per frame-in-flight). `m_Model` and
+     * `m_Material` are arrays (one element per draw call this frame) — see MAX_MODEL_DRAWS in
+     * VK_PipelineCache. `m_Scene.m_Lights` is a StructuredBuffer of up to MAX_LIGHTS elements.
      */
     struct NV_API RHI_EngineParameterBlock {
-        RHI_GpuBufferHandle m_Scene;    // ConstantBuffer<SceneUniforms> scene;
-        RHI_GpuBufferHandle m_Mvp;      // ConstantBuffer<MVP> mvp;
-        RHI_GpuBufferHandle m_Material; // ConstantBuffer<Material> material;
-        RHI_GpuBufferHandle m_Lights;   // StructuredBuffer<LightGPU> lights;
+        RHI_SceneParameterBlock m_Scene;
+        RHI_GpuBufferHandle     m_Model;    // ConstantBuffer<ModelUniforms> model;
+        RHI_GpuBufferHandle     m_Material; // ConstantBuffer<Material> material;
 
         bool IsValid() const {
-            return m_Scene.IsValid() && m_Mvp.IsValid() && m_Material.IsValid() && m_Lights.IsValid();
+            return m_Scene.IsValid() && m_Model.IsValid() && m_Material.IsValid();
         }
     };
 
@@ -206,21 +228,10 @@ namespace Nova::Core::Renderer::RHI {
         return kLayout;
     }
 
-    inline const std::unordered_map<std::string, size_t>& GetSceneLayout() {
+    inline const std::unordered_map<std::string, size_t>& GetModelLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
-            { "m_CameraPos", offsetof(SceneUniforms, m_CameraPos) },
-            { "m_LightCount",  offsetof(SceneUniforms, m_LightCount) },
-        };
-        return kLayout;
-    }
-
-    inline const std::unordered_map<std::string, size_t>& GetMvpLayout() {
-        static const std::unordered_map<std::string, size_t> kLayout = {
-            { "m_Model",       offsetof(MVP, m_Model) },
-            { "m_View",        offsetof(MVP, m_View) },
-            { "m_Proj",        offsetof(MVP, m_Proj) },
-            { "m_ViewProj",    offsetof(MVP, m_ViewProj) },
-            { "m_InvViewProj", offsetof(MVP, m_InvViewProj) },
+            { "m_Model",      offsetof(ModelUniforms, m_Model) },
+            { "m_LightIndex", offsetof(ModelUniforms, m_LightIndex) },
         };
         return kLayout;
     }

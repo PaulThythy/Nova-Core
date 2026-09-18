@@ -29,8 +29,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void MarkEngineDynamicBuffers(RHI::RHI_ProgramReflection& refl) {
         const char* dynamicNames[] = {
-            RHI::EngineResourceName::Scene,
-            RHI::EngineResourceName::Mvp,
+            RHI::EngineResourceName::SceneUniforms,
+            RHI::EngineResourceName::Model,
             RHI::EngineResourceName::Material,
             RHI::EngineResourceName::Lights,
         };
@@ -307,24 +307,24 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (m_Engine.IsValid())
             return true;
 
-        m_Engine.m_Scene = RHI::CreateConstantBuffer<RHI::SceneUniforms>(*m_Renderer, 1, RHI::EngineResourceName::Scene);
-        m_Engine.m_Mvp = RHI::CreateConstantBuffer<RHI::MVP>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Mvp);
+        m_Engine.m_Scene.m_Uniforms = RHI::CreateConstantBuffer<RHI::SceneUniforms>(*m_Renderer, 1, RHI::EngineResourceName::SceneUniforms);
+        m_Engine.m_Scene.m_Lights = RHI::CreateStructuredBuffer<RHI::LightGPU>(*m_Renderer, RHI::MAX_LIGHTS, RHI::EngineResourceName::Lights);
+        m_Engine.m_Model = RHI::CreateConstantBuffer<RHI::ModelUniforms>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Model);
         m_Engine.m_Material = RHI::CreateConstantBuffer<RHI::Material>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Material);
-        m_Engine.m_Lights = RHI::CreateStructuredBuffer<RHI::LightGPU>(*m_Renderer, RHI::MAX_LIGHTS, RHI::EngineResourceName::Lights);
 
         return m_Engine.IsValid();
     }
 
     void VK_PipelineCache::DestroyEngineBuffers() {
         if (!m_Renderer) return;
-        m_Renderer->DestroyGpuBuffer(m_Engine.m_Lights);
         m_Renderer->DestroyGpuBuffer(m_Engine.m_Material);
-        m_Renderer->DestroyGpuBuffer(m_Engine.m_Mvp);
-        m_Renderer->DestroyGpuBuffer(m_Engine.m_Scene);
+        m_Renderer->DestroyGpuBuffer(m_Engine.m_Model);
+        m_Renderer->DestroyGpuBuffer(m_Engine.m_Scene.m_Lights);
+        m_Renderer->DestroyGpuBuffer(m_Engine.m_Scene.m_Uniforms);
         m_Engine = RHI::RHI_EngineParameterBlock{};
     }
 
-    // Resets this frame-in-flight's per-draw ring cursor for `nova.mvp` / `nova.material`, so the
+    // Resets this frame-in-flight's per-draw ring cursor for `nova.model` / `nova.material`, so the
     // first draw of the frame writes at the start of its region instead of continuing from
     // wherever the previous frame using this slot left off.
     void VK_PipelineCache::ResetFrameDynamicUBOs() {
@@ -423,10 +423,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             write.pBufferInfo = &bufferInfo;
             vkUpdateDescriptorSets(m_Renderer->GetDevice(), 1, &write, 0, nullptr);
         };
-        writeEngineBuffer(RHI::EngineResourceName::Scene, m_Engine.m_Scene);
-        writeEngineBuffer(RHI::EngineResourceName::Mvp, m_Engine.m_Mvp);
+        writeEngineBuffer(RHI::EngineResourceName::SceneUniforms, m_Engine.m_Scene.m_Uniforms);
+        writeEngineBuffer(RHI::EngineResourceName::Lights, m_Engine.m_Scene.m_Lights);
+        writeEngineBuffer(RHI::EngineResourceName::Model, m_Engine.m_Model);
         writeEngineBuffer(RHI::EngineResourceName::Material, m_Engine.m_Material);
-        writeEngineBuffer(RHI::EngineResourceName::Lights, m_Engine.m_Lights);
     }
 
     void VK_PipelineCache::WriteShadowMapsToEntry(PipelineEntry& entry) {
@@ -738,10 +738,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             write.pBufferInfo = &bufferInfo;
             vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
         };
-        writeEngineBuffer(RHI::EngineResourceName::Scene, m_Engine.m_Scene);
-        writeEngineBuffer(RHI::EngineResourceName::Mvp, m_Engine.m_Mvp);
+        writeEngineBuffer(RHI::EngineResourceName::SceneUniforms, m_Engine.m_Scene.m_Uniforms);
+        writeEngineBuffer(RHI::EngineResourceName::Lights, m_Engine.m_Scene.m_Lights);
+        writeEngineBuffer(RHI::EngineResourceName::Model, m_Engine.m_Model);
         writeEngineBuffer(RHI::EngineResourceName::Material, m_Engine.m_Material);
-        writeEngineBuffer(RHI::EngineResourceName::Lights, m_Engine.m_Lights);
 
         std::vector<VkDescriptorSetLayout> setLayouts;
         setLayouts.reserve(entry.setLayouts.size());

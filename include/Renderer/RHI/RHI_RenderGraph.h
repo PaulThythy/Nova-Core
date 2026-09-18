@@ -41,7 +41,7 @@ namespace Nova::Core::Renderer::RHI {
         virtual void* GetTextureImGuiID(RHI_TextureHandle handle) const = 0;
         virtual bool Resize(uint32_t width, uint32_t height) = 0;
 
-        /** Engine `ParameterBlock<NovaEngine>` buffers (frame/mvp/material/lights). */
+        /** Engine `ParameterBlock<NovaEngine>` buffers (scene/model/material/lights). */
         virtual const RHI_EngineParameterBlock* GetEngineParameterBlock() const { return nullptr; }
 
         /**

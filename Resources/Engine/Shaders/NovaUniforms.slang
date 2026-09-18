@@ -37,26 +37,41 @@ struct FrameUniforms {
 [[vk::push_constant]]
 ConstantBuffer<FrameUniforms> frame;
 
-// Scene-level data (camera, light count)
-struct SceneUniforms {
-    float3 m_CameraPos;
-    int m_LightCount;
-    float _padAfterLightCount;
-};
-
-struct MVP {
-    float4x4 m_Model;
+// Camera matrices + world-space position (uploaded once per scene via PushSceneUniforms).
+struct CameraGPU {
     float4x4 m_View;
     float4x4 m_Proj;
     float4x4 m_ViewProj;
     float4x4 m_InvViewProj;
+    float3 m_Position;
+    float _pad;
+};
+
+// Scene-level constants (camera + light count).
+struct SceneUniforms {
+    CameraGPU m_Camera;
+    int m_LightCount;
+    float _padAfterLightCount;
+};
+
+// Per-draw model matrix. Lit / editor draws read the camera from `nova.scene.uniforms`.
+// Shadow pass reads `lightViewProj` from `nova.scene.lights[m_LightIndex]`.
+struct ModelUniforms {
+    float4x4 m_Model;
+    int m_LightIndex;
+    float3 _padLightIndex;
+};
+
+// Scene resources: camera/light-count UBO + light list SSBO.
+struct SceneParameterBlock {
+    ConstantBuffer<SceneUniforms> uniforms;
+    StructuredBuffer<LightGPU> lights;
 };
 
 struct NovaEngine {
-    ConstantBuffer<SceneUniforms> scene;
-    ConstantBuffer<MVP> mvp;
+    SceneParameterBlock scene;
+    ConstantBuffer<ModelUniforms> model;
     ConstantBuffer<Material> material;
-    StructuredBuffer<LightGPU> lights;
     Texture2DArray shadowMaps;
     SamplerComparisonState shadowSampler;
 };
