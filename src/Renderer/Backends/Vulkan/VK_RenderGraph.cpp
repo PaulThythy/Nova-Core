@@ -713,7 +713,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (m_Graph.m_InsideRendering)
             m_Graph.EndRendering(cmd);
 
-        m_Graph.TransitionTextureToAttachment(cmd, tex, true, clear);
+        // Never UNDEFINED-transition a multi-layer shadow array that is already in
+        // attachment layout: that would discard every layer, not just `layer`.
+        const bool alreadyAttached = tex.GetResourceState() == RHI::RHI_ResourceState::DepthWrite;
+        m_Graph.TransitionTextureToAttachment(cmd, tex, true, clear && !alreadyAttached);
 
         const auto& depthDesc = tex.GetGraphDesc().m_Desc;
 
