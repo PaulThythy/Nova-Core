@@ -46,10 +46,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_View = other.m_View;
         m_SampledView = other.m_SampledView;
         m_LayerViews = std::move(other.m_LayerViews);
-        m_LayerFramebuffers = std::move(other.m_LayerFramebuffers);
         m_Sampler = other.m_Sampler;
         m_ImGuiID = other.m_ImGuiID;
-        m_Framebuffer = other.m_Framebuffer;
         m_State = other.m_State;
 
         other.m_Allocator = nullptr;
@@ -60,7 +58,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         other.m_SampledView = VK_NULL_HANDLE;
         other.m_Sampler = VK_NULL_HANDLE;
         other.m_ImGuiID = nullptr;
-        other.m_Framebuffer = VK_NULL_HANDLE;
         other.m_State = RHI::RHI_ResourceState::Undefined;
         other.m_Image = {};
         return *this;
@@ -389,14 +386,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         UnregisterImGui();
 
         if (m_Device != VK_NULL_HANDLE) {
-            for (VkFramebuffer& fb : m_LayerFramebuffers) {
-                if (fb != VK_NULL_HANDLE) {
-                    vkDestroyFramebuffer(m_Device, fb, nullptr);
-                    fb = VK_NULL_HANDLE;
-                }
-            }
-            m_LayerFramebuffers.clear();
-
             for (VkImageView& lv : m_LayerViews) {
                 if (lv != VK_NULL_HANDLE) {
                     vkDestroyImageView(m_Device, lv, nullptr);
@@ -405,10 +394,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             }
             m_LayerViews.clear();
 
-            if (m_Framebuffer != VK_NULL_HANDLE) {
-                vkDestroyFramebuffer(m_Device, m_Framebuffer, nullptr);
-                m_Framebuffer = VK_NULL_HANDLE;
-            }
             if (m_Sampler != VK_NULL_HANDLE) {
                 vkDestroySampler(m_Device, m_Sampler, nullptr);
                 m_Sampler = VK_NULL_HANDLE;

@@ -54,7 +54,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         };
 
         bool BuildPipeline(PipelineEntry& entry);
-        bool CreateCompatibleRenderPasses(VkFormat colorFormat, VkFormat depthFormat);
         void DestroyEntry(PipelineEntry& entry);
         bool CreateEngineBuffers();
         void DestroyEngineBuffers();
@@ -65,10 +64,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_Renderer* m_Renderer = nullptr;
         VkPipelineCache m_VkPipelineCache = VK_NULL_HANDLE;
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
-        /** Compatible RP for color+depth pipelines (Grid/Scene). */
-        VkRenderPass m_RenderPass = VK_NULL_HANDLE;
-        /** Compatible RP for depth-only shadow pipelines. */
-        VkRenderPass m_DepthOnlyRenderPass = VK_NULL_HANDLE;
         VkFormat m_ColorFormat = VK_FORMAT_UNDEFINED;
         VkFormat m_DepthFormat = VK_FORMAT_D32_SFLOAT;
 

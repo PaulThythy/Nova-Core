@@ -17,14 +17,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     class VK_Renderer;
 
-    struct NV_API VK_RenderPassAttachmentDesc {
-        VkFormat format = VK_FORMAT_UNDEFINED;
-        VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        VkImageLayout finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    };
-
     class NV_API VK_RenderGraph final : public RHI::IRenderGraph {
     public:
         explicit VK_RenderGraph(RHI::RHI_CompiledRenderGraph compiled);
@@ -54,11 +46,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     private:
         struct PassRenderTarget {
-            VkRenderPass renderPassClear = VK_NULL_HANDLE;
-            VkRenderPass renderPassLoad = VK_NULL_HANDLE;
             std::vector<RHI::RHI_TextureHandle> colorAttachments;
             RHI::RHI_TextureHandle depthAttachment{};
             bool depthOnly = false;
+            bool loadColor = false;
+            bool loadDepth = false;
         };
 
         class PassContext final : public RHI::IPassContext {
@@ -92,22 +84,24 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkFormat ToVkFormat(RHI::RHI_TextureFormat format) const;
         bool IsDepthFormat(RHI::RHI_TextureFormat format) const;
 
-        VkRenderPass CreateRenderPass(
-            const VK_RenderPassAttachmentDesc* colors, uint32_t colorCount,
-            const VK_RenderPassAttachmentDesc* depth) const;
-
-        VkRenderPass CreateColorDepthRenderPass(
-            VkFormat colorFormat,
-            VkAttachmentLoadOp colorLoad,
-            VkAttachmentLoadOp depthLoad,
-            VkImageLayout finalColorLayout,
-            VkImageLayout colorInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED) const;
-
-        VkRenderPass CreateDepthOnlyRenderPass(VkAttachmentLoadOp depthLoad) const;
-
         bool EnsurePassRenderTarget(PassRenderTarget& rt, const RHI::RHI_RenderGraphPassDesc& pass);
-        bool ExecutePass(size_t passIndex, bool presentPhase, bool leaveRenderPassOpen);
+        bool ExecutePass(size_t passIndex, bool presentPhase, bool leaveRenderingOpen);
+
+        void TransitionTextureToAttachment(VkCommandBuffer cmd, VK_Texture& texture, bool isDepth, bool discardContents);
         void TransitionTextureForSampling(VkCommandBuffer cmd, VK_Texture& texture);
+        void TransitionSwapchainToColorAttachment(VkCommandBuffer cmd, uint32_t imageIndex, bool discardContents);
+        void TransitionSwapchainToPresent(VkCommandBuffer cmd, uint32_t imageIndex);
+        void TransitionSwapchainDepthToAttachment(VkCommandBuffer cmd, uint32_t imageIndex, bool discardContents);
+
+        void BeginRendering(
+            VkCommandBuffer cmd,
+            uint32_t width,
+            uint32_t height,
+            const VkRenderingAttachmentInfo* color,
+            uint32_t colorCount,
+            const VkRenderingAttachmentInfo* depth);
+        void EndRendering(VkCommandBuffer cmd);
+
         void SetViewportScissor(VkCommandBuffer cmd, uint32_t width, uint32_t height);
         void DrawFullscreenQuad(VkCommandBuffer cmd);
 
@@ -126,10 +120,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         bool m_ResourcesInitialized = false;
         bool m_ShadersReloaded = false;
-        bool m_InsideRenderPass = false;
+        bool m_InsideRendering = false;
         bool m_SwapchainColorWritten = false;
+        bool m_SwapchainInColorAttachment = false;
+        bool m_SwapchainDepthInAttachment = false;
 
         VkFormat m_DepthFormat = VK_FORMAT_D32_SFLOAT;
+        /** Stable storage for ImGui PipelineRenderingCreateInfo color format pointer. */
+        VkFormat m_ImGuiColorFormat = VK_FORMAT_UNDEFINED;
 
         uint32_t m_SceneWidth = 0;
         uint32_t m_SceneHeight = 0;

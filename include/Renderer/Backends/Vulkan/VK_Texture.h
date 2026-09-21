@@ -57,13 +57,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         }
         VkSampler GetSampler() const { return m_Sampler; }
 
-        VkFramebuffer GetFramebuffer() const { return m_Framebuffer; }
-        void SetFramebuffer(VkFramebuffer fb) { m_Framebuffer = fb; }
-
         std::vector<VkImageView>& GetLayerViews() { return m_LayerViews; }
         const std::vector<VkImageView>& GetLayerViews() const { return m_LayerViews; }
-        std::vector<VkFramebuffer>& GetLayerFramebuffers() { return m_LayerFramebuffers; }
-        const std::vector<VkFramebuffer>& GetLayerFramebuffers() const { return m_LayerFramebuffers; }
 
         RHI::RHI_ResourceState GetResourceState() const { return m_State; }
         void SetResourceState(RHI::RHI_ResourceState state) { m_State = state; }
@@ -85,10 +80,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkImageView m_View = VK_NULL_HANDLE;
         VkImageView m_SampledView = VK_NULL_HANDLE;
         std::vector<VkImageView> m_LayerViews;
-        std::vector<VkFramebuffer> m_LayerFramebuffers;
         VkSampler m_Sampler = VK_NULL_HANDLE;
         void* m_ImGuiID = nullptr;
-        VkFramebuffer m_Framebuffer = VK_NULL_HANDLE;
         RHI::RHI_ResourceState m_State = RHI::RHI_ResourceState::Undefined;
     };
 

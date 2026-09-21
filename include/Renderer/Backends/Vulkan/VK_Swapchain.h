@@ -29,7 +29,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		void Destroy();
 
-		/** Depth + color/depth render passes + framebuffers for graph presentation. */
+		/** Depth images/views for graph presentation (dynamic rendering). */
 		bool InitRenderTargets(VK_MemoryAllocator& allocator);
 		void DestroyRenderTargets();
 		bool RecreateRenderTargets();
@@ -82,19 +82,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			return VK_NULL_HANDLE;
 		}
 
-		const std::vector<VkFramebuffer>& GetFramebuffers() const { return m_Framebuffers; }
-		VkFramebuffer GetFramebuffer(uint32_t imageIndex) const {
-			if (imageIndex < m_Framebuffers.size())
-				return m_Framebuffers[imageIndex];
+		VkImage GetDepthImage(uint32_t imageIndex) const {
+			if (imageIndex < m_DepthImages.size())
+				return m_DepthImages[imageIndex].m_Image.image;
 			return VK_NULL_HANDLE;
 		}
 
-		/** Intermediate scene writes: stay in COLOR_ATTACHMENT_OPTIMAL. */
-		VkRenderPass GetSceneClearRenderPass() const { return m_SceneClearPass; }
-		VkRenderPass GetSceneLoadRenderPass() const { return m_SceneLoadPass; }
-		/** Present / ImGui: transition to PRESENT_SRC_KHR. */
-		VkRenderPass GetPresentClearRenderPass() const { return m_PresentClearPass; }
-		VkRenderPass GetPresentLoadRenderPass() const { return m_PresentLoadPass; }
+		VkImageView GetDepthView(uint32_t imageIndex) const {
+			if (imageIndex < m_DepthImages.size())
+				return m_DepthImages[imageIndex].m_View;
+			return VK_NULL_HANDLE;
+		}
 
 		bool RecreateSwapchain();
 
@@ -111,10 +109,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		bool CreateDepthResources();
 		void DestroyDepthResources();
-		bool CreateBackBufferRenderPasses();
-		void DestroyBackBufferRenderPasses();
-		bool CreateFramebuffers();
-		void DestroyFramebuffers();
 
 		void LogSwapchainConfiguration(uint32_t swapchainImageCount) const;
 
@@ -161,12 +155,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			VkImageView m_View = VK_NULL_HANDLE;
 		};
 		std::vector<DepthImage> m_DepthImages;
-
-		VkRenderPass m_SceneClearPass = VK_NULL_HANDLE;
-		VkRenderPass m_SceneLoadPass = VK_NULL_HANDLE;
-		VkRenderPass m_PresentClearPass = VK_NULL_HANDLE;
-		VkRenderPass m_PresentLoadPass = VK_NULL_HANDLE;
-		std::vector<VkFramebuffer> m_Framebuffers;
 	};
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

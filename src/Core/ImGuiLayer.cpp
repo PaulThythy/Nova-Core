@@ -98,7 +98,7 @@ namespace Nova::Core {
 
             // init_info.Allocator = m_VulkanInitInfo.m_Allocator;
             // init_info.CheckVkResultFn = nullptr;
-            // init_info.UseDynamicRendering = false;
+            // Dynamic rendering is configured by VK_RenderGraph::InitPresentationResources.
 
             m_IsRendererInitialized = true;
             NV_LOG_INFO("ImGui Vulkan backend initialized");

@@ -264,6 +264,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 continue;
             }
 
+            VkPhysicalDeviceVulkan13Features vulkan13Features{};
+            vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+            VkPhysicalDeviceFeatures2 features2{};
+            features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+            features2.pNext = &vulkan13Features;
+            vkGetPhysicalDeviceFeatures2(dev, &features2);
+            if (vulkan13Features.dynamicRendering != VK_TRUE) {
+                NV_LOG_WARN("Skipping GPU: dynamicRendering not supported.");
+                continue;
+            }
+
             // Scoring
             int score = 0;
             if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) score += 1000;
@@ -339,11 +350,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             queueCreateInfos.push_back(qci);
         }
 
+        VkPhysicalDeviceVulkan13Features vulkan13Features{};
+        vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+        vulkan13Features.dynamicRendering = VK_TRUE;
+
         VkPhysicalDeviceFeatures features{};
         features.fillModeNonSolid = VK_TRUE;
 
         VkDeviceCreateInfo dci{};
         dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        dci.pNext = &vulkan13Features;
         dci.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         dci.pQueueCreateInfos = queueCreateInfos.data();
         dci.pEnabledFeatures = &features;

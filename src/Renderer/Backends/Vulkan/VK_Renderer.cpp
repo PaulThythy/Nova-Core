@@ -24,10 +24,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return views;
     }
 
-    VkFramebuffer VK_Renderer::GetSwapchainFramebuffer(uint32_t imageIndex) const {
-        return m_VKSwapchain.GetFramebuffer(imageIndex);
-    }
-
     VK_RenderGraph* VK_Renderer::GetVKRenderGraph() const {
         return dynamic_cast<VK_RenderGraph*>(m_RenderGraph.get());
     }
