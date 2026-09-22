@@ -2,6 +2,8 @@
 #include "Renderer/Backends/Vulkan/VK_Common.h"
 #include "Core/Log.h"
 
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
@@ -40,11 +42,16 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (instance == VK_NULL_HANDLE || physicalDevice == VK_NULL_HANDLE || device == VK_NULL_HANDLE)
             return false;
 
+        VmaVulkanFunctions vulkanFunctions{};
+        vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+        vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
         VmaAllocatorCreateInfo allocatorInfo{};
         allocatorInfo.vulkanApiVersion = vulkanApiVersion;
         allocatorInfo.physicalDevice = physicalDevice;
         allocatorInfo.device = device;
         allocatorInfo.instance = instance;
+        allocatorInfo.pVulkanFunctions = &vulkanFunctions;
 
         VmaAllocator allocator = VK_NULL_HANDLE;
         const VkResult res = vmaCreateAllocator(&allocatorInfo, &allocator);

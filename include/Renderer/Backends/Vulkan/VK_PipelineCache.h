@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 
 #include "Api.h"
 #include "Renderer/RHI/RHI_RenderGraph.h"

@@ -1,7 +1,7 @@
 #ifndef VK_MESH_H
 #define VK_MESH_H
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 #include "Api.h"
 #include "Renderer/RHI/RHI_Mesh.h"
 #include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"

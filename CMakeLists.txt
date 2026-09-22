@@ -21,9 +21,9 @@ target_include_directories(Nova-Core PUBLIC ${Vulkan_INCLUDE_DIRS})
 # Third-party libraries
 add_subdirectory(vendors)
 
-# linking
+# linking (volk charge le loader Vulkan dynamiquement — ne pas lier Vulkan::Vulkan)
 target_link_libraries(Nova-Core PUBLIC
-    Vulkan::Vulkan
+    volk
     SDL3::SDL3
     glm::glm
     imgui

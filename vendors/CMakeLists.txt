@@ -16,6 +16,17 @@ add_subdirectory(SDL EXCLUDE_FROM_ALL)
 # glm
 add_subdirectory(glm)
 
+# volk (avant imgui : le backend Vulkan ImGui utilise volk)
+# Note: avoid VK_USE_PLATFORM_XLIB_KHR — Xlib.h #define None 0 conflicts with our enums.
+if(WIN32)
+    set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_WIN32_KHR CACHE STRING "" FORCE)
+elseif(APPLE)
+    set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_METAL_EXT CACHE STRING "" FORCE)
+elseif(UNIX)
+    set(VOLK_STATIC_DEFINES "VK_USE_PLATFORM_XCB_KHR;VK_USE_PLATFORM_WAYLAND_KHR" CACHE STRING "" FORCE)
+endif()
+add_subdirectory(volk EXCLUDE_FROM_ALL)
+
 # Dear ImGui
 set(IMGUI_SOURCES
     imgui/imgui.cpp
@@ -35,7 +46,8 @@ target_include_directories(imgui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/imgui
     ${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends
 )
-target_link_libraries(imgui PUBLIC Vulkan::Vulkan SDL3::SDL3)
+target_compile_definitions(imgui PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
+target_link_libraries(imgui PUBLIC volk SDL3::SDL3)
 
 # ImGuizmo
 add_library(imguizmo STATIC ImGuizmo/ImGuizmo.cpp ImGuizmo/ImGuizmo.h)

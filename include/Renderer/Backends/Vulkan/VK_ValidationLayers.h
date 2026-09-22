@@ -1,7 +1,7 @@
 #ifndef VK_VALIDATION_LAYERS_H
 #define VK_VALIDATION_LAYERS_H
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 #include <string>
 #include <vector>
 #include <cstring>
@@ -24,10 +24,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     inline VkDebugUtilsMessengerEXT s_DebugMessenger = VK_NULL_HANDLE;
 
-    // Check if validation layers are supported on this system
     bool CheckValidationLayerSupport();
 
-    // Debug callback function for validation layer messages
     VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
         VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -35,27 +33,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void* pUserData
     );
 
-    // Create a debug utils messenger for validation layer messages
-    VkResult CreateDebugUtilsMessengerEXT(
-        VkInstance instance,
-        const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-        const VkAllocationCallbacks* pAllocator,
-        VkDebugUtilsMessengerEXT* pMessenger
-    );
-
-    // Destroy a debug utils messenger
-    void DestroyDebugUtilsMessengerEXT(
-        VkInstance instance,
-        VkDebugUtilsMessengerEXT messenger,
-        const VkAllocationCallbacks* pAllocator
-    );
-
     bool SetupDebugMessenger(VkInstance instance);
+    void DestroyDebugMessenger(VkInstance instance);
 
-    // Setup and populate the debug create info structure
     void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
 
-    // Get/Set validation layers enabled state
     bool IsValidationLayersEnabled();
     void SetValidationLayersEnabled(bool enabled);
 

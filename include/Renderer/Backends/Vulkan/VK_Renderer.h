@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <memory>
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 
 #include "Renderer/RHI/RHI_Renderer.h"
 #include "Renderer/RHI/RHI_RenderGraph.h"

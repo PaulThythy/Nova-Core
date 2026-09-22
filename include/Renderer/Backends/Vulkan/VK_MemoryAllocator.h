@@ -1,7 +1,7 @@
 #ifndef VK_MEMORY_ALLOCATOR_H
 #define VK_MEMORY_ALLOCATOR_H
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 #include <cstdint>
 
 #include "Api.h"

@@ -373,6 +373,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return false;
         }
 
+        volkLoadDevice(m_Device);
+
         // Retrieve queues
         vkGetDeviceQueue(m_Device, m_GraphicsQueueFamily, 0, &m_GraphicsQueue);
 

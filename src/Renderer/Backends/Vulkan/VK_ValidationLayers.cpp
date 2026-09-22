@@ -51,59 +51,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             NV_LOG_DEBUG((std::string(prefix) + pCallbackData->pMessage + "\n").c_str());
         }
 
-        // return VK_TRUE to abort the call that triggered the validation message
         return VK_FALSE;
-    }
-
-    VkResult CreateDebugUtilsMessengerEXT(
-        VkInstance instance,
-        const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-        const VkAllocationCallbacks* pAllocator,
-        VkDebugUtilsMessengerEXT* pMessenger
-    ) {
-        auto func = (PFN_vkCreateDebugUtilsMessengerEXT)
-            vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-        if (func != nullptr) {
-            return func(instance, pCreateInfo, pAllocator, pMessenger);
-        }
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
-    }
-
-    void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT messenger, const VkAllocationCallbacks* pAllocator) {
-        auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
-            vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-        if (func != nullptr) {
-            func(instance, messenger, pAllocator);
-        }
-    }
-
-    bool SetupDebugMessenger(VkInstance instance) {
-        if (!s_EnableValidationLayers) {
-            return true;
-        }
-
-        VkDebugUtilsMessengerCreateInfoEXT createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        createInfo.messageSeverity =
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
-            | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
-            | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-        createInfo.messageType =
-            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-            | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
-            | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-        createInfo.pfnUserCallback = DebugCallback;
-        createInfo.pUserData = nullptr;
-
-        VkResult res = CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &s_DebugMessenger);
-        if (res != VK_SUCCESS) {
-            CheckVkResult(res);
-            NV_LOG_ERROR("Failed to create Vulkan debug messenger.");
-            return false;
-        }
-
-        NV_LOG_INFO("Vulkan debug messenger created.");
-        return true;
     }
 
     void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
@@ -119,6 +67,40 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         createInfo.pfnUserCallback = DebugCallback;
         createInfo.pUserData = nullptr;
+    }
+
+    bool SetupDebugMessenger(VkInstance instance) {
+        if (!s_EnableValidationLayers)
+            return true;
+
+        // volkLoadInstance a déjà résolu vkCreateDebugUtilsMessengerEXT
+        if (!vkCreateDebugUtilsMessengerEXT) {
+            NV_LOG_ERROR("vkCreateDebugUtilsMessengerEXT not loaded by volk.");
+            return false;
+        }
+
+        VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+        PopulateDebugMessengerCreateInfo(createInfo);
+
+        VkResult res = vkCreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &s_DebugMessenger);
+        if (res != VK_SUCCESS) {
+            CheckVkResult(res);
+            NV_LOG_ERROR("Failed to create Vulkan debug messenger.");
+            return false;
+        }
+
+        NV_LOG_INFO("Vulkan debug messenger created.");
+        return true;
+    }
+
+    void DestroyDebugMessenger(VkInstance instance) {
+        if (s_DebugMessenger == VK_NULL_HANDLE)
+            return;
+
+        if (vkDestroyDebugUtilsMessengerEXT)
+            vkDestroyDebugUtilsMessengerEXT(instance, s_DebugMessenger, nullptr);
+
+        s_DebugMessenger = VK_NULL_HANDLE;
     }
 
     bool IsValidationLayersEnabled() {

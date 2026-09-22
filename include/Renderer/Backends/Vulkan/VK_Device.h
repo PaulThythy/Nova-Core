@@ -1,7 +1,7 @@
 #ifndef VK_DEVICE_H
 #define VK_DEVICE_H
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 #include <vector>
 #include <optional>
 #include <set>

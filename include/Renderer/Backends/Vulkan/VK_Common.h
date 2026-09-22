@@ -1,7 +1,7 @@
 #ifndef VK_COMMON_H
 #define VK_COMMON_H
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 #include <cstdint>
 #include <string>
 

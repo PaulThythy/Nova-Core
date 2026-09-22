@@ -1,7 +1,7 @@
 #ifndef VK_SHADERS_H
 #define VK_SHADERS_H
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 #include <vector>
 #include <utility>
 #include <cstdint>
