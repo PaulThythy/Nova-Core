@@ -24,3 +24,6 @@
 	path = vendors/stb
 	url = https://github.com/nothings/stb.git
 	branch = master
+[submodule "vendors/volk"]
+	path = vendors/volk
+	url = https://github.com/zeux/volk.git
