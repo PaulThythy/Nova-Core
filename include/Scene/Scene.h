@@ -33,6 +33,7 @@ namespace Nova::Core::Scene {
 		const entt::registry& GetRegistry() const { return m_Registry; }
 
 		void SetMainCamera(entt::entity entity) { m_MainCamera = entity; }
+		entt::entity GetMainCamera() const { return m_MainCamera; }
 
 		// tree
 
