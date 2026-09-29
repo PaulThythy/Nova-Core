@@ -11,7 +11,7 @@ namespace Nova::Core::Scene {
 
 		m_Root = m_Registry.create();
 
-		m_Registry.emplace<ECS::Components::NameComponent>(m_Root, "Root");
+		m_Registry.emplace<ECS::Components::NameComponent>(m_Root, m_Name);
 		m_Registry.emplace<ECS::Components::WorldTransformComponent>(m_Root);
 
 		m_Nodes.emplace(m_Root, Node{ entt::null, {} });
@@ -24,10 +24,10 @@ namespace Nova::Core::Scene {
 		m_MainCamera = entt::null;
 
 		// Recreate the root entity.
-		m_Root = m_Registry.create();
-		m_Registry.emplace<ECS::Components::NameComponent>(m_Root, "Root");
-		m_Registry.emplace<ECS::Components::WorldTransformComponent>(m_Root);
-		m_Nodes.emplace(m_Root, Node{ entt::null, {} });
+		//m_Root = m_Registry.create();
+		//m_Registry.emplace<ECS::Components::NameComponent>(m_Root, "Root");
+		//m_Registry.emplace<ECS::Components::WorldTransformComponent>(m_Root);
+		//m_Nodes.emplace(m_Root, Node{ entt::null, {} });
 	}
 
 	entt::entity Scene::CreateEntity(const std::string& name) {
