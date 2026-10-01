@@ -40,6 +40,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkCommandPool    m_CommandPool = VK_NULL_HANDLE;
 		VkQueue          m_GraphicsQueue = VK_NULL_HANDLE;
 
+		//TODO maybe not 1 index and vertex buffer per mesh ? 
+		//should depend on the mesh type and the usage of the mesh (static, dynamic, instanced, etc.) ?
 		VK_BufferAllocation m_VertexBuffer{};
 		VK_BufferAllocation m_IndexBuffer{};
 

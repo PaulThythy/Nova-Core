@@ -78,6 +78,7 @@ namespace Nova::Core::Renderer::RHI {
     /** Per-draw model transform. Shadow pass also sets `m_LightIndex` to read `lightViewProj`. */
     struct NV_API ModelUniforms {
         alignas(16) glm::mat4 m_Model{ 1.0f };
+        //TODO remove light index from model uniforms
         alignas(4)  int       m_LightIndex{ 0 };
         alignas(4)  float     m_PadLightIndex0{ 0.0f };
         alignas(4)  float     m_PadLightIndex1{ 0.0f };
