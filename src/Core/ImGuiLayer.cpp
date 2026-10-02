@@ -2,6 +2,8 @@
 
 #include "Core/Log.h"
 
+#include "ImGuizmo.h"
+
 #include <iostream>
 
 namespace Nova::Core {
@@ -134,6 +136,7 @@ namespace Nova::Core {
 
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
+        ImGuizmo::BeginFrame();
     }
 
     void ImGuiLayer::End() {
