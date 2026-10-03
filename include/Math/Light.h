@@ -5,6 +5,7 @@
 #include <cmath>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "Api.h"
 
@@ -16,13 +17,27 @@ namespace Nova::Core::Math {
         Spot = 2
     };
 
+    /** Local beam axis for Spot lights: +X so identity rotation shines along +X. */
+    inline glm::vec3 SpotLocalBeamAxis() { return glm::vec3(1.0f, 0.0f, 0.0f); }
+
+    /**
+     * Spot travel direction from TransformComponent::m_Rotation (Euler radians, XYZ).
+     * Converts Euler → quaternion first so the beam axis is rotated without gimbal lock.
+     */
+    inline glm::vec3 SpotTravelDirectionFromRotation(const glm::vec3& eulerRadians) {
+        const glm::quat q = glm::normalize(glm::quat(eulerRadians));
+        const glm::vec3 dir = q * SpotLocalBeamAxis();
+        const float len2 = glm::dot(dir, dir);
+        return len2 > 1e-12f ? (dir / std::sqrt(len2)) : SpotLocalBeamAxis();
+    }
+
     struct NV_API Light {
         LightType m_Type = LightType::Directional;
         glm::vec3 m_Color = glm::vec3(1.0f);
         float m_Intensity = 1.0f;
         bool m_LightShadow = false;
 
-        /** Travel direction in world space (Directional / Spot). L = -normalize(m_Direction). */
+        /** Travel direction in world space (Directional only). Spot uses Transform rotation. */
         glm::vec3 m_Direction{ 0.0f, -1.0f, 0.0f };
 
         // Specific, ignored if not relevant
