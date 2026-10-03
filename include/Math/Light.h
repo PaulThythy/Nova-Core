@@ -17,18 +17,31 @@ namespace Nova::Core::Math {
         Spot = 2
     };
 
-    /** Local beam axis for Spot lights: +X so identity rotation shines along +X. */
-    inline glm::vec3 SpotLocalBeamAxis() { return glm::vec3(1.0f, 0.0f, 0.0f); }
+    /** Local beam axis for Directional / Spot: +X so identity rotation shines along +X. */
+    inline glm::vec3 LightLocalBeamAxis() { return glm::vec3(1.0f, 0.0f, 0.0f); }
 
     /**
-     * Spot travel direction from TransformComponent::m_Rotation (Euler radians, XYZ).
+     * Travel direction from TransformComponent::m_Rotation (Euler radians, XYZ).
      * Converts Euler → quaternion first so the beam axis is rotated without gimbal lock.
+     * Used by Directional and Spot lights.
      */
-    inline glm::vec3 SpotTravelDirectionFromRotation(const glm::vec3& eulerRadians) {
+    inline glm::vec3 LightTravelDirectionFromRotation(const glm::vec3& eulerRadians) {
         const glm::quat q = glm::normalize(glm::quat(eulerRadians));
-        const glm::vec3 dir = q * SpotLocalBeamAxis();
+        const glm::vec3 dir = q * LightLocalBeamAxis();
         const float len2 = glm::dot(dir, dir);
-        return len2 > 1e-12f ? (dir / std::sqrt(len2)) : SpotLocalBeamAxis();
+        return len2 > 1e-12f ? (dir / std::sqrt(len2)) : LightLocalBeamAxis();
+    }
+
+    /**
+     * Factor in [minFactor, 1]: more top-down → 1, more grazing → minFactor.
+     * Used to shrink depth bias when the light leans sideways (reduces ground peter-panning).
+     */
+    inline float ShadowAngleBiasFactor(const glm::vec3& travelDirection, float minFactor = 0.35f) {
+        const float len2 = glm::dot(travelDirection, travelDirection);
+        if (len2 < 1e-12f)
+            return 1.0f;
+        const float upAmount = std::abs(travelDirection.y) / std::sqrt(len2);
+        return std::max(upAmount, minFactor);
     }
 
     struct NV_API Light {
@@ -36,9 +49,6 @@ namespace Nova::Core::Math {
         glm::vec3 m_Color = glm::vec3(1.0f);
         float m_Intensity = 1.0f;
         bool m_LightShadow = false;
-
-        /** Travel direction in world space (Directional only). Spot uses Transform rotation. */
-        glm::vec3 m_Direction{ 0.0f, -1.0f, 0.0f };
 
         // Specific, ignored if not relevant
         float     m_Range{ 10.0f };         // Spot / Point
@@ -58,18 +68,6 @@ namespace Nova::Core::Math {
         // Helpers
         float InnerCos() const { return std::cos(glm::radians(m_InnerCone)); }
         float OuterCos() const { return std::cos(glm::radians(m_OuterCone)); }
-
-        /**
-         * Factor in [minFactor, 1]: more top-down → 1, more grazing directional → minFactor.
-         * Used to shrink depth bias when the light leans sideways (reduces ground peter-panning).
-         */
-        float ShadowAngleBiasFactor(float minFactor = 0.35f) const {
-            const float len2 = glm::dot(m_Direction, m_Direction);
-            if (len2 < 1e-12f)
-                return 1.0f;
-            const float upAmount = std::abs(m_Direction.y) / std::sqrt(len2);
-            return std::max(upAmount, minFactor);
-        }
     };
 
     /** Build light-space view-projection for shadow mapping (Directional = ortho, Spot = perspective).
