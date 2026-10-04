@@ -3,15 +3,14 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
-#include <fstream>
 #include <mutex>
-#include <sstream>
 #include <string_view>
 
 #include <slang-com-helper.h>
 #include <slang-com-ptr.h>
 #include <slang.h>
 
+#include "Core/FileSystem.h"
 #include "Renderer/RHI/RHI_ShaderCache.h"
 #include "Renderer/RHI/RHI_ShaderReflection.h"
 
@@ -155,8 +154,7 @@ namespace Nova::Core::Renderer::RHI {
 
         std::vector<std::string> searchPathStrings;
         {
-            const std::filesystem::path parent =
-                input.m_File.has_parent_path() ? input.m_File.parent_path() : std::filesystem::current_path();
+            const std::filesystem::path parent = input.m_File.has_parent_path() ? input.m_File.parent_path() : FileSystem::CurrentPath();
             searchPathStrings.push_back(ToSlangPathString(parent));
             for (const auto& inc : input.m_IncludeDirs) {
                 searchPathStrings.push_back(ToSlangPathString(inc));
@@ -294,9 +292,8 @@ namespace Nova::Core::Renderer::RHI {
                     disk.m_Stage = in.m_Stage;
                     disk.m_TargetApi = in.m_TargetApi;
                     std::string readErr;
-                    ReadTextFile(in.m_File, disk.m_Source, readErr);
-                    std::error_code ec;
-                    disk.m_LastWriteTime = std::filesystem::last_write_time(in.m_File, ec);
+                    FileSystem::ReadTextFile(in.m_File, disk.m_Source, readErr);
+                    disk.m_LastWriteTime = FileSystem::LastWriteTime(in.m_File);
                     disk.m_Success = true;
                     RHI_ShaderCache::PutMemory(hash, disk);
                     return disk;
@@ -312,7 +309,7 @@ namespace Nova::Core::Renderer::RHI {
 
         std::string source;
         std::string readErr;
-        if (!ReadTextFile(in.m_File, source, readErr)) {
+        if (!FileSystem::ReadTextFile(in.m_File, source, readErr)) {
             failure.m_Log = std::move(readErr);
             return failure;
         }
@@ -325,8 +322,7 @@ namespace Nova::Core::Renderer::RHI {
             return out;
         }
 
-        std::error_code ec;
-        out.m_LastWriteTime = std::filesystem::last_write_time(in.m_File, ec);
+        out.m_LastWriteTime = FileSystem::LastWriteTime(in.m_File);
 
         if (!in.m_SkipCache) {
             RHI_ShaderCache::SaveDisk(hash, out);
@@ -334,22 +330,6 @@ namespace Nova::Core::Renderer::RHI {
         }
 
         return out;
-    }
-
-    bool ReadTextFile(const std::filesystem::path& path, std::string& outText, std::string& outError) {
-        std::ifstream file(path, std::ios::in | std::ios::binary);
-        if (!file.is_open()) {
-            outError = "Failed to open file: " + path.string();
-            return false;
-        }
-        std::ostringstream ss;
-        ss << file.rdbuf();
-        outText = ss.str();
-        if (outText.empty()) {
-            outError = "File is empty: " + path.string();
-            return false;
-        }
-        return true;
     }
 
     RHI_ShaderStage ShaderStageFromFileExtension(const std::filesystem::path& filePath) {

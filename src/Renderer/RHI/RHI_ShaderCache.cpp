@@ -3,6 +3,8 @@
 #include <fstream>
 #include <unordered_map>
 
+#include "Core/FileSystem.h"
+
 namespace Nova::Core::Renderer::RHI {
 
     std::unordered_map<std::string, RHI_ShaderCompileResult> g_MemoryCache;
@@ -35,7 +37,7 @@ namespace Nova::Core::Renderer::RHI {
 
     bool LoadReflectionCache(const std::filesystem::path& dir, const std::string& hash, RHI_ProgramReflection& out) {
         const auto path = GetReflectionCachePath(dir, hash);
-        if (!std::filesystem::exists(path)) return false;
+        if (!FileSystem::Exists(path)) return false;
 
         std::ifstream is(path, std::ios::binary);
         if (!is.is_open()) return false;
@@ -139,17 +141,16 @@ namespace Nova::Core::Renderer::RHI {
     }
 
     std::filesystem::path RHI_ShaderCache::GetCacheDirectory() {
-        auto dir = std::filesystem::current_path() / "Cache" / "Shaders";
-        std::filesystem::create_directories(dir);
+        auto dir = FileSystem::CurrentPath() / "Cache" / "Shaders";
+        FileSystem::CreateDirectories(dir);
         return dir;
     }
 
     std::string RHI_ShaderCache::ComputeHash(const RHI_ShaderCompileInput& input) {
         std::string hash = input.m_File.generic_string();
 
-        std::error_code ec;
-        const auto ft = std::filesystem::last_write_time(input.m_File, ec);
-        if (!ec) {
+        std::filesystem::file_time_type ft{};
+        if (FileSystem::TryGetLastWriteTime(input.m_File, ft)) {
             hash += std::to_string(ft.time_since_epoch().count());
         }
 
@@ -173,7 +174,7 @@ namespace Nova::Core::Renderer::RHI {
     bool RHI_ShaderCache::NeedsRecompile(const RHI_ShaderCompileInput& input, const std::string& hash) {
         (void)input;
         const auto path = GetCacheDirectory() / (hash + ".spv");
-        return !std::filesystem::exists(path);
+        return !FileSystem::Exists(path);
     }
 
     bool RHI_ShaderCache::TryGetMemory(const std::string& hash, RHI_ShaderCompileResult& out) {
@@ -194,25 +195,19 @@ namespace Nova::Core::Renderer::RHI {
     bool RHI_ShaderCache::LoadDisk(const std::string& hash, RHI_ShaderCompileResult& out) {
         const auto dir = GetCacheDirectory();
         const auto path = dir / (hash + ".spv");
-        if (!std::filesystem::exists(path)) {
+        if (!FileSystem::Exists(path)) {
             return false;
         }
 
-        std::ifstream file(path, std::ios::binary);
-        if (!file.is_open()) {
+        std::string readErr;
+        if (!FileSystem::ReadBinaryFile(path, out.m_Binary, readErr)) {
+            return false;
+        }
+        if (out.m_Binary.Size < 4 || (out.m_Binary.Size % 4) != 0) {
+            out.m_Binary.Release();
             return false;
         }
 
-        file.seekg(0, std::ios::end);
-        const auto end = file.tellg();
-        file.seekg(0);
-        const auto size = static_cast<size_t>(end);
-        if (size < 4 || (size % 4) != 0) {
-            return false;
-        }
-
-        out.m_Binary.Allocate(size);
-        file.read(reinterpret_cast<char*>(out.m_Binary.Data), static_cast<std::streamsize>(size));
         out.m_Format = RHI_ShaderBinaryFormat::Spirv;
 
         (void)LoadReflectionCache(dir, hash, out.m_Reflection);
@@ -224,12 +219,10 @@ namespace Nova::Core::Renderer::RHI {
     void RHI_ShaderCache::SaveDisk(const std::string& hash, const RHI_ShaderCompileResult& result) {
         const auto dir = GetCacheDirectory();
         const auto path = dir / (hash + ".spv");
-        std::ofstream file(path, std::ios::binary);
-        if (!file.is_open()) {
+        std::string writeErr;
+        if (!FileSystem::WriteBinaryFile(path, result.m_Binary, writeErr)) {
             return;
         }
-        file.write(reinterpret_cast<const char*>(result.m_Binary.Data),
-            static_cast<std::streamsize>(result.m_Binary.Size));
 
         SaveReflectionCache(dir, hash, result.m_Reflection);
     }

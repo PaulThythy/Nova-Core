@@ -5,6 +5,7 @@
 #include "Math/Vertex.h"
 #include "Renderer/RHI/RHI_ShaderCompiler.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
+#include "Core/FileSystem.h"
 #include "Core/Log.h"
 
 #include <algorithm>
@@ -78,11 +79,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const VkResult res = vkCreateDescriptorSetLayout(device, &info, nullptr, &outLayout);
         CheckVkResult(res);
         return (res == VK_SUCCESS);
-    }
-
-    std::filesystem::file_time_type GetFileWriteTime(const std::filesystem::path& path) {
-        std::error_code ec;
-        return std::filesystem::last_write_time(path, ec);
     }
 
     bool CompileGraphicsShaders(
@@ -256,9 +252,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             if (!entry.desc.m_DepthOnly && !entry.desc.m_Fragment)
                 continue;
 
-            const auto vertTime = GetFileWriteTime(entry.desc.m_Vertex->GetPath());
+            const auto vertTime = FileSystem::LastWriteTime(entry.desc.m_Vertex->GetPath());
             const auto fragTime = entry.desc.m_Fragment
-                ? GetFileWriteTime(entry.desc.m_Fragment->GetPath())
+                ? FileSystem::LastWriteTime(entry.desc.m_Fragment->GetPath())
                 : entry.fragWriteTime;
             if (vertTime == entry.vertWriteTime && fragTime == entry.fragWriteTime)
                 continue;
@@ -713,9 +709,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         entry.shader->SetReflection(reflForVk);
         WriteShadowMapsToEntry(entry);
 
-        entry.vertWriteTime = GetFileWriteTime(entry.desc.m_Vertex->GetPath());
+        entry.vertWriteTime = FileSystem::LastWriteTime(entry.desc.m_Vertex->GetPath());
         entry.fragWriteTime = entry.desc.m_Fragment
-            ? GetFileWriteTime(entry.desc.m_Fragment->GetPath())
+            ? FileSystem::LastWriteTime(entry.desc.m_Fragment->GetPath())
             : entry.vertWriteTime;
         return true;
     }

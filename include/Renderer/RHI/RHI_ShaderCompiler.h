@@ -60,8 +60,6 @@ namespace Nova::Core::Renderer::RHI {
         static RHI_ShaderCompileResult Compile(const RHI_ShaderCompileInput& input);
     };
 
-    NV_API bool ReadTextFile(const std::filesystem::path& path, std::string& outText, std::string& outError);
-
     NV_API RHI_ShaderStage ShaderStageFromFileExtension(const std::filesystem::path& filePath);
 
     NV_API bool EnsureSlangInitialized();
