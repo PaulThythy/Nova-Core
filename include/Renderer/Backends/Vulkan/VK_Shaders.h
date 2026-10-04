@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 
 #include "Api.h"
+#include "Core/Buffer.h"
 #include "Renderer/RHI/RHI_Shaders.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
 
@@ -33,7 +34,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return *this;
         }
 
-        bool Create(VkDevice device, const std::vector<uint8_t>& spirvBytes);
+        bool Create(VkDevice device, const Nova::Core::Buffer& spirvBytes);
         void Destroy();
 
         VkShaderModule GetModule() const { return m_Module; }

@@ -211,8 +211,8 @@ namespace Nova::Core::Renderer::RHI {
             return false;
         }
 
-        out.m_Binary.resize(size);
-        file.read(reinterpret_cast<char*>(out.m_Binary.data()), static_cast<std::streamsize>(size));
+        out.m_Binary.Allocate(size);
+        file.read(reinterpret_cast<char*>(out.m_Binary.Data), static_cast<std::streamsize>(size));
         out.m_Format = RHI_ShaderBinaryFormat::Spirv;
 
         (void)LoadReflectionCache(dir, hash, out.m_Reflection);
@@ -228,8 +228,8 @@ namespace Nova::Core::Renderer::RHI {
         if (!file.is_open()) {
             return;
         }
-        file.write(reinterpret_cast<const char*>(result.m_Binary.data()),
-            static_cast<std::streamsize>(result.m_Binary.size()));
+        file.write(reinterpret_cast<const char*>(result.m_Binary.Data),
+            static_cast<std::streamsize>(result.m_Binary.Size));
 
         SaveReflectionCache(dir, hash, result.m_Reflection);
     }

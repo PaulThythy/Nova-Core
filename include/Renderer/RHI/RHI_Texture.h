@@ -3,9 +3,9 @@
 
 #include <cstdint>
 #include <memory>
-#include <vector>
 
 #include "Api.h"
+#include "Core/Buffer.h"
 
 namespace Nova::Core::Renderer::RHI {
 
@@ -15,7 +15,7 @@ namespace Nova::Core::Renderer::RHI {
      */
     struct NV_API RHI_Texture {
         RHI_Texture() = default;
-        RHI_Texture(uint32_t width, uint32_t height, std::vector<uint8_t> rgbaPixels, bool createImGuiID = true)
+        RHI_Texture(uint32_t width, uint32_t height, Nova::Core::Buffer rgbaPixels, bool createImGuiID = true)
             : m_Width(width),
               m_Height(height),
               m_Pixels(std::move(rgbaPixels)),
@@ -27,8 +27,8 @@ namespace Nova::Core::Renderer::RHI {
 
         uint32_t GetWidth() const { return m_Width; }
         uint32_t GetHeight() const { return m_Height; }
-        const std::vector<uint8_t>& GetPixels() const { return m_Pixels; }
-        std::vector<uint8_t>& GetPixels() { return m_Pixels; }
+        const Nova::Core::Buffer& GetPixels() const { return m_Pixels; }
+        Nova::Core::Buffer& GetPixels() { return m_Pixels; }
         bool WantsImGuiID() const { return m_CreateImGuiID; }
 
         virtual void Upload(const RHI_Texture& src);
@@ -39,7 +39,7 @@ namespace Nova::Core::Renderer::RHI {
 
         uint32_t m_Width = 0;
         uint32_t m_Height = 0;
-        std::vector<uint8_t> m_Pixels; // RGBA8
+        Nova::Core::Buffer m_Pixels; // RGBA8
         bool m_CreateImGuiID = true;
     };
 

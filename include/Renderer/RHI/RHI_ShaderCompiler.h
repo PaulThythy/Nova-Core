@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Api.h"
+#include "Core/Buffer.h"
 #include "Core/GraphicsAPI.h"
 #include "Renderer/RHI/RHI_ShaderTypes.h"
 #include "Renderer/RHI/RHI_ShaderReflection.h"
@@ -42,7 +43,7 @@ namespace Nova::Core::Renderer::RHI {
         GraphicsAPI m_TargetApi = GraphicsAPI::Vulkan;
 
         RHI_ShaderBinaryFormat m_Format = RHI_ShaderBinaryFormat::Unknown;
-        std::vector<uint8_t> m_Binary;
+        Nova::Core::Buffer m_Binary;
         std::string m_Source;
         std::string m_Log;
 

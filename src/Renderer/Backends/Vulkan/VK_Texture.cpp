@@ -157,13 +157,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_Pixels = src.m_Pixels;
         m_CreateImGuiID = src.m_CreateImGuiID;
 
-        if (m_Width == 0 || m_Height == 0 || m_Pixels.empty()) {
+        if (m_Width == 0 || m_Height == 0 || !m_Pixels) {
             NV_LOG_ERROR("VK_Texture::Upload - empty texture");
             return;
         }
 
         const size_t expected = static_cast<size_t>(m_Width) * static_cast<size_t>(m_Height) * 4u;
-        if (m_Pixels.size() < expected) {
+        if (m_Pixels.Size < expected) {
             NV_LOG_ERROR("VK_Texture::Upload - pixel buffer too small (RGBA8 required)");
             return;
         }
@@ -227,7 +227,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return;
         }
 
-        m_Allocator->WriteToBuffer(staging, 0, expected, m_Pixels.data());
+        m_Allocator->WriteToBuffer(staging, 0, expected, m_Pixels.Data);
 
         if (!CopyBufferToImage(staging.buffer, m_Width, m_Height)) {
             m_Allocator->DestroyBuffer(staging);

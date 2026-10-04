@@ -18,7 +18,7 @@ namespace Nova::Core::Asset::Assets {
         }
     }
 
-    const std::vector<uint8_t>& ShaderAsset::GetBinary() const {
+    const Buffer& ShaderAsset::GetBinary() const {
         return GetBinary(m_LastCompiledApi);
     }
 
@@ -34,7 +34,7 @@ namespace Nova::Core::Asset::Assets {
         return GetReflection(m_LastCompiledApi);
     }
 
-    const std::vector<uint8_t>& ShaderAsset::GetBinary(GraphicsAPI api) const {
+    const Buffer& ShaderAsset::GetBinary(GraphicsAPI api) const {
         (void)api;
         return m_BinaryVulkan;
     }

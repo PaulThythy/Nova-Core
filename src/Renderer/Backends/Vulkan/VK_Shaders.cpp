@@ -13,16 +13,16 @@
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
     // --- VK_ShaderModule ---
-    bool VK_ShaderModule::Create(VkDevice device, const std::vector<uint8_t>& spirvBytes) {
+    bool VK_ShaderModule::Create(VkDevice device, const Buffer& spirvBytes) {
         Destroy();
 
-        if (device == VK_NULL_HANDLE || spirvBytes.empty() || (spirvBytes.size() % 4) != 0)
+        if (device == VK_NULL_HANDLE || !spirvBytes || (spirvBytes.Size % 4) != 0)
             return false;
 
         VkShaderModuleCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        createInfo.codeSize = spirvBytes.size();
-        createInfo.pCode = reinterpret_cast<const uint32_t*>(spirvBytes.data());
+        createInfo.codeSize = static_cast<size_t>(spirvBytes.Size);
+        createInfo.pCode = spirvBytes.As<uint32_t>();
 
         VkResult res = vkCreateShaderModule(device, &createInfo, nullptr, &m_Module);
         if (res != VK_SUCCESS) {

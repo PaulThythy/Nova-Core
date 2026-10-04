@@ -1,8 +1,6 @@
 #ifndef VK_TEXTURE_H
 #define VK_TEXTURE_H
 
-#include <vector>
-
 #include <volk.h>
 
 #include "Api.h"

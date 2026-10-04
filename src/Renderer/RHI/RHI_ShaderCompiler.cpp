@@ -113,7 +113,7 @@ namespace Nova::Core::Renderer::RHI {
     bool GetLinkedSpirv(
         slang::IComponentType* linked,
         std::string& log,
-        std::vector<uint8_t>& outBinary,
+        Buffer& outBinary,
         std::string& outFailureMessage) {
         Slang::ComPtr<ISlangBlob> codeBlob;
         Slang::ComPtr<ISlangBlob> diagBlob;
@@ -132,8 +132,8 @@ namespace Nova::Core::Renderer::RHI {
             return false;
         }
 
-        outBinary.resize(byteSize);
-        std::memcpy(outBinary.data(), bytes, byteSize);
+        outBinary.Allocate(byteSize);
+        std::memcpy(outBinary.Data, bytes, byteSize);
         return true;
     }
 

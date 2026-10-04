@@ -3,6 +3,7 @@
 
 #include "Api.h"
 #include "Asset/Asset.h"
+#include "Core/Buffer.h"
 #include "Renderer/RHI/RHI_ShaderCompiler.h"
 
 namespace Nova::Core::Asset::Assets {
@@ -18,13 +19,13 @@ namespace Nova::Core::Asset::Assets {
         bool Recompile();
 
         // Accessors populated after compilation.
-        const std::vector<uint8_t>& GetBinary() const;
+        const Nova::Core::Buffer& GetBinary() const;
         Nova::Core::Renderer::RHI::RHI_ShaderBinaryFormat GetBinaryFormat() const;
         // Source .slang conservé après compilation (débogage).
         const std::string& GetSource() const;
         const std::string& GetLastLog() const { return m_LastLog; }
 
-        const std::vector<uint8_t>& GetBinary(Nova::Core::GraphicsAPI api) const;
+        const Nova::Core::Buffer& GetBinary(Nova::Core::GraphicsAPI api) const;
         Nova::Core::Renderer::RHI::RHI_ShaderBinaryFormat GetBinaryFormat(Nova::Core::GraphicsAPI api) const;
         const std::string& GetSource(Nova::Core::GraphicsAPI api) const;
 
@@ -42,7 +43,7 @@ namespace Nova::Core::Asset::Assets {
 
         Nova::Core::Renderer::RHI::RHI_ShaderBinaryFormat m_FormatVulkan =
             Nova::Core::Renderer::RHI::RHI_ShaderBinaryFormat::Unknown;
-        std::vector<uint8_t> m_BinaryVulkan;
+        Nova::Core::Buffer m_BinaryVulkan;
 
         std::string m_SourceVulkan;
 
