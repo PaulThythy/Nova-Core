@@ -2,6 +2,7 @@
 #define SCENE_H
 
 #include <entt/entt.hpp>
+#include <glm/glm.hpp>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -44,6 +45,11 @@ namespace Nova::Core::Scene {
 
 		entt::entity GetParent(entt::entity entity) const;
 		const std::vector<entt::entity>& GetChildren(entt::entity entity) const;
+
+		/** World matrix = parentWorld * local TransformComponent (identity if missing). */
+		glm::mat4 GetWorldTransform(entt::entity entity) const;
+		/** Writes local TransformComponent so that GetWorldTransform(entity) == worldMatrix. */
+		void SetWorldTransform(entt::entity entity, const glm::mat4& worldMatrix);
 
 		void Clear();
 

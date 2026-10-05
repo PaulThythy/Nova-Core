@@ -1,10 +1,46 @@
 #include "Scene/Scene.h"
 
+#include <algorithm>
+#include <cmath>
+#include <vector>
+
+#include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtc/quaternion.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
+
 #include "ECS/Components/IDComponent.h"
 #include "ECS/Components/NameComponent.h"
-#include "ECS/Components/WorldTransformComponent.h"
+#include "ECS/Components/TransformComponent.h"
 
 namespace Nova::Core::Scene {
+
+	static void DecomposeMatrixToTRS(
+		const glm::mat4& matrix,
+		glm::vec3& outTranslation,
+		glm::quat& outRotation,
+		glm::vec3& outScale)
+	{
+		outTranslation = glm::vec3(matrix[3]);
+
+		glm::vec3 column0 = glm::vec3(matrix[0]);
+		glm::vec3 column1 = glm::vec3(matrix[1]);
+		glm::vec3 column2 = glm::vec3(matrix[2]);
+
+		outScale = glm::vec3(
+			glm::length(column0),
+			glm::length(column1),
+			glm::length(column2));
+
+		if (glm::determinant(glm::mat3(matrix)) < 0.0f)
+			outScale.x = -outScale.x;
+
+		if (std::abs(outScale.x) > 1e-8f) column0 /= outScale.x;
+		if (std::abs(outScale.y) > 1e-8f) column1 /= outScale.y;
+		if (std::abs(outScale.z) > 1e-8f) column2 /= outScale.z;
+
+		outRotation = glm::normalize(glm::quat_cast(glm::mat3(column0, column1, column2)));
+	}
 
 	Scene::Scene(const std::string& sceneName) {
 		m_Name = sceneName;
@@ -12,7 +48,6 @@ namespace Nova::Core::Scene {
 		m_Root = m_Registry.create();
 
 		m_Registry.emplace<ECS::Components::NameComponent>(m_Root, m_Name);
-		m_Registry.emplace<ECS::Components::WorldTransformComponent>(m_Root);
 
 		m_Nodes.emplace(m_Root, Node{ entt::null, {} });
 	}
@@ -26,7 +61,6 @@ namespace Nova::Core::Scene {
 		// Recreate the root entity.
 		//m_Root = m_Registry.create();
 		//m_Registry.emplace<ECS::Components::NameComponent>(m_Root, "Root");
-		//m_Registry.emplace<ECS::Components::WorldTransformComponent>(m_Root);
 		//m_Nodes.emplace(m_Root, Node{ entt::null, {} });
 	}
 
@@ -40,8 +74,6 @@ namespace Nova::Core::Scene {
 		m_Registry.emplace<ECS::Components::IDComponent>(entity, id);
 		m_Registry.emplace<ECS::Components::NameComponent>(entity, name.empty() ? "Entity" : name);
 
-		m_Registry.emplace<ECS::Components::WorldTransformComponent>(entity);
-		
 		m_EntityMap[id] = entity;
 
 		EnsureNode(entity);
@@ -167,8 +199,16 @@ namespace Nova::Core::Scene {
 		if (m_Nodes[child].m_Parent == newParent)
 			return true;
 
+		// Keep world pose stable across reparent (children keep their local offsets).
+		const bool hasTransform = m_Registry.all_of<ECS::Components::TransformComponent>(child);
+		const glm::mat4 world = hasTransform ? GetWorldTransform(child) : glm::mat4(1.0f);
+
 		DetachFromParent(child);
 		AttachToParent(child, newParent);
+
+		if (hasTransform)
+			SetWorldTransform(child, world);
+
 		return true;
 	}
 	
@@ -190,4 +230,40 @@ namespace Nova::Core::Scene {
 			return s_Empty;
 		return it->second.m_Children;
 	}
-}
+
+	glm::mat4 Scene::GetWorldTransform(entt::entity entity) const {
+		if (!IsValidEntity(entity) || entity == m_Root)
+			return glm::mat4(1.0f);
+
+		std::vector<entt::entity> chain;
+		for (entt::entity e = entity; e != entt::null && e != m_Root; e = GetParent(e))
+			chain.push_back(e);
+
+		glm::mat4 world{ 1.0f };
+		for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+			if (const auto* tc = m_Registry.try_get<ECS::Components::TransformComponent>(*it))
+				world *= tc->GetTransform();
+		}
+		return world;
+	}
+
+	void Scene::SetWorldTransform(entt::entity entity, const glm::mat4& worldMatrix) {
+		auto* tc = m_Registry.try_get<ECS::Components::TransformComponent>(entity);
+		if (!tc)
+			return;
+
+		const entt::entity parent = GetParent(entity);
+		const glm::mat4 parentWorld = (parent != entt::null) ? GetWorldTransform(parent) : glm::mat4(1.0f);
+		const glm::mat4 local = glm::inverse(parentWorld) * worldMatrix;
+
+		glm::vec3 translation{};
+		glm::quat rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+		glm::vec3 scale{ 1.0f };
+		DecomposeMatrixToTRS(local, translation, rotation, scale);
+
+		tc->m_Translation = translation;
+		tc->m_Rotation = glm::eulerAngles(rotation);
+		tc->m_Scale = scale;
+	}
+
+} // namespace Nova::Core::Scene
