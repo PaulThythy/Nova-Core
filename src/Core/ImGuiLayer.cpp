@@ -119,7 +119,7 @@ namespace Nova::Core {
 
     void ImGuiLayer::Begin() {
         if(!m_IsRendererInitialized) {
-            NV_LOG_ERROR("ImGui backend not initialized!");
+            NV_LOG_WARN("ImGui backend not initialized!");
             return;
         }
 
@@ -141,7 +141,7 @@ namespace Nova::Core {
 
     void ImGuiLayer::End() {
         if(!m_IsRendererInitialized) {
-            NV_LOG_ERROR("ImGui backend not initialized!");
+            NV_LOG_WARN("ImGui backend not initialized!");
             return;
         }
 
