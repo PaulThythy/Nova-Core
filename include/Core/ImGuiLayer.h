@@ -19,7 +19,7 @@ namespace Nova::Core {
 
     class NV_API ImGuiLayer : public Layer {
     public:
-        ImGuiLayer(Window& window, GraphicsAPI api);
+        explicit ImGuiLayer(Window& window);
         ~ImGuiLayer() = default;
 
         virtual void OnAttach() override;

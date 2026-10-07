@@ -30,7 +30,7 @@ namespace Nova::Core {
         };
 
         InitWindow(desc);
-        m_ImGuiLayer = &m_LayerStack.PushOverlay<ImGuiLayer>(*m_Window, desc.m_GraphicsAPI);
+        m_ImGuiLayer = &m_LayerStack.PushOverlay<ImGuiLayer>(*m_Window);
     }
 
     void Application::DestroyEngine() {
