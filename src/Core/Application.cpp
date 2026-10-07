@@ -34,6 +34,11 @@ namespace Nova::Core {
     }
 
     void Application::DestroyEngine() {
+        // Tear down layers (Vulkan/ImGui backends, swapchain, …) while the
+        // SDL window and surface are still alive. Destroying the window first
+        // leaves dangling platform handles and segfaults on shutdown.
+        m_LayerStack.Clear();
+        m_ImGuiLayer = nullptr;
         DestroyWindow();
     }
 

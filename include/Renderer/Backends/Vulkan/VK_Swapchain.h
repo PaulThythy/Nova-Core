@@ -7,10 +7,24 @@
 #include <cstdint>
 
 #include "Api.h"
-#include "Renderer/RHI/RHI_Renderer.h"
 #include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
+
+	enum class VK_PresentMode {
+		Default,
+		LowLatency,
+		Immediate
+	};
+
+	struct NV_API VK_SwapchainDesc {
+		uint32_t m_FramesInFlight = 3;
+		bool m_CreateSurface = true;
+		bool m_EnableSwapchain = true;
+		uint32_t m_Width = 0;
+		uint32_t m_Height = 0;
+		VK_PresentMode m_PreferredPresentMode = VK_PresentMode::LowLatency;
+	};
 
 	class NV_API VK_Swapchain {
 	public:
@@ -25,7 +39,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			VkQueue presentQueue,
 			uint32_t graphicsQueueFamily,
 			uint32_t presentQueueFamily,
-			const RHI::RHI_SwapchainDesc& desc);
+			const VK_SwapchainDesc& desc);
 
 		void Destroy();
 
@@ -127,7 +141,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		uint32_t         m_GraphicsQueueFamily = UINT32_MAX;
 		uint32_t         m_PresentQueueFamily = UINT32_MAX;
 
-		RHI::RHI_SwapchainDesc m_Desc{};
+		VK_SwapchainDesc m_Desc{};
 
 		VkSwapchainKHR   m_Swapchain = VK_NULL_HANDLE;
 		VkFormat         m_SwapchainImageFormat{};

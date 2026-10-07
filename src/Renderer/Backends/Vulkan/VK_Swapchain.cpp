@@ -103,13 +103,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		};
 
 		switch (m_Desc.m_PreferredPresentMode) {
-		case RHI::RHI_PresentMode::Immediate:
+		case VK_PresentMode::Immediate:
 			if (hasMode(VK_PRESENT_MODE_IMMEDIATE_KHR))
 				return VK_PRESENT_MODE_IMMEDIATE_KHR;
 			break;
-		case RHI::RHI_PresentMode::Default:
+		case VK_PresentMode::Default:
 			return VK_PRESENT_MODE_FIFO_KHR;
-		case RHI::RHI_PresentMode::LowLatency:
+		case VK_PresentMode::LowLatency:
 		default:
 			if (hasMode(VK_PRESENT_MODE_MAILBOX_KHR))
 				return VK_PRESENT_MODE_MAILBOX_KHR;
@@ -179,7 +179,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkQueue presentQueue,
 		uint32_t graphicsQueueFamily,
 		uint32_t presentQueueFamily,
-		const RHI::RHI_SwapchainDesc& desc)
+		const VK_SwapchainDesc& desc)
 	{
 		if (physicalDevice == VK_NULL_HANDLE || device == VK_NULL_HANDLE || surface == VK_NULL_HANDLE) {
 			NV_LOG_ERROR("VK_Swapchain::Create failed: invalid physicalDevice/device/surface");

@@ -32,7 +32,23 @@ namespace Nova::Core {
             style.Colors[ImGuiCol_WindowBg].w = 1.0f;
         }
 
+        InitPlatformOnlyBackend();
+    }
+
+    void ImGuiLayer::ShutdownPlatformBackend() {
+        if (ImGui::GetIO().BackendPlatformUserData == nullptr)
+            return;
+        ImGui_ImplSDL3_Shutdown();
+        m_IsRendererInitializedWithoutBackend = false;
+    }
+
+    void ImGuiLayer::InitPlatformOnlyBackend() {
+        ShutdownPlatformBackend();
         SDL_Window* sdlWindow = m_Window.GetSDLWindow();
+        if (!sdlWindow) {
+            NV_LOG_WARN("ImGuiLayer: cannot init platform backend — SDL window is null");
+            return;
+        }
         ImGui_ImplSDL3_InitForOther(sdlWindow);
         m_IsRendererInitializedWithoutBackend = true;
     }
@@ -46,10 +62,9 @@ namespace Nova::Core {
             DestroyImGuiBackend(m_GraphicsAPI);
         }
 
-        if (m_IsRendererInitializedWithoutBackend) {
-            ImGui_ImplSDL3_Shutdown();
-            m_IsRendererInitializedWithoutBackend = false;
-        }
+        // Tear down whatever SDL3 platform backend is live (InitForOther /
+        // InitForSDLRenderer / InitForVulkan) before re-initializing.
+        ShutdownPlatformBackend();
 
         m_GraphicsAPI = api;
         switch (m_GraphicsAPI) {
@@ -70,7 +85,7 @@ namespace Nova::Core {
         }
     }
 
-    void ImGuiLayer::DestroyImGuiBackend(GraphicsAPI api) {
+    void ImGuiLayer::DestroyImGuiBackend(GraphicsAPI api, bool restorePlatformOnly) {
         if (!m_IsRendererInitialized)
             return;
 
@@ -89,6 +104,13 @@ namespace Nova::Core {
         }
 
         m_IsRendererInitialized = false;
+        m_GraphicsAPI = GraphicsAPI::None;
+
+        // Layer transitions: keep a valid platform backend for EmptyLayer /
+        // inter-backend frames (Begin() always calls ImGui_ImplSDL3_NewFrame).
+        // Full shutdown must skip this — the SDL window may already be destroyed.
+        if (restorePlatformOnly)
+            InitPlatformOnlyBackend();
     }
 
     void ImGuiLayer::SetVulkanInitInfo(const ImGui_ImplVulkan_InitInfo& info) {
@@ -103,9 +125,7 @@ namespace Nova::Core {
         m_VulkanInitInfo = info;
         m_GraphicsAPI = GraphicsAPI::Vulkan;
 
-        ImGui_ImplSDL3_Shutdown();
-        m_IsRendererInitializedWithoutBackend = false;
-
+        ShutdownPlatformBackend();
         ImGui_ImplSDL3_InitForVulkan(m_Window.GetSDLWindow());
         ImGui_ImplVulkan_Init(&m_VulkanInitInfo);
 
@@ -114,8 +134,8 @@ namespace Nova::Core {
     }
 
     void ImGuiLayer::OnDetach() {
-        DestroyImGuiBackend(m_GraphicsAPI);
-        ImGui_ImplSDL3_Shutdown();
+        DestroyImGuiBackend(m_GraphicsAPI, /*restorePlatformOnly=*/false);
+        ShutdownPlatformBackend();
         ImGui::DestroyContext();
     }
 

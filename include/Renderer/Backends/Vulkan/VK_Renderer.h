@@ -28,6 +28,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         ~VK_Renderer() override = default;
 
         bool Create(const RHI::RHI_SwapchainDesc& desc) override;
+        bool Create(const VK_SwapchainDesc& desc);
         void Destroy() override;
 
         bool Resize(int w, int h) override;
@@ -92,7 +93,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_MemoryAllocator   m_MemoryAllocator;
         VK_Swapchain         m_VKSwapchain;
         VK_GpuBufferPool     m_GpuBuffers;
-        RHI::RHI_SwapchainDesc m_SwapchainDesc{};
+        VK_SwapchainDesc m_SwapchainDesc{};
 
         std::unique_ptr<RHI::IRenderGraph> m_RenderGraph;
 

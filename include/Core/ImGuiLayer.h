@@ -37,7 +37,13 @@ namespace Nova::Core {
         void ProcessSDLEvent(const SDL_Event& e);
 
         void SetImGuiBackend(GraphicsAPI api);
-        void DestroyImGuiBackend(GraphicsAPI api);
+        /**
+         * Tear down the GPU renderer backend.
+         * When restorePlatformOnly is true (layer transitions), re-init the
+         * generic SDL3 platform backend so Begin() keeps working.
+         * Pass false on full shutdown — the window may already be gone.
+         */
+        void DestroyImGuiBackend(GraphicsAPI api, bool restorePlatformOnly = true);
 
         // --- Vulkan-specific methods ---
         // Must be called by VK_Renderer before the layer is attached (or immediately after creation)
@@ -48,6 +54,11 @@ namespace Nova::Core {
         void SetVulkanBeforeRenderCallback(std::function<void()> callback) { m_VulkanBeforeRenderCallback = callback; }
 
     private:
+        /** Tear down ImGui_ImplSDL3 if a platform backend is currently live. */
+        void ShutdownPlatformBackend();
+        /** Re-init the generic SDL3 platform backend (no GPU renderer). */
+        void InitPlatformOnlyBackend();
+
         bool m_BlockEvents = true;
         Window& m_Window;
         GraphicsAPI m_GraphicsAPI;

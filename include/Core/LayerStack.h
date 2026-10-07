@@ -59,6 +59,9 @@ namespace Nova::Core {
 		std::vector<Layer*>::const_reverse_iterator rend() const { return m_Layers.rend(); }
 
         void ProcessPendingTransitions();
+
+        /** Detach and delete every layer/overlay. Safe to call more than once. */
+        void Clear();
     
     private:
         std::vector<Layer*> m_Layers;

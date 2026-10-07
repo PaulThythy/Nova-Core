@@ -42,7 +42,31 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return cmdBuffers[imageIndex];
     }
 
+    static VK_PresentMode ToVKPresentMode(RHI::RHI_PresentMode mode) {
+        switch (mode) {
+        case RHI::RHI_PresentMode::Immediate:  return VK_PresentMode::Immediate;
+        case RHI::RHI_PresentMode::Default:    return VK_PresentMode::Default;
+        case RHI::RHI_PresentMode::LowLatency: return VK_PresentMode::LowLatency;
+        }
+        return VK_PresentMode::LowLatency;
+    }
+
+    static VK_SwapchainDesc ToVKSwapchainDesc(const RHI::RHI_SwapchainDesc& desc) {
+        VK_SwapchainDesc out{};
+        out.m_FramesInFlight = desc.m_FramesInFlight;
+        out.m_CreateSurface = desc.m_CreateSurface;
+        out.m_EnableSwapchain = desc.m_EnableSwapchain;
+        out.m_Width = desc.m_Width;
+        out.m_Height = desc.m_Height;
+        out.m_PreferredPresentMode = ToVKPresentMode(desc.m_PreferredPresentMode);
+        return out;
+    }
+
     bool VK_Renderer::Create(const RHI::RHI_SwapchainDesc& desc) {
+        return Create(ToVKSwapchainDesc(desc));
+    }
+
+    bool VK_Renderer::Create(const VK_SwapchainDesc& desc) {
         m_SwapchainDesc = desc;
         NV_LOG_INFO("Creating Vulkan renderer (instance, device, swapchain)...");
 
