@@ -205,7 +205,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_Engine.m_Scene.m_Uniforms = RHI::CreateConstantBuffer<RHI::SceneUniforms>(*m_Renderer, 1, RHI::EngineResourceName::SceneUniforms);
         m_Engine.m_Scene.m_Lights = RHI::CreateStructuredBuffer<RHI::LightGPU>(*m_Renderer, RHI::MAX_LIGHTS, RHI::EngineResourceName::Lights);
         m_Engine.m_Model = RHI::CreateConstantBuffer<RHI::ModelUniforms>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Model);
-        m_Engine.m_Material = RHI::CreateConstantBuffer<RHI::Material>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Material);
+        m_Engine.m_Material = RHI::CreateConstantBuffer<RHI::MaterialGPU>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Material);
 
         return m_Engine.IsValid();
     }

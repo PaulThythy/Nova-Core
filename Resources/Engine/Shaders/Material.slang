@@ -5,7 +5,7 @@
 
 #include "Globals.slang"
 
-struct Material
+struct MaterialGPU
 {
     float m_Base;
     float3 m_BaseColor;
@@ -44,9 +44,9 @@ struct Material
     uint2 m_PadCbufferAlign;
 };
 
-Material defaultMaterial()
+MaterialGPU defaultMaterial()
 {
-    Material material;
+    MaterialGPU material;
     material.m_Base                 = 0.8f;
     material.m_BaseColor            = float3(WHITE, WHITE, WHITE);
     material.m_DiffuseRoughness     = 0.0f;
@@ -113,7 +113,7 @@ float G_Smith(float NdotV, float NdotL, float roughness)
 }
 
 
-float3 evalPBR(Material mat, float3 N, float3 V, float3 L, float3 lightColor)
+float3 evalPBR(MaterialGPU mat, float3 N, float3 V, float3 L, float3 lightColor)
 {
     float3 H = normalize(V + L);
 

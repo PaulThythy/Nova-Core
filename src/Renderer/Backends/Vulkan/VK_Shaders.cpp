@@ -290,7 +290,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkDeviceSize materialOffsetThisDraw = 0;
         if (usesMaterial) {
-            RHI::Material material{};
+            RHI::MaterialGPU material{};
             CopyParametersIntoStruct(m_Parameters, RHI::GetMaterialLayout(), &material);
             materialOffsetThisDraw = pool.WriteNextDynamicElement(m_Engine.m_Material, &material, sizeof material, frameIdx);
         }

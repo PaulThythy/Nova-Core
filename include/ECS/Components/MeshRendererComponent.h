@@ -11,15 +11,14 @@ namespace Nova::Core::ECS::Components {
 
     struct NV_API MeshRendererComponent {
         std::shared_ptr<Asset::Assets::MeshAsset> m_MeshAsset;
-        Renderer::RHI::Material m_Material{};
+        Renderer::RHI::MaterialGPU m_Material{};
 
         MeshRendererComponent() = default;
 
         explicit MeshRendererComponent(const std::shared_ptr<Asset::Assets::MeshAsset>& meshAsset)
             : m_MeshAsset(meshAsset) {}
 
-        MeshRendererComponent(const std::shared_ptr<Asset::Assets::MeshAsset>& meshAsset,
-                              const Renderer::RHI::Material& material)
+        MeshRendererComponent(const std::shared_ptr<Asset::Assets::MeshAsset>& meshAsset, const Renderer::RHI::MaterialGPU& material)
             : m_MeshAsset(meshAsset), m_Material(material) {}
     };
 

@@ -104,7 +104,7 @@ namespace Nova::Core::Renderer::RHI {
         alignas(16) glm::mat4 m_LightViewProj{ 1.0f };
     };
 
-    struct NV_API Material {
+    struct NV_API MaterialGPU {
         alignas(4)  float       m_Base{ 0.8f };
         alignas(16) glm::vec3   m_BaseColor{ 1.0f, 1.0f, 1.0f };
         alignas(4)  float       m_DiffuseRoughness{ 0.0f };
@@ -167,7 +167,7 @@ namespace Nova::Core::Renderer::RHI {
     struct NV_API RHI_EngineParameterBlock {
         RHI_SceneParameterBlock m_Scene;
         RHI_GpuBufferHandle     m_Model;    // ConstantBuffer<ModelUniforms> model;
-        RHI_GpuBufferHandle     m_Material; // ConstantBuffer<Material> material;
+        RHI_GpuBufferHandle     m_Material; // ConstantBuffer<MaterialGPU> material;
 
         bool IsValid() const {
             return m_Scene.IsValid() && m_Model.IsValid() && m_Material.IsValid();
@@ -178,40 +178,40 @@ namespace Nova::Core::Renderer::RHI {
     // CPU mirror structs above. Padding fields are intentionally absent: they are never set.
     inline const std::unordered_map<std::string, size_t>& GetMaterialLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
-            { "m_Base",                 offsetof(Material, m_Base) },
-            { "m_BaseColor",            offsetof(Material, m_BaseColor) },
-            { "m_DiffuseRoughness",     offsetof(Material, m_DiffuseRoughness) },
-            { "m_Metalness",            offsetof(Material, m_Metalness) },
-            { "m_MetalColor",           offsetof(Material, m_MetalColor) },
-            { "m_Specular",             offsetof(Material, m_Specular) },
-            { "m_SpecularColor",        offsetof(Material, m_SpecularColor) },
-            { "m_SpecularRoughness",    offsetof(Material, m_SpecularRoughness) },
-            { "m_SpecularIOR",          offsetof(Material, m_SpecularIOR) },
-            { "m_SpecularAnisotropy",   offsetof(Material, m_SpecularAnisotropy) },
-            { "m_SpecularRotation",     offsetof(Material, m_SpecularRotation) },
-            { "m_Transmission",         offsetof(Material, m_Transmission) },
-            { "m_TransmissionColor",    offsetof(Material, m_TransmissionColor) },
-            { "m_Subsurface",           offsetof(Material, m_Subsurface) },
-            { "m_SubsurfaceColor",      offsetof(Material, m_SubsurfaceColor) },
-            { "m_SubsurfaceRadius",     offsetof(Material, m_SubsurfaceRadius) },
-            { "m_SubsurfaceScale",      offsetof(Material, m_SubsurfaceScale) },
-            { "m_SubsurfaceAnisotropy", offsetof(Material, m_SubsurfaceAnisotropy) },
-            { "m_Sheen",                offsetof(Material, m_Sheen) },
-            { "m_SheenColor",           offsetof(Material, m_SheenColor) },
-            { "m_SheenRoughness",       offsetof(Material, m_SheenRoughness) },
-            { "m_Coat",                 offsetof(Material, m_Coat) },
-            { "m_CoatColor",            offsetof(Material, m_CoatColor) },
-            { "m_CoatRoughness",        offsetof(Material, m_CoatRoughness) },
-            { "m_CoatAnisotropy",       offsetof(Material, m_CoatAnisotropy) },
-            { "m_CoatRotation",         offsetof(Material, m_CoatRotation) },
-            { "m_CoatIOR",              offsetof(Material, m_CoatIOR) },
-            { "m_CoatAffectColor",      offsetof(Material, m_CoatAffectColor) },
-            { "m_CoatAffectRoughness",  offsetof(Material, m_CoatAffectRoughness) },
-            { "m_Emission",             offsetof(Material, m_Emission) },
-            { "m_EmissionColor",        offsetof(Material, m_EmissionColor) },
-            { "m_Opacity",              offsetof(Material, m_Opacity) },
-            { "m_ThinWalled",           offsetof(Material, m_ThinWalled) },
-            { "m_IsOpaque",             offsetof(Material, m_IsOpaque) },
+            { "m_Base",                 offsetof(MaterialGPU, m_Base) },
+            { "m_BaseColor",            offsetof(MaterialGPU, m_BaseColor) },
+            { "m_DiffuseRoughness",     offsetof(MaterialGPU, m_DiffuseRoughness) },
+            { "m_Metalness",            offsetof(MaterialGPU, m_Metalness) },
+            { "m_MetalColor",           offsetof(MaterialGPU, m_MetalColor) },
+            { "m_Specular",             offsetof(MaterialGPU, m_Specular) },
+            { "m_SpecularColor",        offsetof(MaterialGPU, m_SpecularColor) },
+            { "m_SpecularRoughness",    offsetof(MaterialGPU, m_SpecularRoughness) },
+            { "m_SpecularIOR",          offsetof(MaterialGPU, m_SpecularIOR) },
+            { "m_SpecularAnisotropy",   offsetof(MaterialGPU, m_SpecularAnisotropy) },
+            { "m_SpecularRotation",     offsetof(MaterialGPU, m_SpecularRotation) },
+            { "m_Transmission",         offsetof(MaterialGPU, m_Transmission) },
+            { "m_TransmissionColor",    offsetof(MaterialGPU, m_TransmissionColor) },
+            { "m_Subsurface",           offsetof(MaterialGPU, m_Subsurface) },
+            { "m_SubsurfaceColor",      offsetof(MaterialGPU, m_SubsurfaceColor) },
+            { "m_SubsurfaceRadius",     offsetof(MaterialGPU, m_SubsurfaceRadius) },
+            { "m_SubsurfaceScale",      offsetof(MaterialGPU, m_SubsurfaceScale) },
+            { "m_SubsurfaceAnisotropy", offsetof(MaterialGPU, m_SubsurfaceAnisotropy) },
+            { "m_Sheen",                offsetof(MaterialGPU, m_Sheen) },
+            { "m_SheenColor",           offsetof(MaterialGPU, m_SheenColor) },
+            { "m_SheenRoughness",       offsetof(MaterialGPU, m_SheenRoughness) },
+            { "m_Coat",                 offsetof(MaterialGPU, m_Coat) },
+            { "m_CoatColor",            offsetof(MaterialGPU, m_CoatColor) },
+            { "m_CoatRoughness",        offsetof(MaterialGPU, m_CoatRoughness) },
+            { "m_CoatAnisotropy",       offsetof(MaterialGPU, m_CoatAnisotropy) },
+            { "m_CoatRotation",         offsetof(MaterialGPU, m_CoatRotation) },
+            { "m_CoatIOR",              offsetof(MaterialGPU, m_CoatIOR) },
+            { "m_CoatAffectColor",      offsetof(MaterialGPU, m_CoatAffectColor) },
+            { "m_CoatAffectRoughness",  offsetof(MaterialGPU, m_CoatAffectRoughness) },
+            { "m_Emission",             offsetof(MaterialGPU, m_Emission) },
+            { "m_EmissionColor",        offsetof(MaterialGPU, m_EmissionColor) },
+            { "m_Opacity",              offsetof(MaterialGPU, m_Opacity) },
+            { "m_ThinWalled",           offsetof(MaterialGPU, m_ThinWalled) },
+            { "m_IsOpaque",             offsetof(MaterialGPU, m_IsOpaque) },
         };
         return kLayout;
     }

@@ -71,7 +71,7 @@ struct SceneParameterBlock {
 struct NovaEngine {
     SceneParameterBlock scene;
     ConstantBuffer<ModelUniforms> model;
-    ConstantBuffer<Material> material;
+    ConstantBuffer<MaterialGPU> material;
     Texture2DArray shadowMaps;
     SamplerComparisonState shadowSampler;
 };
