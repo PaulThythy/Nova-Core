@@ -89,15 +89,24 @@ namespace Nova::Core {
         if (!m_IsRendererInitialized)
             return;
 
+        // Guard against double-shutdown / destroyed ImGui context (e.g. if a
+        // layer tears down the backend and OnDetach runs again later).
+        const bool hasContext = ImGui::GetCurrentContext() != nullptr;
+
         switch (api) {
             case GraphicsAPI::SDLRenderer:
-                ImGui_ImplSDLRenderer3_Shutdown();
+                if (hasContext && ImGui::GetIO().BackendRendererUserData)
+                    ImGui_ImplSDLRenderer3_Shutdown();
                 break;
             case GraphicsAPI::Vulkan:
-                if (m_VulkanInitInfo.Device != VK_NULL_HANDLE)
-                    vkDeviceWaitIdle(m_VulkanInitInfo.Device);
-                m_VulkanInitInfo.Device = VK_NULL_HANDLE;
-                ImGui_ImplVulkan_Shutdown();
+                if (hasContext && ImGui::GetIO().BackendRendererUserData) {
+                    if (m_VulkanInitInfo.Device != VK_NULL_HANDLE)
+                        vkDeviceWaitIdle(m_VulkanInitInfo.Device);
+                    m_VulkanInitInfo.Device = VK_NULL_HANDLE;
+                    ImGui_ImplVulkan_Shutdown();
+                } else {
+                    m_VulkanInitInfo.Device = VK_NULL_HANDLE;
+                }
                 break;
             default:
                 break;
