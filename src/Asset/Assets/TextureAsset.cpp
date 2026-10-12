@@ -1,8 +1,9 @@
 #include "Asset/Assets/TextureAsset.h"
 
+#include <cstring>
 #include <string>
-#include <vector>
 
+#include "Core/Buffer.h"
 #include "Core/Log.h"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -41,8 +42,9 @@ namespace Nova::Core::Asset::Assets {
             return false;
         }
 
-        const size_t byteCount = static_cast<size_t>(w) * static_cast<size_t>(h) * 4u;
-        std::vector<uint8_t> pixels(data, data + byteCount);
+        const uint64_t byteCount = static_cast<uint64_t>(w) * static_cast<uint64_t>(h) * 4u;
+        Buffer pixels(byteCount);
+        std::memcpy(pixels.Data, data, static_cast<size_t>(byteCount));
         stbi_image_free(data);
 
         m_CPUTexture = std::make_shared<Renderer::RHI::RHI_Texture>(

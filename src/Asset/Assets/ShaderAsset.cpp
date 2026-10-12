@@ -1,5 +1,6 @@
 #include "Asset/Assets/ShaderAsset.h"
 #include "Core/Application.h"
+#include "Core/FileSystem.h"
 #include "Core/Log.h"
 
 namespace Nova::Core::Asset::Assets {
@@ -18,7 +19,7 @@ namespace Nova::Core::Asset::Assets {
         }
     }
 
-    const std::vector<uint8_t>& ShaderAsset::GetBinary() const {
+    const Buffer& ShaderAsset::GetBinary() const {
         return GetBinary(m_LastCompiledApi);
     }
 
@@ -34,7 +35,7 @@ namespace Nova::Core::Asset::Assets {
         return GetReflection(m_LastCompiledApi);
     }
 
-    const std::vector<uint8_t>& ShaderAsset::GetBinary(GraphicsAPI api) const {
+    const Buffer& ShaderAsset::GetBinary(GraphicsAPI api) const {
         (void)api;
         return m_BinaryVulkan;
     }
@@ -78,11 +79,9 @@ namespace Nova::Core::Asset::Assets {
         RHI::RHI_ShaderCompileInput opts = m_Input;
         opts.m_TargetApi = api;
 
-        const std::filesystem::path engineShaderRoot =
-            std::filesystem::current_path() / "Nova-Core" / "Resources" / "Engine" / "Shaders";
+        const std::filesystem::path engineShaderRoot = FileSystem::CurrentPath() / "Nova-Core" / "Resources" / "Engine" / "Shaders";
 
-        const std::filesystem::path editorShaderRoot =
-            std::filesystem::current_path() / "Nova-App" / "Resources" / "Editor" / "Shaders";
+        const std::filesystem::path editorShaderRoot = FileSystem::CurrentPath() / "Nova-App" / "Resources" / "Editor" / "Shaders";
 
         opts.m_IncludeDirs.push_back(engineShaderRoot);
         opts.m_IncludeDirs.push_back(editorShaderRoot);

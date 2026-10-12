@@ -103,13 +103,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		};
 
 		switch (m_Desc.m_PreferredPresentMode) {
-		case RHI::RHI_PresentMode::Immediate:
+		case VK_PresentMode::Immediate:
 			if (hasMode(VK_PRESENT_MODE_IMMEDIATE_KHR))
 				return VK_PRESENT_MODE_IMMEDIATE_KHR;
 			break;
-		case RHI::RHI_PresentMode::Default:
+		case VK_PresentMode::Default:
 			return VK_PRESENT_MODE_FIFO_KHR;
-		case RHI::RHI_PresentMode::LowLatency:
+		case VK_PresentMode::LowLatency:
 		default:
 			if (hasMode(VK_PRESENT_MODE_MAILBOX_KHR))
 				return VK_PRESENT_MODE_MAILBOX_KHR;
@@ -179,7 +179,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkQueue presentQueue,
 		uint32_t graphicsQueueFamily,
 		uint32_t presentQueueFamily,
-		const RHI::RHI_SwapchainDesc& desc)
+		const VK_SwapchainDesc& desc)
 	{
 		if (physicalDevice == VK_NULL_HANDLE || device == VK_NULL_HANDLE || surface == VK_NULL_HANDLE) {
 			NV_LOG_ERROR("VK_Swapchain::Create failed: invalid physicalDevice/device/surface");
@@ -211,6 +211,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		vkDeviceWaitIdle(m_Device);
 
+		DestroyRenderTargets();
 		DestroySwapchain();
 		DestroySyncObjects();
 
@@ -309,6 +310,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			return false;
 
 		vkDeviceWaitIdle(m_Device);
+		DestroyDepthResources();
 		DestroySwapchain();
 
 		if (!CreateSwapchain())        return false;
@@ -327,6 +329,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		m_ImagesInFlight.assign(m_Images.size(), VK_NULL_HANDLE);
 		NV_LOG_INFO("VK_Swapchain recreated after resize.");
+
+		if (m_Allocator) {
+			if (!CreateDepthResources()) return false;
+		}
 		return true;
 	}
 
@@ -471,6 +477,99 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkResult res = vkAllocateCommandBuffers(m_Device, &allocInfo, m_CommandBuffers.data());
 		CheckVkResult(res);
 		return (res == VK_SUCCESS);
+	}
+
+
+	bool VK_Swapchain::InitRenderTargets(VK_MemoryAllocator& allocator) {
+		m_Allocator = &allocator;
+		return CreateDepthResources();
+	}
+
+	void VK_Swapchain::DestroyRenderTargets() {
+		DestroyDepthResources();
+		m_Allocator = nullptr;
+	}
+
+	bool VK_Swapchain::RecreateRenderTargets() {
+		if (!m_Allocator) return false;
+		DestroyDepthResources();
+		return CreateDepthResources();
+	}
+
+	bool VK_Swapchain::CreateDepthResources() {
+		if (!m_Allocator || m_Device == VK_NULL_HANDLE || m_PhysicalDevice == VK_NULL_HANDLE)
+			return false;
+
+		const std::vector<VkFormat> candidates = {
+			VK_FORMAT_D32_SFLOAT,
+			VK_FORMAT_D32_SFLOAT_S8_UINT,
+			VK_FORMAT_D24_UNORM_S8_UINT
+		};
+		m_DepthFormat = VK_FORMAT_UNDEFINED;
+
+		for (VkFormat format : candidates) {
+			VkFormatProperties props{};
+			vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, format, &props);
+			if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+				m_DepthFormat = format;
+				break;
+			}
+		}
+		if (m_DepthFormat == VK_FORMAT_UNDEFINED) return false;
+
+		const uint32_t imageCount = GetImageCount();
+		if (imageCount == 0) return false;
+
+		m_DepthImages.clear();
+		m_DepthImages.resize(imageCount);
+
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageInfo.extent = { m_SwapchainExtent.width, m_SwapchainExtent.height, 1 };
+		imageInfo.mipLevels = 1;
+		imageInfo.arrayLayers = 1;
+		imageInfo.format = m_DepthFormat;
+		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+		for (uint32_t i = 0; i < imageCount; ++i) {
+			auto& depth = m_DepthImages[i];
+			if (!m_Allocator->CreateImage(imageInfo, VK_MemoryLocation::GpuOnly, depth.m_Image))
+				return false;
+
+			VkImageViewCreateInfo viewInfo{};
+			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			viewInfo.image = depth.m_Image.image;
+			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			viewInfo.format = m_DepthFormat;
+			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			viewInfo.subresourceRange.levelCount = 1;
+			viewInfo.subresourceRange.layerCount = 1;
+
+			if (vkCreateImageView(m_Device, &viewInfo, nullptr, &depth.m_View) != VK_SUCCESS)
+				return false;
+		}
+		return true;
+	}
+
+	void VK_Swapchain::DestroyDepthResources() {
+		if (m_Device == VK_NULL_HANDLE) {
+			m_DepthImages.clear();
+			return;
+		}
+
+		for (auto& depth : m_DepthImages) {
+			if (depth.m_View != VK_NULL_HANDLE) {
+				vkDestroyImageView(m_Device, depth.m_View, nullptr);
+				depth.m_View = VK_NULL_HANDLE;
+			}
+			if (m_Allocator)
+				m_Allocator->DestroyImage(depth.m_Image);
+		}
+		m_DepthImages.clear();
 	}
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

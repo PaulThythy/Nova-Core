@@ -6,20 +6,36 @@ namespace Nova::Core {
 
     LayerStack::~LayerStack()
 	{
+        Clear();
+	}
 
-        /*for (Layer* layer : m_Layers)
-        {
-            layer->OnDetach();
-            delete layer;
-        }*/
-        // Detach in reverse order (LIFO) to respect dependencies between layers
-        for (auto it = m_Layers.rbegin(); it != m_Layers.rend(); ++it)
-        {
-            Layer* layer = *it;
+    void LayerStack::Clear()
+    {
+        // Drop pending transitions first — their targets were never attached.
+        for (auto& tr : m_PendingTransitions) {
+            delete tr.to;
+        }
+        m_PendingTransitions.clear();
+
+        // Detach regular layers first (LIFO among themselves) while overlays
+        // such as ImGuiLayer are still alive — content layers often call
+        // GetImGuiLayer() from OnDetach to release GPU backends.
+        for (unsigned int i = m_LayerInsertIndex; i > 0; --i) {
+            Layer* layer = m_Layers[i - 1];
             layer->OnDetach();
             delete layer;
         }
-	}
+
+        // Then overlays (LIFO).
+        for (size_t i = m_Layers.size(); i > m_LayerInsertIndex; --i) {
+            Layer* overlay = m_Layers[i - 1];
+            overlay->OnDetach();
+            delete overlay;
+        }
+
+        m_Layers.clear();
+        m_LayerInsertIndex = 0;
+    }
 
     // PushLayer: insert a Layer before the overlay insertion point.
     // Regular layers are inserted in the stack at position m_LayerInsertIndex,

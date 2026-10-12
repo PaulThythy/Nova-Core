@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <memory>
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 
 #include "Renderer/RHI/RHI_Renderer.h"
 #include "Renderer/RHI/RHI_RenderGraph.h"
@@ -28,6 +28,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         ~VK_Renderer() override = default;
 
         bool Create(const RHI::RHI_SwapchainDesc& desc) override;
+        bool Create(const VK_SwapchainDesc& desc);
         void Destroy() override;
 
         bool Resize(int w, int h) override;
@@ -80,8 +81,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         uint32_t GetCurrentFrameInFlight() const { return m_VKSwapchain.GetCurrentFrame(); }
         VkFormat GetSwapchainImageFormat() const { return m_VKSwapchain.GetImageFormat(); }
         std::vector<VkImageView> GetSwapchainImageViews() const;
-        VkFramebuffer GetSwapchainFramebuffer(uint32_t imageIndex) const;
         uint32_t GetAcquiredImageIndex() const { return m_VKSwapchain.GetAcquiredImageIndex(); }
+        VK_Swapchain& GetSwapchain() { return m_VKSwapchain; }
+        const VK_Swapchain& GetSwapchain() const { return m_VKSwapchain; }
 
     private:
         void WarnIfNoRenderGraph(const char* operation) const;
@@ -91,7 +93,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VK_MemoryAllocator   m_MemoryAllocator;
         VK_Swapchain         m_VKSwapchain;
         VK_GpuBufferPool     m_GpuBuffers;
-        RHI::RHI_SwapchainDesc m_SwapchainDesc{};
+        VK_SwapchainDesc m_SwapchainDesc{};
 
         std::unique_ptr<RHI::IRenderGraph> m_RenderGraph;
 

@@ -39,7 +39,6 @@ namespace Nova::Core::Scene {
 		RaycastHit best{};
 
 		for (auto entity : view) {
-			const auto& tc = view.get<ECS::Components::TransformComponent>(entity);
 			const auto& mc = view.get<ECS::Components::MeshComponent>(entity);
 
 			if (!mc.m_AABBTree.IsBuilt() || !mc.m_MeshAsset || !mc.m_MeshAsset->IsLoaded())
@@ -49,7 +48,7 @@ namespace Nova::Core::Scene {
 			if (!cpuMesh)
 				continue;
 
-			const glm::mat4 model = tc.GetTransform();
+			const glm::mat4 model = scene.GetWorldTransform(entity);
 			const glm::mat4 invModel = glm::inverse(model);
 
 			// Transform the ray into local mesh space (direction may be non-unit under non-uniform scale).

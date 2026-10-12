@@ -1,16 +1,30 @@
 #ifndef VK_SWAPCHAIN_H
 #define VK_SWAPCHAIN_H
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 
 #include <vector>
-#include <array>
 #include <cstdint>
 
 #include "Api.h"
-#include "Renderer/RHI/RHI_Renderer.h"
+#include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
+
+	enum class VK_PresentMode {
+		Default,
+		LowLatency,
+		Immediate
+	};
+
+	struct NV_API VK_SwapchainDesc {
+		uint32_t m_FramesInFlight = 3;
+		bool m_CreateSurface = true;
+		bool m_EnableSwapchain = true;
+		uint32_t m_Width = 0;
+		uint32_t m_Height = 0;
+		VK_PresentMode m_PreferredPresentMode = VK_PresentMode::LowLatency;
+	};
 
 	class NV_API VK_Swapchain {
 	public:
@@ -25,9 +39,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			VkQueue presentQueue,
 			uint32_t graphicsQueueFamily,
 			uint32_t presentQueueFamily,
-			const RHI::RHI_SwapchainDesc& desc);
+			const VK_SwapchainDesc& desc);
 
 		void Destroy();
+
+		/** Depth images/views for graph presentation (dynamic rendering). */
+		bool InitRenderTargets(VK_MemoryAllocator& allocator);
+		void DestroyRenderTargets();
+		bool RecreateRenderTargets();
 
 		struct NV_API VK_FrameSync {
 			VkSemaphore m_ImageAvailableSemaphore = VK_NULL_HANDLE;
@@ -49,6 +68,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		const VkExtent2D& GetExtent() const { return m_SwapchainExtent; }
 		VkFormat GetImageFormat() const { return m_SwapchainImageFormat; }
 		VkPresentModeKHR GetPresentMode() const { return m_PresentMode; }
+		VkFormat GetDepthFormat() const { return m_DepthFormat; }
 
 		uint32_t GetFramesInFlight() const { return m_FramesInFlight; }
 		uint32_t GetImageCount() const { return static_cast<uint32_t>(m_Images.size()); }
@@ -76,6 +96,18 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 			return VK_NULL_HANDLE;
 		}
 
+		VkImage GetDepthImage(uint32_t imageIndex) const {
+			if (imageIndex < m_DepthImages.size())
+				return m_DepthImages[imageIndex].m_Image.image;
+			return VK_NULL_HANDLE;
+		}
+
+		VkImageView GetDepthView(uint32_t imageIndex) const {
+			if (imageIndex < m_DepthImages.size())
+				return m_DepthImages[imageIndex].m_View;
+			return VK_NULL_HANDLE;
+		}
+
 		bool RecreateSwapchain();
 
 	private:
@@ -88,6 +120,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		bool CreateSyncObjects();
 		void DestroySyncObjects();
+
+		bool CreateDepthResources();
+		void DestroyDepthResources();
 
 		void LogSwapchainConfiguration(uint32_t swapchainImageCount) const;
 
@@ -106,7 +141,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		uint32_t         m_GraphicsQueueFamily = UINT32_MAX;
 		uint32_t         m_PresentQueueFamily = UINT32_MAX;
 
-		RHI::RHI_SwapchainDesc m_Desc{};
+		VK_SwapchainDesc m_Desc{};
 
 		VkSwapchainKHR   m_Swapchain = VK_NULL_HANDLE;
 		VkFormat         m_SwapchainImageFormat{};
@@ -125,6 +160,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		uint32_t m_CurrentFrame = 0;
 		uint32_t m_AcquiredImage = 0;
+
+		VK_MemoryAllocator* m_Allocator = nullptr;
+		VkFormat m_DepthFormat = VK_FORMAT_D32_SFLOAT;
+
+		struct DepthImage {
+			VK_ImageAllocation m_Image{};
+			VkImageView m_View = VK_NULL_HANDLE;
+		};
+		std::vector<DepthImage> m_DepthImages;
 	};
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

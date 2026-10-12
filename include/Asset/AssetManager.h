@@ -13,6 +13,7 @@
 #include "AssetHandle.h"
 #include "Asset.h"
 #include "Core/Assert.h"
+#include "Core/FileSystem.h"
 #include "Core/UUID.h"
 
 namespace Nova::Core::Asset {
@@ -82,7 +83,7 @@ namespace Nova::Core::Asset {
                 return root / s.substr(prefix.size());
             };
 
-            const std::filesystem::path cwd = std::filesystem::current_path();
+            const std::filesystem::path cwd = FileSystem::CurrentPath();
             const std::filesystem::path engineShaders = cwd / "Nova-Core" / "Resources" / "Engine" / "Shaders";
             const std::filesystem::path editorShaders = cwd / "Nova-App" / "Resources" / "Editor" / "Shaders";
             const std::filesystem::path editorIcons = cwd / "Nova-App" / "Resources" / "Editor" / "Icons";
@@ -111,12 +112,8 @@ namespace Nova::Core::Asset {
             if (s.find("://") != std::string::npos || s.rfind("Engine:", 0) == 0 || s.rfind("Editor:", 0) == 0)
                 return resolved;
 
-            std::error_code ec;
-            auto abs = std::filesystem::absolute(resolved, ec);
-            if (ec) abs = resolved;
-
             // lexically_normal does not touch the filesystem, so it still works for missing files.
-            return abs.lexically_normal();
+            return FileSystem::Absolute(resolved).lexically_normal();
         }
 
         static std::string PathKey(const std::filesystem::path& p) {

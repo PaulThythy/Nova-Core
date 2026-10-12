@@ -30,37 +30,62 @@ namespace Nova::Core::Renderer::RHI {
     // Stable reflection names for the engine resources declared in NovaUniforms.slang
     // (`ParameterBlock<NovaEngine> nova;`). The descriptor set and binding for each are
     // assigned by Slang reflection and looked up by these names at runtime.
+    // `frame` is a push constant (not a descriptor) — see FrameUniforms below.
     namespace EngineResourceName {
-        inline constexpr const char* Frame         = "nova.frame";
-        inline constexpr const char* Mvp           = "nova.mvp";
+        inline constexpr const char* SceneUniforms = "nova.scene.uniforms";
+        inline constexpr const char* Lights        = "nova.scene.lights";
+        inline constexpr const char* Model         = "nova.model";
         inline constexpr const char* Material      = "nova.material";
-        inline constexpr const char* Lights        = "nova.lights";
         inline constexpr const char* ShadowMaps    = "nova.shadowMaps";
         inline constexpr const char* ShadowSampler = "nova.shadowSampler";
     }
 
+    /**
+     * Per-frame globals (time, resolution, inputs). Vulkan push constants (std430 layout).
+     * Uploaded via vkCmdPushConstants every ApplyParameters when the shader reflects them.
+     * Must stay within the Vulkan minimum maxPushConstantsSize (128 bytes).
+     */
     struct NV_API FrameUniforms {
-        alignas(16) glm::vec3 m_IResolution{ 0.0f, 0.0f, 0.0f };
+        alignas(16) glm::vec3 m_Resolution{ 0.0f, 0.0f, 0.0f };
         alignas(4)  float     m_PadAfterRes{ 0.0f };
-        alignas(4)  float     m_ITime{ 0.0f };
-        alignas(4)  float     m_ITimeDelta{ 0.0f };
-        alignas(4)  float     m_IFrameRate{ 0.0f };
-        alignas(4)  int       m_IFrame{ 0 };
-        alignas(16) glm::vec3 m_UCameraPos{ 0.0f, 0.0f, 0.0f };
-        alignas(4)  int       m_LightCount{ 0 };
-        alignas(16) glm::vec4 m_IMouse{ 0.0f, 0.0f, 0.0f, 0.0f };
-        alignas(16) glm::vec4 m_IDate{ 0.0f, 0.0f, 0.0f, 0.0f };
+        alignas(4)  float     m_Time{ 0.0f };
+        alignas(4)  float     m_TimeDelta{ 0.0f };
+        alignas(4)  float     m_FrameRate{ 0.0f };
+        alignas(4)  int       m_Frame{ 0 };
+        alignas(4)  int       m_PadAfterFrame{ 0 };
+        alignas(16) glm::vec4 m_Mouse{ 0.0f, 0.0f, 0.0f, 0.0f };
+        alignas(16) glm::vec4 m_Date{ 0.0f, 0.0f, 0.0f, 0.0f };
     };
+    static_assert(sizeof(FrameUniforms) <= 128, "FrameUniforms exceeds Vulkan min maxPushConstantsSize");
 
-    struct NV_API MVP {
-        alignas(16) glm::mat4 m_Model{ 1.0f };
+    /** Camera matrices + world-space position (`CameraGPU` in NovaUniforms.slang). */
+    struct NV_API CameraGPU {
         alignas(16) glm::mat4 m_View{ 1.0f };
         alignas(16) glm::mat4 m_Proj{ 1.0f };
         alignas(16) glm::mat4 m_ViewProj{ 1.0f };
         alignas(16) glm::mat4 m_InvViewProj{ 1.0f };
+        alignas(16) glm::vec3 m_Position{ 0.0f, 0.0f, 0.0f };
+        alignas(4)  float     m_Pad{ 0.0f };
     };
 
-    /** GPU light element for `StructuredBuffer<LightGPU> nova.lights` (std430). */
+    /** Scene-level data: camera + light count. Uploaded by AppRenderer::PushSceneUniforms. */
+    struct NV_API SceneUniforms {
+        CameraGPU m_Camera{};
+        alignas(4) int   m_LightCount{ 0 };
+        alignas(4) float m_PadAfterLightCount{ 0.0f };
+    };
+
+    /** Per-draw model transform. Shadow pass also sets `m_LightIndex` to read `lightViewProj`. */
+    struct NV_API ModelUniforms {
+        alignas(16) glm::mat4 m_Model{ 1.0f };
+        //TODO remove light index from model uniforms
+        alignas(4)  int       m_LightIndex{ 0 };
+        alignas(4)  float     m_PadLightIndex0{ 0.0f };
+        alignas(4)  float     m_PadLightIndex1{ 0.0f };
+        alignas(4)  float     m_PadLightIndex2{ 0.0f };
+    };
+
+    /** GPU light element for `StructuredBuffer<LightGPU> nova.scene.lights` (std430). */
     struct NV_API LightGPU {
         alignas(4)  int       m_Type{ 0 };           // 0=Directional, 1=Point, 2=Spot
         alignas(4)  int       m_CastShadow{ 0 };
@@ -79,7 +104,7 @@ namespace Nova::Core::Renderer::RHI {
         alignas(16) glm::mat4 m_LightViewProj{ 1.0f };
     };
 
-    struct NV_API Material {
+    struct NV_API MaterialGPU {
         alignas(4)  float       m_Base{ 0.8f };
         alignas(16) glm::vec3   m_BaseColor{ 1.0f, 1.0f, 1.0f };
         alignas(4)  float       m_DiffuseRoughness{ 0.0f };
@@ -118,22 +143,34 @@ namespace Nova::Core::Renderer::RHI {
     };
 
     /**
-     * C++ mirror of `ParameterBlock<NovaEngine> nova;` (NovaUniforms.slang): one GPU buffer handle
-     * per buffer field of `NovaEngine`. Shadow map texture/sampler are render-graph resources bound
-     * by reflection name after texture creation.
-     *
-     * `m_Frame` holds a single `FrameUniforms` value (one region per frame-in-flight). `m_Mvp` and
-     * `m_Material` are arrays (one element per draw call this frame) — see MAX_MODEL_DRAWS in
-     * VK_PipelineCache. `m_Lights` is a StructuredBuffer of up to MAX_LIGHTS elements.
+     * GPU handles for `SceneParameterBlock` (`nova.scene.*`): scene UBO + lights SSBO.
+     * Uploaded by the app (`PushSceneUniforms` / `UploadLights`), not rewritten per draw.
      */
-    struct NV_API RHI_EngineParameterBlock {
-        RHI_GpuBufferHandle m_Frame;    // ConstantBuffer<FrameUniforms> frame;
-        RHI_GpuBufferHandle m_Mvp;      // ConstantBuffer<MVP> mvp;
-        RHI_GpuBufferHandle m_Material; // ConstantBuffer<Material> material;
-        RHI_GpuBufferHandle m_Lights;   // StructuredBuffer<LightGPU> lights;
+    struct NV_API RHI_SceneParameterBlock {
+        RHI_GpuBufferHandle m_Uniforms; // ConstantBuffer<SceneUniforms> scene.uniforms;
+        RHI_GpuBufferHandle m_Lights;   // StructuredBuffer<LightGPU> scene.lights;
 
         bool IsValid() const {
-            return m_Frame.IsValid() && m_Mvp.IsValid() && m_Material.IsValid() && m_Lights.IsValid();
+            return m_Uniforms.IsValid() && m_Lights.IsValid();
+        }
+    };
+
+    /**
+     * C++ mirror of `ParameterBlock<NovaEngine> nova;` (NovaUniforms.slang): one GPU buffer handle
+     * per buffer field of `NovaEngine`. `FrameUniforms` is a push constant (not a descriptor
+     * buffer). Shadow map texture/sampler are render-graph resources bound by reflection name
+     * after texture creation.
+     * `m_Scene.m_Uniforms` holds a single value (one region per frame-in-flight). `m_Model` and
+     * `m_Material` are arrays (one element per draw call this frame) — see MAX_MODEL_DRAWS in
+     * VK_PipelineCache. `m_Scene.m_Lights` is a StructuredBuffer of up to MAX_LIGHTS elements.
+     */
+    struct NV_API RHI_EngineParameterBlock {
+        RHI_SceneParameterBlock m_Scene;
+        RHI_GpuBufferHandle     m_Model;    // ConstantBuffer<ModelUniforms> model;
+        RHI_GpuBufferHandle     m_Material; // ConstantBuffer<MaterialGPU> material;
+
+        bool IsValid() const {
+            return m_Scene.IsValid() && m_Model.IsValid() && m_Material.IsValid();
         }
     };
 
@@ -141,66 +178,61 @@ namespace Nova::Core::Renderer::RHI {
     // CPU mirror structs above. Padding fields are intentionally absent: they are never set.
     inline const std::unordered_map<std::string, size_t>& GetMaterialLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
-            { "base",                 offsetof(Material, m_Base) },
-            { "baseColor",            offsetof(Material, m_BaseColor) },
-            { "diffuseRoughness",     offsetof(Material, m_DiffuseRoughness) },
-            { "metalness",            offsetof(Material, m_Metalness) },
-            { "metalColor",           offsetof(Material, m_MetalColor) },
-            { "specular",             offsetof(Material, m_Specular) },
-            { "specularColor",        offsetof(Material, m_SpecularColor) },
-            { "specularRoughness",    offsetof(Material, m_SpecularRoughness) },
-            { "specularIOR",          offsetof(Material, m_SpecularIOR) },
-            { "specularAnisotropy",   offsetof(Material, m_SpecularAnisotropy) },
-            { "specularRotation",     offsetof(Material, m_SpecularRotation) },
-            { "transmission",         offsetof(Material, m_Transmission) },
-            { "transmissionColor",    offsetof(Material, m_TransmissionColor) },
-            { "subsurface",           offsetof(Material, m_Subsurface) },
-            { "subsurfaceColor",      offsetof(Material, m_SubsurfaceColor) },
-            { "subsurfaceRadius",     offsetof(Material, m_SubsurfaceRadius) },
-            { "subsurfaceScale",      offsetof(Material, m_SubsurfaceScale) },
-            { "subsurfaceAnisotropy", offsetof(Material, m_SubsurfaceAnisotropy) },
-            { "sheen",                offsetof(Material, m_Sheen) },
-            { "sheenColor",           offsetof(Material, m_SheenColor) },
-            { "sheenRoughness",       offsetof(Material, m_SheenRoughness) },
-            { "coat",                 offsetof(Material, m_Coat) },
-            { "coatColor",            offsetof(Material, m_CoatColor) },
-            { "coatRoughness",        offsetof(Material, m_CoatRoughness) },
-            { "coatAnisotropy",       offsetof(Material, m_CoatAnisotropy) },
-            { "coatRotation",         offsetof(Material, m_CoatRotation) },
-            { "coatIOR",              offsetof(Material, m_CoatIOR) },
-            { "coatAffectColor",      offsetof(Material, m_CoatAffectColor) },
-            { "coatAffectRoughness",  offsetof(Material, m_CoatAffectRoughness) },
-            { "emission",             offsetof(Material, m_Emission) },
-            { "emissionColor",        offsetof(Material, m_EmissionColor) },
-            { "opacity",              offsetof(Material, m_Opacity) },
-            { "thinWalled",           offsetof(Material, m_ThinWalled) },
-            { "isOpaque",             offsetof(Material, m_IsOpaque) },
+            { "m_Base",                 offsetof(MaterialGPU, m_Base) },
+            { "m_BaseColor",            offsetof(MaterialGPU, m_BaseColor) },
+            { "m_DiffuseRoughness",     offsetof(MaterialGPU, m_DiffuseRoughness) },
+            { "m_Metalness",            offsetof(MaterialGPU, m_Metalness) },
+            { "m_MetalColor",           offsetof(MaterialGPU, m_MetalColor) },
+            { "m_Specular",             offsetof(MaterialGPU, m_Specular) },
+            { "m_SpecularColor",        offsetof(MaterialGPU, m_SpecularColor) },
+            { "m_SpecularRoughness",    offsetof(MaterialGPU, m_SpecularRoughness) },
+            { "m_SpecularIOR",          offsetof(MaterialGPU, m_SpecularIOR) },
+            { "m_SpecularAnisotropy",   offsetof(MaterialGPU, m_SpecularAnisotropy) },
+            { "m_SpecularRotation",     offsetof(MaterialGPU, m_SpecularRotation) },
+            { "m_Transmission",         offsetof(MaterialGPU, m_Transmission) },
+            { "m_TransmissionColor",    offsetof(MaterialGPU, m_TransmissionColor) },
+            { "m_Subsurface",           offsetof(MaterialGPU, m_Subsurface) },
+            { "m_SubsurfaceColor",      offsetof(MaterialGPU, m_SubsurfaceColor) },
+            { "m_SubsurfaceRadius",     offsetof(MaterialGPU, m_SubsurfaceRadius) },
+            { "m_SubsurfaceScale",      offsetof(MaterialGPU, m_SubsurfaceScale) },
+            { "m_SubsurfaceAnisotropy", offsetof(MaterialGPU, m_SubsurfaceAnisotropy) },
+            { "m_Sheen",                offsetof(MaterialGPU, m_Sheen) },
+            { "m_SheenColor",           offsetof(MaterialGPU, m_SheenColor) },
+            { "m_SheenRoughness",       offsetof(MaterialGPU, m_SheenRoughness) },
+            { "m_Coat",                 offsetof(MaterialGPU, m_Coat) },
+            { "m_CoatColor",            offsetof(MaterialGPU, m_CoatColor) },
+            { "m_CoatRoughness",        offsetof(MaterialGPU, m_CoatRoughness) },
+            { "m_CoatAnisotropy",       offsetof(MaterialGPU, m_CoatAnisotropy) },
+            { "m_CoatRotation",         offsetof(MaterialGPU, m_CoatRotation) },
+            { "m_CoatIOR",              offsetof(MaterialGPU, m_CoatIOR) },
+            { "m_CoatAffectColor",      offsetof(MaterialGPU, m_CoatAffectColor) },
+            { "m_CoatAffectRoughness",  offsetof(MaterialGPU, m_CoatAffectRoughness) },
+            { "m_Emission",             offsetof(MaterialGPU, m_Emission) },
+            { "m_EmissionColor",        offsetof(MaterialGPU, m_EmissionColor) },
+            { "m_Opacity",              offsetof(MaterialGPU, m_Opacity) },
+            { "m_ThinWalled",           offsetof(MaterialGPU, m_ThinWalled) },
+            { "m_IsOpaque",             offsetof(MaterialGPU, m_IsOpaque) },
         };
         return kLayout;
     }
 
     inline const std::unordered_map<std::string, size_t>& GetFrameLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
-            { "iResolution", offsetof(FrameUniforms, m_IResolution) },
-            { "iTime",       offsetof(FrameUniforms, m_ITime) },
-            { "iTimeDelta",  offsetof(FrameUniforms, m_ITimeDelta) },
-            { "iFrameRate",  offsetof(FrameUniforms, m_IFrameRate) },
-            { "iFrame",      offsetof(FrameUniforms, m_IFrame) },
-            { "u_CameraPos", offsetof(FrameUniforms, m_UCameraPos) },
-            { "lightCount",  offsetof(FrameUniforms, m_LightCount) },
-            { "iMouse",      offsetof(FrameUniforms, m_IMouse) },
-            { "iDate",       offsetof(FrameUniforms, m_IDate) },
+            { "m_Resolution", offsetof(FrameUniforms, m_Resolution) },
+            { "m_Time",       offsetof(FrameUniforms, m_Time) },
+            { "m_TimeDelta",  offsetof(FrameUniforms, m_TimeDelta) },
+            { "m_FrameRate",  offsetof(FrameUniforms, m_FrameRate) },
+            { "m_Frame",      offsetof(FrameUniforms, m_Frame) },
+            { "m_Mouse",      offsetof(FrameUniforms, m_Mouse) },
+            { "m_Date",       offsetof(FrameUniforms, m_Date) },
         };
         return kLayout;
     }
 
-    inline const std::unordered_map<std::string, size_t>& GetMvpLayout() {
+    inline const std::unordered_map<std::string, size_t>& GetModelLayout() {
         static const std::unordered_map<std::string, size_t> kLayout = {
-            { "model",       offsetof(MVP, m_Model) },
-            { "view",        offsetof(MVP, m_View) },
-            { "proj",        offsetof(MVP, m_Proj) },
-            { "viewProj",    offsetof(MVP, m_ViewProj) },
-            { "invViewProj", offsetof(MVP, m_InvViewProj) },
+            { "m_Model",      offsetof(ModelUniforms, m_Model) },
+            { "m_LightIndex", offsetof(ModelUniforms, m_LightIndex) },
         };
         return kLayout;
     }

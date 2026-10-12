@@ -10,7 +10,6 @@
 #include "Api.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
 #include "Renderer/RHI/RHI_ShaderReflection.h"
-#include "Renderer/RHI/RHI_ShaderResourceSet.h"
 
 namespace Nova::Core::Renderer::RHI {
 

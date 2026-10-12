@@ -1,7 +1,7 @@
 #ifndef VK_MESH_H
 #define VK_MESH_H
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 #include "Api.h"
 #include "Renderer/RHI/RHI_Mesh.h"
 #include "Renderer/Backends/Vulkan/VK_MemoryAllocator.h"
@@ -40,6 +40,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		VkCommandPool    m_CommandPool = VK_NULL_HANDLE;
 		VkQueue          m_GraphicsQueue = VK_NULL_HANDLE;
 
+		//TODO maybe not 1 index and vertex buffer per mesh ? 
+		//should depend on the mesh type and the usage of the mesh (static, dynamic, instanced, etc.) ?
 		VK_BufferAllocation m_VertexBuffer{};
 		VK_BufferAllocation m_IndexBuffer{};
 

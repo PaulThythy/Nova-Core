@@ -1,5 +1,5 @@
-#ifndef RHI_SHADER_COMPILER_H
-#define RHI_SHADER_COMPILER_H
+#ifndef RHI_SHADERCOMPILER_H
+#define RHI_SHADERCOMPILER_H
 
 #include <cstdint>
 #include <filesystem>
@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Api.h"
+#include "Core/Buffer.h"
 #include "Core/GraphicsAPI.h"
 #include "Renderer/RHI/RHI_ShaderTypes.h"
 #include "Renderer/RHI/RHI_ShaderReflection.h"
@@ -42,7 +43,7 @@ namespace Nova::Core::Renderer::RHI {
         GraphicsAPI m_TargetApi = GraphicsAPI::Vulkan;
 
         RHI_ShaderBinaryFormat m_Format = RHI_ShaderBinaryFormat::Unknown;
-        std::vector<uint8_t> m_Binary;
+        Nova::Core::Buffer m_Binary;
         std::string m_Source;
         std::string m_Log;
 
@@ -57,18 +58,7 @@ namespace Nova::Core::Renderer::RHI {
     class NV_API RHI_ShaderCompiler {
     public:
         static RHI_ShaderCompileResult Compile(const RHI_ShaderCompileInput& input);
-
-    private:
-        static std::string ComputeHash(const RHI_ShaderCompileInput& input);
-        static bool NeedsRecompile(const RHI_ShaderCompileInput& input, const std::string& hash);
-
-        static bool LoadCache(const std::string& hash, RHI_ShaderCompileResult& out);
-        static void SaveCache(const std::string& hash, const RHI_ShaderCompileResult& result);
-
-        static std::filesystem::path GetCacheDirectory();
     };
-
-    NV_API bool ReadTextFile(const std::filesystem::path& path, std::string& outText, std::string& outError);
 
     NV_API RHI_ShaderStage ShaderStageFromFileExtension(const std::filesystem::path& filePath);
 
@@ -77,4 +67,4 @@ namespace Nova::Core::Renderer::RHI {
 
 } // namespace Nova::Core::Renderer::RHI
 
-#endif // RHI_SHADER_COMPILER_H
+#endif // RHI_SHADERCOMPILER_H

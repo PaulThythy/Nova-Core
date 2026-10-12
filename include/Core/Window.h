@@ -23,7 +23,6 @@ namespace Nova::Core {
             int m_Height        = 720;
             bool m_Resizable    = true;
             bool m_Maximized    = false;
-            GraphicsAPI m_GraphicsAPI = GraphicsAPI::Vulkan;
             bool m_VSync        = true;
 
             using EventCallbackFn = std::function<void(Events::Event&)>;
@@ -36,10 +35,16 @@ namespace Nova::Core {
         void SetVSync(bool enabled);
         void SetTitle(const char* title);
 
+        /** Bind (or switch) the graphics API used with this window.
+         *  Call after Create(). Window-owned resources (e.g. SDL_Renderer)
+         *  are torn down / recreated as needed. Higher-level GPU backends
+         *  (Vulkan device, swapchain, etc.) remain the caller's responsibility. */
+        bool SetGraphicsAPI(GraphicsAPI api);
+        GraphicsAPI GetGraphicsAPI() const { return m_GraphicsAPI; }
+
         void GetWindowSize(int& width, int& height);
         SDL_Window* GetSDLWindow() const { return m_Window; }
         SDL_Renderer* GetSDLRenderer() const { return m_Renderer; }
-        GraphicsAPI GetGraphicsAPI() const { return m_Desc.m_GraphicsAPI; }
 
         void SetSDLRenderer(SDL_Renderer* renderer) { m_Renderer = renderer; }
 
@@ -53,7 +58,10 @@ namespace Nova::Core {
         void RaiseEvent(Events::Event& event);
     
     private:
+        void DestroyGraphicsAPIResources();
+
         WindowDesc m_Desc;
+        GraphicsAPI m_GraphicsAPI = GraphicsAPI::None;
 
         SDL_Window* m_Window = nullptr;
         SDL_Renderer* m_Renderer = nullptr;

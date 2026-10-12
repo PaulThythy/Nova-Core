@@ -6,6 +6,7 @@
 #include <string>
 
 #include "Api.h"
+#include "Core/Platform.h"
 
 namespace Nova::Core {
 
@@ -68,12 +69,59 @@ namespace Nova::Core {
         Log& operator=(const Log&) = delete;
     };
 
-#define NV_LOG_TRACE(message, ...) Nova::Core::Log::Get().Trace(message, ##__VA_ARGS__)
-#define NV_LOG_DEBUG(message, ...) Nova::Core::Log::Get().Debug(message, ##__VA_ARGS__)
-#define NV_LOG_INFO(message, ...)  Nova::Core::Log::Get().Info(message, ##__VA_ARGS__)
-#define NV_LOG_WARN(message, ...)  Nova::Core::Log::Get().Warn(message, ##__VA_ARGS__)
-#define NV_LOG_ERROR(message) Nova::Core::Log::Get().Error(message, __FILE__, __LINE__)
-#define NV_LOG_FATAL(message) Nova::Core::Log::Get().Fatal(message, __FILE__, __LINE__)
+// Compile-time log stripping by build type:
+//   Debug          -> TRACE+
+//   RelWithDebInfo -> INFO+
+//   Release        -> WARN+
+//   MinSizeRel     -> ERROR+
+//   Dist           -> none (shipping; no console output)
+#if defined(NOVA_DIST)
+    #define NV_LOG_ACTIVE_LEVEL 6
+#elif defined(NOVA_MINSIZEREL)
+    #define NV_LOG_ACTIVE_LEVEL 4
+#elif defined(NOVA_RELEASE)
+    #define NV_LOG_ACTIVE_LEVEL 3
+#elif defined(NOVA_RELWITHDEBINFO)
+    #define NV_LOG_ACTIVE_LEVEL 2
+#else
+    #define NV_LOG_ACTIVE_LEVEL 0
+#endif
+
+#if NV_LOG_ACTIVE_LEVEL <= 0
+    #define NV_LOG_TRACE(message, ...) Nova::Core::Log::Get().Trace(message, ##__VA_ARGS__)
+#else
+    #define NV_LOG_TRACE(message, ...) do { (void)sizeof(message); } while (0)
+#endif
+
+#if NV_LOG_ACTIVE_LEVEL <= 1
+    #define NV_LOG_DEBUG(message, ...) Nova::Core::Log::Get().Debug(message, ##__VA_ARGS__)
+#else
+    #define NV_LOG_DEBUG(message, ...) do { (void)sizeof(message); } while (0)
+#endif
+
+#if NV_LOG_ACTIVE_LEVEL <= 2
+    #define NV_LOG_INFO(message, ...)  Nova::Core::Log::Get().Info(message, ##__VA_ARGS__)
+#else
+    #define NV_LOG_INFO(message, ...)  do { (void)sizeof(message); } while (0)
+#endif
+
+#if NV_LOG_ACTIVE_LEVEL <= 3
+    #define NV_LOG_WARN(message, ...)  Nova::Core::Log::Get().Warn(message, ##__VA_ARGS__)
+#else
+    #define NV_LOG_WARN(message, ...)  do { (void)sizeof(message); } while (0)
+#endif
+
+#if NV_LOG_ACTIVE_LEVEL <= 4
+    #define NV_LOG_ERROR(message) Nova::Core::Log::Get().Error(message, __FILE__, __LINE__)
+#else
+    #define NV_LOG_ERROR(message) do { (void)sizeof(message); } while (0)
+#endif
+
+#if NV_LOG_ACTIVE_LEVEL <= 5
+    #define NV_LOG_FATAL(message) Nova::Core::Log::Get().Fatal(message, __FILE__, __LINE__)
+#else
+    #define NV_LOG_FATAL(message) do { (void)sizeof(message); } while (0)
+#endif
 
 #define NV_LOG_OBJECT_CREATED(type, name)    NV_LOG_DEBUG(std::string("Created ") + (type) + ": " + (name))
 #define NV_LOG_OBJECT_DESTROYED(type, name)  NV_LOG_DEBUG(std::string("Destroyed ") + (type) + ": " + (name))

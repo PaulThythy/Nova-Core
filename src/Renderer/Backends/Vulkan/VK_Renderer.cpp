@@ -24,14 +24,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return views;
     }
 
-    VkFramebuffer VK_Renderer::GetSwapchainFramebuffer(uint32_t imageIndex) const {
-        if (auto* graph = GetVKRenderGraph()) {
-            const auto& fbs = graph->GetSwapchainFramebuffers();
-            if (imageIndex < fbs.size()) return fbs[imageIndex];
-        }
-        return VK_NULL_HANDLE;
-    }
-
     VK_RenderGraph* VK_Renderer::GetVKRenderGraph() const {
         return dynamic_cast<VK_RenderGraph*>(m_RenderGraph.get());
     }
@@ -50,7 +42,31 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         return cmdBuffers[imageIndex];
     }
 
+    static VK_PresentMode ToVKPresentMode(RHI::RHI_PresentMode mode) {
+        switch (mode) {
+        case RHI::RHI_PresentMode::Immediate:  return VK_PresentMode::Immediate;
+        case RHI::RHI_PresentMode::Default:    return VK_PresentMode::Default;
+        case RHI::RHI_PresentMode::LowLatency: return VK_PresentMode::LowLatency;
+        }
+        return VK_PresentMode::LowLatency;
+    }
+
+    static VK_SwapchainDesc ToVKSwapchainDesc(const RHI::RHI_SwapchainDesc& desc) {
+        VK_SwapchainDesc out{};
+        out.m_FramesInFlight = desc.m_FramesInFlight;
+        out.m_CreateSurface = desc.m_CreateSurface;
+        out.m_EnableSwapchain = desc.m_EnableSwapchain;
+        out.m_Width = desc.m_Width;
+        out.m_Height = desc.m_Height;
+        out.m_PreferredPresentMode = ToVKPresentMode(desc.m_PreferredPresentMode);
+        return out;
+    }
+
     bool VK_Renderer::Create(const RHI::RHI_SwapchainDesc& desc) {
+        return Create(ToVKSwapchainDesc(desc));
+    }
+
+    bool VK_Renderer::Create(const VK_SwapchainDesc& desc) {
         m_SwapchainDesc = desc;
         NV_LOG_INFO("Creating Vulkan renderer (instance, device, swapchain)...");
 
@@ -86,6 +102,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                     m_VKDevice.GetPresentQueueFamily(),
                     desc)) {
                 NV_LOG_ERROR("Failed to create swapchain");
+                return false;
+            }
+            if (!m_VKSwapchain.InitRenderTargets(m_MemoryAllocator)) {
+                NV_LOG_ERROR("Failed to create swapchain render targets");
                 return false;
             }
         } else if (desc.m_EnableSwapchain) {
@@ -215,8 +235,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (m_FramebufferResized) {
             m_FramebufferResized = false;
             if (!m_VKSwapchain.RecreateSwapchain())
-                return;
-            if (!vkGraph->RecreateSwapchainRenderTargets())
                 return;
         }
 

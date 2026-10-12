@@ -20,10 +20,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Instance::Destroy() {
-        if (IsValidationLayersEnabled() && s_DebugMessenger != VK_NULL_HANDLE) {
-            DestroyDebugUtilsMessengerEXT(m_Instance, s_DebugMessenger, nullptr);
-            s_DebugMessenger = VK_NULL_HANDLE;
-        }
+        if (IsValidationLayersEnabled())
+            DestroyDebugMessenger(m_Instance);
 
         DestroySurface();
         DestroyInstance();
@@ -33,6 +31,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         SDL_Window* window = Nova::Core::Application::Get().GetWindow().GetSDLWindow();
         if (!window) {
             NV_LOG_ERROR("CreateInstance failed: SDL window is null.");
+            return false;
+        }
+
+        if (volkInitialize() != VK_SUCCESS) {
+            NV_LOG_ERROR("volkInitialize failed: Vulkan loader not found.");
             return false;
         }
 
@@ -82,19 +85,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             ci.enabledLayerCount = static_cast<uint32_t>(s_ValidationLayers.size());
             ci.ppEnabledLayerNames = s_ValidationLayers.data();
 
-            dbgCreateInfo = {};
-            dbgCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-            dbgCreateInfo.messageSeverity =
-                VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
-                | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
-                | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-            dbgCreateInfo.messageType =
-                VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-                | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
-                | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-            dbgCreateInfo.pfnUserCallback = DebugCallback;
-            dbgCreateInfo.pUserData = nullptr;
-
+            PopulateDebugMessengerCreateInfo(dbgCreateInfo);
             ci.pNext = &dbgCreateInfo;
         }
         else {
@@ -109,6 +100,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             NV_LOG_ERROR("Failed to create Vulkan instance.");
             return false;
         }
+
+        volkLoadInstance(m_Instance);
 
         if (IsValidationLayersEnabled()) {
             if (!SetupDebugMessenger(m_Instance)) {
