@@ -5,7 +5,7 @@
 //   NOVA_WINDOWS | NOVA_LINUX | NOVA_MACOS | NOVA_UNKNOWN_PLATFORM
 //
 // Build-type macros (same source):
-//   NOVA_DEBUG | NOVA_RELEASE | NOVA_RELWITHDEBINFO | NOVA_MINSIZEREL
+//   NOVA_DEBUG | NOVA_RELEASE | NOVA_RELWITHDEBINFO | NOVA_MINSIZEREL | NOVA_DIST
 
 #if defined(NOVA_WINDOWS)
     #define NOVA_PLATFORM_NAME "Windows"
@@ -25,6 +25,8 @@
     #define NOVA_BUILD_TYPE_NAME "RelWithDebInfo"
 #elif defined(NOVA_MINSIZEREL)
     #define NOVA_BUILD_TYPE_NAME "MinSizeRel"
+#elif defined(NOVA_DIST)
+    #define NOVA_BUILD_TYPE_NAME "Dist"
 #else
     #define NOVA_BUILD_TYPE_NAME "Unknown"
 #endif
