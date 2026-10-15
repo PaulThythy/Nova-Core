@@ -15,8 +15,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         "VK_LAYER_KHRONOS_validation"
     };
 
+    // Enabled for Debug / RelWithDebInfo; off for Release, MinSizeRel, Dist.
     static inline bool s_EnableValidationLayers =
-#ifdef NOVA_DEBUG
+#if defined(NOVA_DEBUG) || defined(NOVA_RELWITHDEBINFO)
         true;
 #else
         false;
