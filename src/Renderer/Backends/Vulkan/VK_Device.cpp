@@ -350,8 +350,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             queueCreateInfos.push_back(qci);
         }
 
+        // SV_InstanceID / DrawParameters (GPU instancing) requires Vulkan 1.1 shaderDrawParameters.
+        VkPhysicalDeviceVulkan11Features vulkan11Features{};
+        vulkan11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+        vulkan11Features.shaderDrawParameters = VK_TRUE;
+
         VkPhysicalDeviceVulkan13Features vulkan13Features{};
         vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+        vulkan13Features.pNext = &vulkan11Features;
         vulkan13Features.dynamicRendering = VK_TRUE;
 
         VkPhysicalDeviceFeatures features{};
