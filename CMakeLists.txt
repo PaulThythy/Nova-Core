@@ -31,6 +31,7 @@ target_link_libraries(Nova-Core PUBLIC
     EnTT::EnTT
     slang
     VulkanMemoryAllocator
+    assimp
 )
 target_link_libraries(Nova-Core PRIVATE stb)
 
