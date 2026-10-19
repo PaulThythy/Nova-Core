@@ -25,7 +25,8 @@ namespace Nova::Core::Asset {
 
     class NV_API Asset {
     public:
-        Asset(AssetType type, std::filesystem::path path) : m_Type(type), m_Path(std::move(path)) {}
+        Asset(AssetType type, std::filesystem::path path, UUID uuid = GenerateUUID())
+            : m_UUID(uuid), m_Type(type), m_Path(std::move(path)) {}
         virtual ~Asset() = default;
 
         UUID GetUUID() const { return m_UUID; }
@@ -33,7 +34,7 @@ namespace Nova::Core::Asset {
         const std::filesystem::path& GetPath() const { return m_Path; }
 
     protected:
-        UUID m_UUID;
+        UUID m_UUID = kInvalidUUID;
         AssetType m_Type;
         std::filesystem::path m_Path;
     };

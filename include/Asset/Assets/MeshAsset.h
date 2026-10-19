@@ -21,6 +21,19 @@ namespace Nova::Core::Asset::Assets {
         Torus
     };
 
+    /**
+     * Stable AssetIDs for engine mesh primitives (reserved UUID range).
+     * External meshes (obj/fbx/…) get a random UUID via GenerateUUID().
+     */
+    namespace PrimitiveMeshAssetID {
+        constexpr UUID Cube     = 1;
+        constexpr UUID Sphere   = 2;
+        constexpr UUID Cylinder = 3;
+        constexpr UUID Capsule  = 4;
+        constexpr UUID Torus    = 5;
+        constexpr UUID Plane    = 6;
+    }
+
     struct NV_API MeshAssetDesc {
         // Cube
         float m_HalfExtent = 0.5f;
@@ -69,9 +82,12 @@ namespace Nova::Core::Asset::Assets {
     private:
         bool LoadFromPath();
         bool LoadPrimitive(MeshPrimitive primitive);
+        bool LoadFromFile();
 
         static bool IsEnginePrimitivePath(const std::filesystem::path& path, std::string* outName);
         static MeshPrimitive PrimitiveFromName(const std::string& name);
+        static UUID UUIDForMeshPath(const std::filesystem::path& path);
+        static UUID UUIDForPrimitive(MeshPrimitive primitive);
 
         MeshAssetDesc m_Desc;
         MeshPrimitive m_Primitive = MeshPrimitive::Unknown;
