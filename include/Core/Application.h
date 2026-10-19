@@ -17,6 +17,17 @@
 
 namespace Nova::Core {
 
+    struct ApplicationCommandLineArgs {
+        int Count = 0;
+        char** Args = nullptr;
+
+        const char* operator[](int index) const
+        {
+            NV_ASSERT(index < Count);
+            return Args[index];
+        }
+    };
+
     class NV_API Application {
     public:
         explicit Application(const Window::WindowDesc& windowDesc);
@@ -59,6 +70,9 @@ namespace Nova::Core {
         ImGuiLayer* m_ImGuiLayer = nullptr;
         LayerStack m_LayerStack;
     };
+
+    // To be defined in the CLIENT (Nova-App).
+    Application* CreateApplication(ApplicationCommandLineArgs args);
 
 } // namespace Nova::Core
 
