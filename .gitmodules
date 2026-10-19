@@ -27,3 +27,6 @@
 [submodule "vendors/volk"]
 	path = vendors/volk
 	url = https://github.com/zeux/volk.git
+[submodule "vendors/assimp"]
+	path = vendors/assimp
+	url = https://github.com/assimp/assimp.git
