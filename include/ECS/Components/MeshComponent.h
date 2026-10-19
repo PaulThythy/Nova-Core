@@ -30,7 +30,10 @@ namespace Nova::Core::ECS::Components {
 			if (!cpuMesh)
 				return;
 
-			m_AABBTree.Build(cpuMesh->GetVertices(), cpuMesh->GetIndices(), m_AABBTreeDepth);
+			m_AABBTree.Build(
+				cpuMesh->GetVertices(), cpuMesh->GetVertexCount(),
+				cpuMesh->GetIndices(), cpuMesh->GetIndexCount(),
+				m_AABBTreeDepth);
 		}
 	};
 

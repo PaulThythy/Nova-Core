@@ -62,8 +62,11 @@ namespace Nova::Core::Scene {
 
 			Math::AABBTreeHit localHit{};
 			const float localMaxT = closestDistance * localDirLength;
-			if (!mc.m_AABBTree.Raycast(localRay, cpuMesh->GetVertices(), cpuMesh->GetIndices(),
-			                          localHit, localMaxT)) {
+			if (!mc.m_AABBTree.Raycast(
+					localRay,
+					cpuMesh->GetVertices(), cpuMesh->GetVertexCount(),
+					cpuMesh->GetIndices(), cpuMesh->GetIndexCount(),
+					localHit, localMaxT)) {
 				continue;
 			}
 

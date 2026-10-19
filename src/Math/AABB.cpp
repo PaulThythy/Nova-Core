@@ -68,8 +68,8 @@ namespace Nova::Core::Math {
 	}
 
 	AABB AABBTree::ComputeBounds(const std::vector<uint32_t>& triangleIndices,
-	                             const std::vector<Vertex>& vertices,
-	                             const std::vector<uint32_t>& indices) {
+	                             const Vertex* vertices,
+	                             const uint32_t* indices) {
 		AABB bounds;
 		const float inf = std::numeric_limits<float>::infinity();
 		bounds.m_Min = glm::vec3(inf);
@@ -91,8 +91,8 @@ namespace Nova::Core::Math {
 	                         std::vector<uint32_t>& triangleIndices,
 	                         uint32_t depth,
 	                         uint32_t maxDepth,
-	                         const std::vector<Vertex>& vertices,
-	                         const std::vector<uint32_t>& indices) {
+	                         const Vertex* vertices,
+	                         const uint32_t* indices) {
 		auto& node = m_Nodes[static_cast<size_t>(nodeIndex)];
 		node.m_Bounds = ComputeBounds(triangleIndices, vertices, indices);
 
@@ -140,15 +140,15 @@ namespace Nova::Core::Math {
 		BuildNode(node.m_RightChild, right, depth + 1, maxDepth, vertices, indices);
 	}
 
-	void AABBTree::Build(const std::vector<Vertex>& vertices,
-	                     const std::vector<uint32_t>& indices,
+	void AABBTree::Build(const Vertex* vertices, uint32_t vertexCount,
+	                     const uint32_t* indices, uint32_t indexCount,
 	                     uint32_t maxDepth) {
 		m_Nodes.clear();
 
-		if (indices.size() < 3)
+		if (!vertices || !indices || vertexCount == 0 || indexCount < 3)
 			return;
 
-		const uint32_t triangleCount = static_cast<uint32_t>(indices.size() / 3);
+		const uint32_t triangleCount = indexCount / 3;
 		std::vector<uint32_t> triangleIndices(triangleCount);
 		std::iota(triangleIndices.begin(), triangleIndices.end(), 0);
 
@@ -157,16 +157,16 @@ namespace Nova::Core::Math {
 	}
 
 	bool AABBTree::Raycast(const Ray& ray,
-	                       const std::vector<Vertex>& vertices,
-	                       const std::vector<uint32_t>& indices,
+	                       const Vertex* vertices, uint32_t vertexCount,
+	                       const uint32_t* indices, uint32_t indexCount,
 	                       AABBTreeHit& outHit,
 	                       float maxDistance) const {
-		if (m_Nodes.empty())
+		if (m_Nodes.empty() || !vertices || !indices || vertexCount == 0 || indexCount < 3)
 			return false;
 
 		float closestT = maxDistance;
 		AABBTreeHit hit{};
-		if (!RaycastNode(0, ray, vertices, indices, hit, closestT))
+		if (!RaycastNode(0, ray, vertices, indices, indexCount, hit, closestT))
 			return false;
 
 		outHit = hit;
@@ -175,8 +175,9 @@ namespace Nova::Core::Math {
 
 	bool AABBTree::RaycastNode(int nodeIndex,
 	                           const Ray& ray,
-	                           const std::vector<Vertex>& vertices,
-	                           const std::vector<uint32_t>& indices,
+	                           const Vertex* vertices,
+	                           const uint32_t* indices,
+	                           uint32_t indexCount,
 	                           AABBTreeHit& outHit,
 	                           float& closestT) const {
 		const AABBNode& node = m_Nodes[static_cast<size_t>(nodeIndex)];
@@ -189,7 +190,7 @@ namespace Nova::Core::Math {
 			bool hit = false;
 			for (uint32_t triIndex : node.m_TriangleIndices) {
 				const uint32_t base = triIndex * 3;
-				if (base + 2 >= indices.size())
+				if (base + 2 >= indexCount)
 					continue;
 
 				const Triangle tri{
@@ -215,9 +216,9 @@ namespace Nova::Core::Math {
 		bool hitLeft = false;
 		bool hitRight = false;
 		if (node.m_LeftChild >= 0)
-			hitLeft = RaycastNode(node.m_LeftChild, ray, vertices, indices, outHit, closestT);
+			hitLeft = RaycastNode(node.m_LeftChild, ray, vertices, indices, indexCount, outHit, closestT);
 		if (node.m_RightChild >= 0)
-			hitRight = RaycastNode(node.m_RightChild, ray, vertices, indices, outHit, closestT);
+			hitRight = RaycastNode(node.m_RightChild, ray, vertices, indices, indexCount, outHit, closestT);
 		return hitLeft || hitRight;
 	}
 

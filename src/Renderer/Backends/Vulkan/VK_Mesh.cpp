@@ -9,7 +9,10 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    VK_Mesh::VK_Mesh(const Renderer::RHI::RHI_Mesh& mesh) : Renderer::RHI::RHI_Mesh(mesh.GetVertices(), mesh.GetIndices()) {}
+    VK_Mesh::VK_Mesh(const Renderer::RHI::RHI_Mesh& mesh)
+        : Renderer::RHI::RHI_Mesh(
+            Core::Buffer::Copy(mesh.GetVertexBuffer()),
+            Core::Buffer::Copy(mesh.GetIndexBuffer())) {}
 
     VK_Mesh::~VK_Mesh() { Release(); }
 
@@ -21,13 +24,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             return;
         }
 
-        const auto& vertices = mesh.GetVertices();
-        const auto& indices = mesh.GetIndices();
-        m_IndexCount = static_cast<int>(indices.size());
+        const Core::Buffer& vertices = mesh.GetVertexBuffer();
+        const Core::Buffer& indices = mesh.GetIndexBuffer();
+        m_IndexCount = static_cast<int>(mesh.GetIndexCount());
 
         // ---- Vertex buffer ----
-        {
-            const VkDeviceSize size = vertices.size() * sizeof(Math::Vertex);
+        if (vertices.Data && vertices.Size > 0) {
+            const VkDeviceSize size = vertices.Size;
 
             VK_BufferAllocation staging;
             if (!m_Allocator->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MemoryLocation::CpuReadWrite, staging)) {
@@ -35,21 +38,21 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 return;
             }
 
-            m_Allocator->WriteToBuffer(staging, 0, size, vertices.data());
+            m_Allocator->WriteToBuffer(staging, 0, size, vertices.Data);
 
-            if (!m_Allocator->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MemoryLocation::GpuOnly, m_VertexBuffer)) {
+            if (!m_Allocator->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MemoryLocation::GpuOnly, m_GpuVertexBuffer)) {
                 NV_LOG_ERROR("VK_Mesh::Upload - failed to create device-local vertex buffer");
                 m_Allocator->DestroyBuffer(staging);
                 return;
             }
 
-            CopyBuffer(staging.buffer, m_VertexBuffer.buffer, size);
+            CopyBuffer(staging.buffer, m_GpuVertexBuffer.buffer, size);
             m_Allocator->DestroyBuffer(staging);
         }
 
         // ---- Index buffer ----
-        {
-            const VkDeviceSize size = indices.size() * sizeof(uint32_t);
+        if (indices.Data && indices.Size > 0) {
+            const VkDeviceSize size = indices.Size;
 
             VK_BufferAllocation staging;
             if (!m_Allocator->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MemoryLocation::CpuReadWrite, staging)) {
@@ -57,15 +60,15 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 return;
             }
 
-            m_Allocator->WriteToBuffer(staging, 0, size, indices.data());
+            m_Allocator->WriteToBuffer(staging, 0, size, indices.Data);
 
-            if (!m_Allocator->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MemoryLocation::GpuOnly, m_IndexBuffer)) {
+            if (!m_Allocator->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MemoryLocation::GpuOnly, m_GpuIndexBuffer)) {
                 NV_LOG_ERROR("VK_Mesh::Upload - failed to create device-local index buffer");
                 m_Allocator->DestroyBuffer(staging);
                 return;
             }
 
-            CopyBuffer(staging.buffer, m_IndexBuffer.buffer, size);
+            CopyBuffer(staging.buffer, m_GpuIndexBuffer.buffer, size);
             m_Allocator->DestroyBuffer(staging);
         }
     }
@@ -74,17 +77,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (m_Allocator == nullptr || !m_Allocator->IsValid())
             return;
 
-        m_Allocator->DestroyBuffer(m_IndexBuffer);
-        m_Allocator->DestroyBuffer(m_VertexBuffer);
+        m_Allocator->DestroyBuffer(m_GpuIndexBuffer);
+        m_Allocator->DestroyBuffer(m_GpuVertexBuffer);
         m_IndexCount = 0;
     }
 
     void VK_Mesh::Bind() const {
         if (m_ActiveCmd == VK_NULL_HANDLE) return;
         VkDeviceSize offset = 0;
-        const VkBuffer vertexBuffer = m_VertexBuffer.buffer;
+        const VkBuffer vertexBuffer = m_GpuVertexBuffer.buffer;
         vkCmdBindVertexBuffers(m_ActiveCmd, 0, 1, &vertexBuffer, &offset);
-        vkCmdBindIndexBuffer(m_ActiveCmd, m_IndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(m_ActiveCmd, m_GpuIndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
     }
 
     void VK_Mesh::Unbind() const {

@@ -29,8 +29,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 		void Unbind() const override; // no-op
 		void Draw()   const override;
 
-		VkBuffer GetVertexBuffer() const { return m_VertexBuffer.buffer; }
-		VkBuffer GetIndexBuffer()  const { return m_IndexBuffer.buffer; }
+		VkBuffer GetGpuVertexBuffer() const { return m_GpuVertexBuffer.buffer; }
+		VkBuffer GetGpuIndexBuffer()  const { return m_GpuIndexBuffer.buffer; }
 		int      GetIndexCount()   const { return m_IndexCount; }
 
 		void SetCommandBuffer(VkCommandBuffer cmd) { m_ActiveCmd = cmd; }
@@ -42,8 +42,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
 		//TODO maybe not 1 index and vertex buffer per mesh ? 
 		//should depend on the mesh type and the usage of the mesh (static, dynamic, instanced, etc.) ?
-		VK_BufferAllocation m_VertexBuffer{};
-		VK_BufferAllocation m_IndexBuffer{};
+		VK_BufferAllocation m_GpuVertexBuffer{};
+		VK_BufferAllocation m_GpuIndexBuffer{};
 
 		int m_IndexCount = 0;
 

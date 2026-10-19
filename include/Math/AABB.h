@@ -52,8 +52,8 @@ namespace Nova::Core::Math {
 
 	class NV_API AABBTree {
 	public:
-		void Build(const std::vector<Vertex>& vertices,
-		           const std::vector<uint32_t>& indices,
+		void Build(const Vertex* vertices, uint32_t vertexCount,
+		           const uint32_t* indices, uint32_t indexCount,
 		           uint32_t maxDepth);
 
 		const std::vector<AABBNode>& GetNodes() const { return m_Nodes; }
@@ -64,8 +64,8 @@ namespace Nova::Core::Math {
 		 * Requires the same vertices/indices used to Build().
 		 */
 		bool Raycast(const Ray& ray,
-		             const std::vector<Vertex>& vertices,
-		             const std::vector<uint32_t>& indices,
+		             const Vertex* vertices, uint32_t vertexCount,
+		             const uint32_t* indices, uint32_t indexCount,
 		             AABBTreeHit& outHit,
 		             float maxDistance = 1e30f) const;
 
@@ -74,19 +74,20 @@ namespace Nova::Core::Math {
 		               std::vector<uint32_t>& triangleIndices,
 		               uint32_t depth,
 		               uint32_t maxDepth,
-		               const std::vector<Vertex>& vertices,
-		               const std::vector<uint32_t>& indices);
+		               const Vertex* vertices,
+		               const uint32_t* indices);
 
 		bool RaycastNode(int nodeIndex,
 		                 const Ray& ray,
-		                 const std::vector<Vertex>& vertices,
-		                 const std::vector<uint32_t>& indices,
+		                 const Vertex* vertices,
+		                 const uint32_t* indices,
+		                 uint32_t indexCount,
 		                 AABBTreeHit& outHit,
 		                 float& closestT) const;
 
 		static AABB ComputeBounds(const std::vector<uint32_t>& triangleIndices,
-		                          const std::vector<Vertex>& vertices,
-		                          const std::vector<uint32_t>& indices);
+		                          const Vertex* vertices,
+		                          const uint32_t* indices);
 
 		std::vector<AABBNode> m_Nodes;
 	};
