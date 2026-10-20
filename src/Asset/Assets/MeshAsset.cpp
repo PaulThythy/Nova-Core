@@ -131,72 +131,99 @@ namespace Nova::Core::Asset::Assets {
         std::vector<Math::Vertex> vertices;
         std::vector<uint32_t> indices;
 
+        // Same per-corner colors as engine primitives (RHI_Mesh) when a file has no vertex colors.
+        const glm::vec3 triColors[3] = {
+            { 1.0f, 1.0f, 0.0f }, // yellow
+            { 1.0f, 0.0f, 1.0f }, // magenta
+            { 0.0f, 1.0f, 1.0f }  // cyan
+        };
+
+        auto makeVertex = [](const aiMesh* mesh, unsigned int i, const glm::vec3& color) {
+            Math::Vertex vertex{};
+
+            vertex.m_Position = {
+                mesh->mVertices[i].x,
+                mesh->mVertices[i].y,
+                mesh->mVertices[i].z
+            };
+
+            if (mesh->HasNormals()) {
+                vertex.m_Normal = {
+                    mesh->mNormals[i].x,
+                    mesh->mNormals[i].y,
+                    mesh->mNormals[i].z
+                };
+            }
+
+            if (mesh->mTextureCoords[0]) {
+                vertex.m_TexCoord = {
+                    mesh->mTextureCoords[0][i].x,
+                    mesh->mTextureCoords[0][i].y
+                };
+            }
+
+            vertex.m_Color = color;
+
+            if (mesh->HasTangentsAndBitangents()) {
+                vertex.m_Tangent = {
+                    mesh->mTangents[i].x,
+                    mesh->mTangents[i].y,
+                    mesh->mTangents[i].z
+                };
+                vertex.m_Bitangent = {
+                    mesh->mBitangents[i].x,
+                    mesh->mBitangents[i].y,
+                    mesh->mBitangents[i].z
+                };
+            }
+
+            return vertex;
+        };
+
         for (unsigned int meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
             const aiMesh* mesh = scene->mMeshes[meshIndex];
             if (!mesh)
                 continue;
 
-            const uint32_t baseVertex = static_cast<uint32_t>(vertices.size());
-            vertices.reserve(vertices.size() + mesh->mNumVertices);
+            const bool hasVertexColors = mesh->HasVertexColors(0);
 
-            for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
-                Math::Vertex vertex{};
+            if (hasVertexColors) {
+                const uint32_t baseVertex = static_cast<uint32_t>(vertices.size());
+                vertices.reserve(vertices.size() + mesh->mNumVertices);
 
-                vertex.m_Position = {
-                    mesh->mVertices[i].x,
-                    mesh->mVertices[i].y,
-                    mesh->mVertices[i].z
-                };
-
-                if (mesh->HasNormals()) {
-                    vertex.m_Normal = {
-                        mesh->mNormals[i].x,
-                        mesh->mNormals[i].y,
-                        mesh->mNormals[i].z
-                    };
-                }
-
-                if (mesh->mTextureCoords[0]) {
-                    vertex.m_TexCoord = {
-                        mesh->mTextureCoords[0][i].x,
-                        mesh->mTextureCoords[0][i].y
-                    };
-                }
-
-                if (mesh->HasVertexColors(0)) {
-                    vertex.m_Color = {
+                for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
+                    vertices.push_back(makeVertex(mesh, i, {
                         mesh->mColors[0][i].r,
                         mesh->mColors[0][i].g,
                         mesh->mColors[0][i].b
-                    };
-                } else {
-                    vertex.m_Color = { 1.0f, 1.0f, 1.0f };
+                    }));
                 }
 
-                if (mesh->HasTangentsAndBitangents()) {
-                    vertex.m_Tangent = {
-                        mesh->mTangents[i].x,
-                        mesh->mTangents[i].y,
-                        mesh->mTangents[i].z
-                    };
-                    vertex.m_Bitangent = {
-                        mesh->mBitangents[i].x,
-                        mesh->mBitangents[i].y,
-                        mesh->mBitangents[i].z
-                    };
+                for (unsigned int f = 0; f < mesh->mNumFaces; ++f) {
+                    const aiFace& face = mesh->mFaces[f];
+                    if (face.mNumIndices != 3)
+                        continue;
+
+                    indices.push_back(baseVertex + face.mIndices[0]);
+                    indices.push_back(baseVertex + face.mIndices[1]);
+                    indices.push_back(baseVertex + face.mIndices[2]);
                 }
+            } else {
+                // Duplicate vertices per triangle corner so each face gets yellow/magenta/cyan.
+                vertices.reserve(vertices.size() + mesh->mNumFaces * 3u);
+                indices.reserve(indices.size() + mesh->mNumFaces * 3u);
 
-                vertices.push_back(vertex);
-            }
+                for (unsigned int f = 0; f < mesh->mNumFaces; ++f) {
+                    const aiFace& face = mesh->mFaces[f];
+                    if (face.mNumIndices != 3)
+                        continue;
 
-            for (unsigned int f = 0; f < mesh->mNumFaces; ++f) {
-                const aiFace& face = mesh->mFaces[f];
-                if (face.mNumIndices != 3)
-                    continue;
-
-                indices.push_back(baseVertex + face.mIndices[0]);
-                indices.push_back(baseVertex + face.mIndices[1]);
-                indices.push_back(baseVertex + face.mIndices[2]);
+                    const uint32_t base = static_cast<uint32_t>(vertices.size());
+                    for (unsigned int c = 0; c < 3; ++c) {
+                        vertices.push_back(makeVertex(mesh, face.mIndices[c], triColors[c]));
+                        indices.push_back(base + c);
+                    }
+                }
             }
         }
 
