@@ -60,7 +60,7 @@ namespace Nova::Core::Scene {
 	NV_API bool Raycast(Scene& scene, const Math::Ray& ray, RaycastHit& outHit, float maxDistance = FLT_MAX);
 
 	/**
-	 * Group MeshRendererComponent entities by mesh AssetID for GPU instancing.
+	 * Group entities with MeshRendererComponent + MeshComponent by mesh AssetID for GPU instancing.
 	 * Deduplicates MaterialGPU into `m_Materials`; each InstanceGPU stores an index into that table.
 	 * Batches are contiguous in `m_Instances` starting at `firstInstance`.
 	 */

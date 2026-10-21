@@ -132,7 +132,7 @@ namespace Nova::Core::Scene {
 		SceneRenderBatches out;
 
 		auto& registry = scene.GetRegistry();
-		auto view = registry.view<ECS::Components::MeshRendererComponent>();
+		auto view = registry.view<ECS::Components::MeshRendererComponent, ECS::Components::MeshComponent>();
 
 		std::unordered_map<UUID, uint32_t> batchByMesh;
 		std::unordered_map<size_t, std::vector<uint32_t>> materialsByHash;
@@ -141,7 +141,8 @@ namespace Nova::Core::Scene {
 
 		for (auto entity : view) {
 			const auto& mrc = view.get<ECS::Components::MeshRendererComponent>(entity);
-			auto meshAsset = Asset::AssetManager::Get().GetAsset(mrc.m_Mesh);
+			const auto& mc = view.get<ECS::Components::MeshComponent>(entity);
+			auto meshAsset = Asset::AssetManager::Get().GetAsset(mc.m_Mesh);
 			if (!meshAsset || !meshAsset->IsLoaded())
 				continue;
 
@@ -149,7 +150,7 @@ namespace Nova::Core::Scene {
 			if (!cpuMesh)
 				continue;
 
-			const UUID meshID = mrc.m_Mesh.GetUUID();
+			const UUID meshID = mc.m_Mesh.GetUUID();
 			const uint32_t matIndex = FindOrAddMaterial(out.m_Materials, materialsByHash, mrc.m_Material);
 
 			if (out.m_Batches.empty() || out.m_Batches[lastBatch].m_MeshID != meshID) {
