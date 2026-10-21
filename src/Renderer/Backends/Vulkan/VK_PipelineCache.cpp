@@ -31,9 +31,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     void MarkEngineDynamicBuffers(RHI::RHI_ProgramReflection& refl) {
         const char* dynamicNames[] = {
             RHI::EngineResourceName::SceneUniforms,
-            RHI::EngineResourceName::Model,
             RHI::EngineResourceName::Material,
             RHI::EngineResourceName::Lights,
+            RHI::EngineResourceName::Instances,
+            RHI::EngineResourceName::Materials,
         };
         for (const char* name : dynamicNames) {
             const RHI::RHI_BindingKey* key = refl.FindBindingKeyByName(name);
@@ -140,6 +141,11 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         if (!CreateDescriptorPool())
             return false;
 
+        // Created up front (not on the first pipeline build) so the app can upload engine data,
+        // e.g. instances, before the first pass runs.
+        if (!CreateEngineBuffers())
+            return false;
+
         // One entry per declared shader; pipelines are built lazily on first use.
         m_Entries.resize(shaders.size());
         for (size_t i = 0; i < shaders.size(); ++i)
@@ -204,22 +210,24 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         m_Engine.m_Scene.m_Uniforms = RHI::CreateConstantBuffer<RHI::SceneUniforms>(*m_Renderer, 1, RHI::EngineResourceName::SceneUniforms);
         m_Engine.m_Scene.m_Lights = RHI::CreateStructuredBuffer<RHI::LightGPU>(*m_Renderer, RHI::MAX_LIGHTS, RHI::EngineResourceName::Lights);
-        m_Engine.m_Model = RHI::CreateConstantBuffer<RHI::ModelUniforms>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Model);
         m_Engine.m_Material = RHI::CreateConstantBuffer<RHI::MaterialGPU>(*m_Renderer, MAX_MODEL_DRAWS, RHI::EngineResourceName::Material);
+        m_Engine.m_Instances = RHI::CreateStructuredBuffer<RHI::InstanceGPU>(*m_Renderer, RHI::INITIAL_INSTANCE_CAPACITY, RHI::EngineResourceName::Instances);
+        m_Engine.m_Materials = RHI::CreateStructuredBuffer<RHI::MaterialGPU>(*m_Renderer, RHI::INITIAL_MATERIAL_CAPACITY, RHI::EngineResourceName::Materials);
 
         return m_Engine.IsValid();
     }
 
     void VK_PipelineCache::DestroyEngineBuffers() {
         if (!m_Renderer) return;
+        m_Renderer->DestroyGpuBuffer(m_Engine.m_Materials);
+        m_Renderer->DestroyGpuBuffer(m_Engine.m_Instances);
         m_Renderer->DestroyGpuBuffer(m_Engine.m_Material);
-        m_Renderer->DestroyGpuBuffer(m_Engine.m_Model);
         m_Renderer->DestroyGpuBuffer(m_Engine.m_Scene.m_Lights);
         m_Renderer->DestroyGpuBuffer(m_Engine.m_Scene.m_Uniforms);
         m_Engine = RHI::RHI_EngineParameterBlock{};
     }
 
-    // Resets this frame-in-flight's per-draw ring cursor for `nova.model` / `nova.material`, so the
+    // Resets this frame-in-flight's per-draw ring cursor for `nova.material`, so the
     // first draw of the frame writes at the start of its region instead of continuing from
     // wherever the previous frame using this slot left off.
     void VK_PipelineCache::ResetFrameDynamicUBOs() {
@@ -320,8 +328,23 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         };
         writeEngineBuffer(RHI::EngineResourceName::SceneUniforms, m_Engine.m_Scene.m_Uniforms);
         writeEngineBuffer(RHI::EngineResourceName::Lights, m_Engine.m_Scene.m_Lights);
-        writeEngineBuffer(RHI::EngineResourceName::Model, m_Engine.m_Model);
         writeEngineBuffer(RHI::EngineResourceName::Material, m_Engine.m_Material);
+        writeEngineBuffer(RHI::EngineResourceName::Instances, m_Engine.m_Instances);
+        writeEngineBuffer(RHI::EngineResourceName::Materials, m_Engine.m_Materials);
+    }
+
+    void VK_PipelineCache::OnGpuBufferResized(RHI::RHI_GpuBufferHandle handle) {
+        const bool isEngineBuffer =
+            handle == m_Engine.m_Scene.m_Uniforms || handle == m_Engine.m_Scene.m_Lights
+            || handle == m_Engine.m_Material
+            || handle == m_Engine.m_Instances || handle == m_Engine.m_Materials;
+        if (!isEngineBuffer)
+            return;
+
+        for (auto& entry : m_Entries) {
+            if (entry.shader)
+                WriteEngineBuffersToEntry(entry);
+        }
     }
 
     void VK_PipelineCache::WriteShadowMapsToEntry(PipelineEntry& entry) {
@@ -605,39 +628,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             entry.descriptorSets.emplace_back(setIndex, ds);
         }
 
-        auto findDescriptorSet = [&](uint32_t set) -> VkDescriptorSet {
-            for (const auto& [idx, ds] : entry.descriptorSets) if (idx == set) return ds;
-            return VK_NULL_HANDLE;
-        };
-        auto writeEngineBuffer = [&](const char* name, RHI::RHI_GpuBufferHandle handle) {
-            const RHI::RHI_BindingInfo* info = reflForVk.FindBindingByName(name);
-            VkBuffer buffer = VK_NULL_HANDLE;
-            VkDeviceSize range = 0;
-            if (!info || !m_Renderer->GetGpuBufferPool().GetDescriptorInfo(handle, buffer, range))
-                return;
-            VkDescriptorSet ds = findDescriptorSet(info->m_Key.m_Set);
-            if (ds == VK_NULL_HANDLE) return;
-
-            VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = buffer;
-            bufferInfo.offset = 0;
-            bufferInfo.range = range;
-
-            VkWriteDescriptorSet write{};
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = ds;
-            write.dstBinding = info->m_Key.m_Binding;
-            write.dstArrayElement = 0;
-            write.descriptorCount = 1;
-            write.descriptorType = ToVkDescriptorType(*info);
-            write.pBufferInfo = &bufferInfo;
-            vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
-        };
-        writeEngineBuffer(RHI::EngineResourceName::SceneUniforms, m_Engine.m_Scene.m_Uniforms);
-        writeEngineBuffer(RHI::EngineResourceName::Lights, m_Engine.m_Scene.m_Lights);
-        writeEngineBuffer(RHI::EngineResourceName::Model, m_Engine.m_Model);
-        writeEngineBuffer(RHI::EngineResourceName::Material, m_Engine.m_Material);
-
         std::vector<VkDescriptorSetLayout> setLayouts;
         setLayouts.reserve(entry.setLayouts.size());
         for (const auto& [setIndex, layout] : entry.setLayouts) setLayouts.push_back(layout);
@@ -707,6 +697,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         entry.shader->SetPipeline(entry.pipeline, entry.pipelineLayout);
         entry.shader->SetEngineBuffers(m_Renderer, m_Engine, entry.descriptorSets);
         entry.shader->SetReflection(reflForVk);
+        WriteEngineBuffersToEntry(entry);
         WriteShadowMapsToEntry(entry);
 
         entry.vertWriteTime = FileSystem::LastWriteTime(entry.desc.m_Vertex->GetPath());

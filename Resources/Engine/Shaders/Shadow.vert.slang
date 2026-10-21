@@ -1,5 +1,8 @@
 #include "NovaUniforms.slang"
 
+// Depth-only shadow pass: world matrix from `nova.instances`, light projection from
+// `nova.scene.lights[nova.scene.uniforms.m_LightIndex]`.
+
 struct VSIn {
     float3 a_Position;
     float3 a_Normal;
@@ -9,9 +12,19 @@ struct VSIn {
     float3 a_Bitangent;
 };
 
+struct VSOut {
+    float4 sv_position : SV_Position;
+};
+
 [shader("vertex")]
-float4 main(VSIn input) : SV_Position {
-    float4 world = mul(nova.model.m_Model, float4(input.a_Position, 1.0));
-    float4x4 lightViewProj = nova.scene.lights[nova.model.m_LightIndex].lightViewProj;
-    return mul(lightViewProj, world);
+VSOut main(VSIn input, uint instanceIndex : SV_VulkanInstanceID) {
+    InstanceGPU instance = nova.instances[instanceIndex];
+    float4 world = mul(instance.m_Model, float4(input.a_Position, 1.0));
+
+    int lightIndex = clamp(nova.scene.uniforms.m_LightIndex, 0, MAX_LIGHTS - 1);
+    float4x4 lightViewProj = nova.scene.lights[lightIndex].lightViewProj;
+
+    VSOut o;
+    o.sv_position = mul(lightViewProj, world);
+    return o;
 }

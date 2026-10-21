@@ -55,6 +55,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         RHI::RHI_GpuBufferHandle CreateRWStructuredBuffer(const RHI::RHI_GpuBufferDesc& desc) override;
         void DestroyGpuBuffer(RHI::RHI_GpuBufferHandle handle) override;
         void UpdateGpuBuffer(RHI::RHI_GpuBufferHandle handle, const void* data, size_t size, uint32_t elementIndex = 0) override;
+        uint32_t GetGpuBufferElementCount(RHI::RHI_GpuBufferHandle handle) const override;
+        bool ResizeGpuBuffer(RHI::RHI_GpuBufferHandle handle, uint32_t elementCount) override;
         RHI::RHI_BufferBinding ResolveGpuBufferBinding(RHI::RHI_GpuBufferHandle handle, uint32_t elementIndex = 0) const override;
 
         /** Internal backend access (engine-only per-draw dynamic ring allocation); not part of IRenderer. */
@@ -99,6 +101,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         bool m_FramebufferResized = false;
         bool m_FrameActive = false;
+        // Set once RenderFrame recorded this frame's passes: their descriptor sets/buffers can no longer change.
+        bool m_PassesRecorded = false;
     };
 
 } // namespace Nova::Core::Renderer::Backends::Vulkan

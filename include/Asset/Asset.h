@@ -25,6 +25,7 @@ namespace Nova::Core::Asset {
 
     class NV_API Asset {
     public:
+        /** Assets get a random UUID unless the engine provides a fixed one (e.g. primitive meshes). */
         Asset(AssetType type, std::filesystem::path path, UUID uuid = GenerateUUID())
             : m_UUID(uuid), m_Type(type), m_Path(std::move(path)) {}
         virtual ~Asset() = default;

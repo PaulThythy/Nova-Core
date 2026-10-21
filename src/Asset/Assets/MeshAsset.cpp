@@ -15,7 +15,33 @@ namespace Nova::Core::Asset::Assets {
         constexpr const char* kPrimitiveFolder = "Primitives/";
     }
 
-    MeshAsset::MeshAsset(std::filesystem::path path, MeshAssetDesc desc) : Asset(AssetType::Mesh, path, UUIDForMeshPath(path)), m_Desc(std::move(desc)) {}
+    MeshAsset::MeshAsset(std::filesystem::path path, MeshAssetDesc desc)
+        : Asset(AssetType::Mesh, path, UUIDForMeshPath(path)), m_Desc(std::move(desc)) {}
+
+    UUID MeshAsset::GetPrimitiveAssetID(MeshPrimitive primitive) {
+        // Must stay in [1, kEngineReservedUUIDEnd) and never change once assigned.
+        switch (primitive) {
+        case MeshPrimitive::Cube:     return PrimitiveMeshAssetID::Cube;
+        case MeshPrimitive::Sphere:   return PrimitiveMeshAssetID::Sphere;
+        case MeshPrimitive::Cylinder: return PrimitiveMeshAssetID::Cylinder;
+        case MeshPrimitive::Capsule:  return PrimitiveMeshAssetID::Capsule;
+        case MeshPrimitive::Torus:    return PrimitiveMeshAssetID::Torus;
+        case MeshPrimitive::Plane:    return PrimitiveMeshAssetID::Plane;
+        default:                      return kInvalidUUID;
+        }
+    }
+
+    UUID MeshAsset::UUIDForMeshPath(const std::filesystem::path& path) {
+        std::string name;
+        if (!IsEnginePrimitivePath(path, &name))
+            return GenerateUUID();
+
+        // Only the canonical URI owns the fixed ID: variants (e.g. a "?..." suffix) are separate
+        // AssetManager entries and must not share it.
+        const UUID id = GetPrimitiveAssetID(PrimitiveFromName(name));
+        const bool canonical = path.generic_string().ends_with(std::string(kPrimitiveFolder) + name);
+        return (id != kInvalidUUID && canonical) ? id : GenerateUUID();
+    }
 
     bool MeshAsset::Load() {
         if (m_Loaded && m_CPUMesh)
@@ -68,28 +94,6 @@ namespace Nova::Core::Asset::Assets {
         if (name == "Capsule")  return MeshPrimitive::Capsule;
         if (name == "Torus")    return MeshPrimitive::Torus;
         return MeshPrimitive::Unknown;
-    }
-
-    UUID MeshAsset::UUIDForPrimitive(MeshPrimitive primitive) {
-        switch (primitive) {
-        case MeshPrimitive::Cube:     return PrimitiveMeshAssetID::Cube;
-        case MeshPrimitive::Sphere:   return PrimitiveMeshAssetID::Sphere;
-        case MeshPrimitive::Cylinder: return PrimitiveMeshAssetID::Cylinder;
-        case MeshPrimitive::Capsule:  return PrimitiveMeshAssetID::Capsule;
-        case MeshPrimitive::Torus:    return PrimitiveMeshAssetID::Torus;
-        case MeshPrimitive::Plane:    return PrimitiveMeshAssetID::Plane;
-        default:                      return GenerateUUID();
-        }
-    }
-
-    UUID MeshAsset::UUIDForMeshPath(const std::filesystem::path& path) {
-        std::string primitiveName;
-        if (IsEnginePrimitivePath(path, &primitiveName)) {
-            const MeshPrimitive primitive = PrimitiveFromName(primitiveName);
-            if (primitive != MeshPrimitive::Unknown)
-                return UUIDForPrimitive(primitive);
-        }
-        return GenerateUUID();
     }
 
     bool MeshAsset::LoadFromPath() {

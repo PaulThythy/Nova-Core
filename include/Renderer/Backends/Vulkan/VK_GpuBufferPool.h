@@ -24,8 +24,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
      * - `Update()`: caller picks the element index explicitly (plain buffers, e.g. a single
      *   `ConstantBuffer<T>` or a `StructuredBuffer<T>` indexed by meaningful data). This is what
      *   `IRenderer::UpdateGpuBuffer` uses, for both engine and App-created buffers.
-     * - `WriteNextDynamicElement()`: engine-only per-draw ring allocation (used for `nova.model` /
-     *   `nova.material`, which get one element per draw call within the current frame). Not exposed
+     * - `WriteNextDynamicElement()`: engine-only per-draw ring allocation (used for legacy
+     *   `nova.material`, one element per draw call within the current frame). Not exposed
      *   on the abstract `IRenderer`; only `VK_Shaders`/`VK_PipelineCache` use it directly.
      */
     class NV_API VK_GpuBufferPool {
@@ -36,7 +36,19 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         RHI::RHI_GpuBufferHandle Create(RHI::RHI_ResourceKind kind, const RHI::RHI_GpuBufferDesc& desc);
         void Destroy(RHI::RHI_GpuBufferHandle handle);
 
-        /** Write `size` bytes at `elementIndex`, into the region of the given frame-in-flight. */
+        /**
+         * Reallocate the buffer with `elementCount` elements, keeping the handle. Contents are not
+         * preserved and the VkBuffer changes: the GPU must be idle and descriptors referencing the
+         * buffer must be rewritten.
+         */
+        bool Resize(RHI::RHI_GpuBufferHandle handle, uint32_t elementCount);
+        /** Element count per frame region, 0 for an invalid handle. */
+        uint32_t GetElementCount(RHI::RHI_GpuBufferHandle handle) const;
+
+        /**
+         * Write `size` bytes at `elementIndex`, into the region of the given frame-in-flight.
+         * `size` may span several consecutive elements; writes past the region are clamped.
+         */
         void Update(RHI::RHI_GpuBufferHandle handle, const void* data, size_t size, uint32_t elementIndex, uint32_t currentFrame);
         /** Resolve to a bindable (VkBuffer/offset/range) for `elementIndex` at the given frame-in-flight. */
         RHI::RHI_BufferBinding ResolveBinding(RHI::RHI_GpuBufferHandle handle, uint32_t elementIndex, uint32_t currentFrame) const;
@@ -61,15 +73,20 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             VK_BufferAllocation m_Buffer{};
             RHI::RHI_ResourceKind m_Kind = RHI::RHI_ResourceKind::ConstantBuffer;
             size_t m_ElementSize = 0;
-            VkDeviceSize m_ElementStride = 0; // aligned to UBO/SSBO offset alignment
+            // ConstantBuffer: aligned to the UBO offset alignment (each element is a dynamic offset target).
+            // Structured buffers: m_ElementSize, i.e. the std430 array stride the shader indexes with.
+            VkDeviceSize m_ElementStride = 0;
             uint32_t m_ElementCount = 1;
             bool m_PerFrameInFlight = true;
-            VkDeviceSize m_FrameRegionStride = 0; // m_ElementStride * m_ElementCount
+            VkDeviceSize m_FrameRegionStride = 0; // m_ElementStride * m_ElementCount, aligned to the offset alignment
             std::vector<VkDeviceSize> m_DynamicCursor; // one per frame-in-flight
             std::string m_DebugName;
+            bool m_WarnedOverflow = false;
         };
 
         static VkDeviceSize AlignUp(VkDeviceSize value, VkDeviceSize alignment);
+        bool CreateEntry(RHI::RHI_ResourceKind kind, size_t elementSize, uint32_t elementCount,
+                         bool perFrameInFlight, std::string debugName, Entry& outEntry) const;
         VkDeviceSize FrameBase(const Entry& entry, uint32_t currentFrame) const;
         const Entry* FindEntry(RHI::RHI_GpuBufferHandle handle) const;
         Entry* FindEntry(RHI::RHI_GpuBufferHandle handle);

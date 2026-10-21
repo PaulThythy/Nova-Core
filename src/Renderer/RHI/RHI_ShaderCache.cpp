@@ -1,7 +1,9 @@
 #include "Renderer/RHI/RHI_ShaderCache.h"
 
 #include <fstream>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "Core/FileSystem.h"
 
@@ -140,6 +142,47 @@ namespace Nova::Core::Renderer::RHI {
         }
     }
 
+    // Appends the path + write time of every file reachable through `#include "..."` from `file`,
+    // so editing an included file (e.g. NovaUniforms.slang) invalidates the cached binaries.
+    void AppendIncludeDependencies(const std::filesystem::path& file, const std::vector<std::filesystem::path>& includeDirs,
+                                   std::unordered_set<std::string>& visited, std::string& hash) {
+        std::ifstream is(file);
+        if (!is.is_open()) return;
+
+        constexpr std::string_view kDirective = "#include";
+        std::string line;
+        while (std::getline(is, line)) {
+            const size_t start = line.find_first_not_of(" \t");
+            if (start == std::string::npos || line.compare(start, kDirective.size(), kDirective) != 0)
+                continue;
+            const size_t open = line.find('"', start + kDirective.size());
+            const size_t close = (open == std::string::npos) ? std::string::npos : line.find('"', open + 1);
+            if (close == std::string::npos)
+                continue;
+
+            const std::filesystem::path name = line.substr(open + 1, close - open - 1);
+            std::filesystem::path resolved = file.parent_path() / name;
+            if (!FileSystem::Exists(resolved)) {
+                for (const auto& dir : includeDirs) {
+                    if (FileSystem::Exists(dir / name)) {
+                        resolved = dir / name;
+                        break;
+                    }
+                }
+            }
+
+            const std::string key = resolved.lexically_normal().generic_string();
+            if (!visited.insert(key).second)
+                continue;
+
+            hash += key;
+            std::filesystem::file_time_type ft{};
+            if (FileSystem::TryGetLastWriteTime(resolved, ft))
+                hash += std::to_string(ft.time_since_epoch().count());
+            AppendIncludeDependencies(resolved, includeDirs, visited, hash);
+        }
+    }
+
     std::filesystem::path RHI_ShaderCache::GetCacheDirectory() {
         auto dir = FileSystem::CurrentPath() / "Cache" / "Shaders";
         FileSystem::CreateDirectories(dir);
@@ -167,6 +210,9 @@ namespace Nova::Core::Renderer::RHI {
             hash += d.first;
             hash += d.second;
         }
+
+        std::unordered_set<std::string> visitedIncludes;
+        AppendIncludeDependencies(input.m_File, input.m_IncludeDirs, visitedIncludes, hash);
 
         return std::to_string(std::hash<std::string>{}(hash));
     }

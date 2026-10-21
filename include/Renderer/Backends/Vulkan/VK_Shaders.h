@@ -63,7 +63,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         /**
          * Engine `ConstantBuffer<T>` handles (`ParameterBlock<NovaEngine> nova;`:
-         * scene.uniforms / model / material / scene.lights)
+         * scene.uniforms / material / scene.lights / instances / materials)
          * + the descriptor sets to bind. `FrameUniforms` is pushed via vkCmdPushConstants (not a buffer).
          * `descriptorSets` lists every descriptor set allocated for the pipeline as (set index, set) pairs;
          * the set indices and bindings come from Slang reflection.
@@ -103,8 +103,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         /** Bind all descriptor sets, supplying dynamic offsets in reflection (set, binding) order. */
         void BindDescriptorSets(VkCommandBuffer cmd,
             VkDeviceSize sceneDynamicOffset,
-            VkDeviceSize modelDynamicOffset, VkDeviceSize materialDynamicOffset,
-            VkDeviceSize lightsDynamicOffset);
+            VkDeviceSize materialDynamicOffset,
+            VkDeviceSize lightsDynamicOffset,
+            VkDeviceSize instancesDynamicOffset, VkDeviceSize materialsDynamicOffset);
         /** Resolve the descriptor set allocated for a given reflection set index (VK_NULL_HANDLE if none). */
         VkDescriptorSet FindDescriptorSet(uint32_t set) const;
         VkDevice GetDevice() const;

@@ -208,8 +208,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_Shaders::BindDescriptorSets(VkCommandBuffer cmd,
         VkDeviceSize sceneDynamicOffset,
-        VkDeviceSize modelDynamicOffset, VkDeviceSize materialDynamicOffset,
-        VkDeviceSize lightsDynamicOffset)
+        VkDeviceSize materialDynamicOffset,
+        VkDeviceSize lightsDynamicOffset,
+        VkDeviceSize instancesDynamicOffset, VkDeviceSize materialsDynamicOffset)
     {
         if (m_DescriptorSets.empty()) return;
 
@@ -219,9 +220,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         struct EngineDynamic { const char* name; VkDeviceSize offset; };
         const EngineDynamic engineDynamics[] = {
             { RHI::EngineResourceName::SceneUniforms, sceneDynamicOffset },
-            { RHI::EngineResourceName::Model,         modelDynamicOffset },
             { RHI::EngineResourceName::Material,      materialDynamicOffset },
             { RHI::EngineResourceName::Lights,        lightsDynamicOffset },
+            { RHI::EngineResourceName::Instances,     instancesDynamicOffset },
+            { RHI::EngineResourceName::Materials,     materialsDynamicOffset },
         };
 
         // m_DescriptorSets is sorted by set index in SetEngineBuffers.
@@ -277,16 +279,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 pool.ResolveBinding(m_Engine.m_Scene.m_Uniforms, 0, frameIdx).m_Offset);
         }
 
-        // Model / Material: per-draw dynamic UBOs from SetParameter.
-        const bool usesModel = m_Reflection.FindBindingByName(RHI::EngineResourceName::Model) != nullptr;
+        // Material: legacy per-draw dynamic UBO from SetParameter (prefer nova.materials SSBO).
         const bool usesMaterial = m_Reflection.FindBindingByName(RHI::EngineResourceName::Material) != nullptr;
-
-        VkDeviceSize modelOffsetThisDraw = 0;
-        if (usesModel) {
-            RHI::ModelUniforms model{};
-            CopyParametersIntoStruct(m_Parameters, RHI::GetModelLayout(), &model);
-            modelOffsetThisDraw = pool.WriteNextDynamicElement(m_Engine.m_Model, &model, sizeof model, frameIdx);
-        }
 
         VkDeviceSize materialOffsetThisDraw = 0;
         if (usesMaterial) {
@@ -295,12 +289,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             materialOffsetThisDraw = pool.WriteNextDynamicElement(m_Engine.m_Material, &material, sizeof material, frameIdx);
         }
 
-        // Lights SSBO: App uploads the array; bind the current frame region.
-        const VkDeviceSize lightsOffsetThisFrame = m_Engine.m_Scene.m_Lights.IsValid()
-            ? static_cast<VkDeviceSize>(pool.ResolveBinding(m_Engine.m_Scene.m_Lights, 0, frameIdx).m_Offset)
-            : 0;
+        // Lights / instances / materials SSBOs: App uploads the arrays; bind the current frame region.
+        auto frameRegionOffset = [&](RHI::RHI_GpuBufferHandle handle) -> VkDeviceSize {
+            return handle.IsValid()
+                ? static_cast<VkDeviceSize>(pool.ResolveBinding(handle, 0, frameIdx).m_Offset)
+                : 0;
+        };
 
-        BindDescriptorSets(cmd, sceneOffsetThisFrame, modelOffsetThisDraw, materialOffsetThisDraw, lightsOffsetThisFrame);
+        BindDescriptorSets(cmd, sceneOffsetThisFrame, materialOffsetThisDraw,
+            frameRegionOffset(m_Engine.m_Scene.m_Lights),
+            frameRegionOffset(m_Engine.m_Instances),
+            frameRegionOffset(m_Engine.m_Materials));
     }
 
     void* VK_Shaders::GetNativeHandle() const {

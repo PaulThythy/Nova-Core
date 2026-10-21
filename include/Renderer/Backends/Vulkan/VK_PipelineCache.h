@@ -38,6 +38,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         VkDescriptorPool GetDescriptorPool() const { return m_DescriptorPool; }
         const RHI::RHI_EngineParameterBlock& GetEngine() const { return m_Engine; }
         bool BindEngineShadowMaps(VkImageView arrayView, VkSampler comparisonSampler);
+        /** Rewrite engine buffer descriptors of every built pipeline if `handle` is an engine buffer (its VkBuffer changed). */
+        void OnGpuBufferResized(RHI::RHI_GpuBufferHandle handle);
 
         friend class VK_RenderGraph;
 
