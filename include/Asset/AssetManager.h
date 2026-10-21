@@ -71,7 +71,7 @@ namespace Nova::Core::Asset {
         //AssetHandle<T> Acquire(UUID uuid);
 
     private:
-        /** Resolve virtual asset URIs (Engine://Shaders/..., Editor://Shaders/...) to filesystem paths. */
+        /** Resolve virtual asset URIs (Engine://..., Editor://..., Tests://...) to filesystem paths. */
         static std::filesystem::path ResolveUri(const std::filesystem::path& p) {
             const std::string s = p.generic_string();
 
@@ -87,6 +87,7 @@ namespace Nova::Core::Asset {
             const std::filesystem::path engineShaders = cwd / "Nova-Core" / "Resources" / "Engine" / "Shaders";
             const std::filesystem::path editorShaders = cwd / "Nova-App" / "Resources" / "Editor" / "Shaders";
             const std::filesystem::path editorIcons = cwd / "Nova-App" / "Resources" / "Editor" / "Icons";
+            const std::filesystem::path testsRoot = cwd / "Nova-Tests" / "Resources" / "Tests";
 
             if (auto resolved = tryMount("Engine://Shaders/", engineShaders); !resolved.empty())
                 return resolved;
@@ -100,6 +101,10 @@ namespace Nova::Core::Asset {
                 return resolved;
             if (auto resolved = tryMount("Editor:/Icons/", editorIcons); !resolved.empty())
                 return resolved;
+            if (auto resolved = tryMount("Tests://", testsRoot); !resolved.empty())
+                return resolved;
+            if (auto resolved = tryMount("Tests:/", testsRoot); !resolved.empty())
+                return resolved;
 
             return p;
         }
@@ -109,7 +114,7 @@ namespace Nova::Core::Asset {
 
             // Virtual URIs (e.g. Engine://Primitives/Cube) stay as-is for asset-specific loaders.
             const std::string s = resolved.generic_string();
-            if (s.find("://") != std::string::npos || s.rfind("Engine:", 0) == 0 || s.rfind("Editor:", 0) == 0)
+            if (s.find("://") != std::string::npos || s.rfind("Engine:", 0) == 0 || s.rfind("Editor:", 0) == 0 || s.rfind("Tests:", 0) == 0)
                 return resolved;
 
             // lexically_normal does not touch the filesystem, so it still works for missing files.
