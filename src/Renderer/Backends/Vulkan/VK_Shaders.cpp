@@ -90,27 +90,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
     }
 
-    static VkDescriptorType ToVkDescriptorType(RHI::RHI_ResourceKind kind) {
-        using RK = RHI::RHI_ResourceKind;
-        switch (kind) {
-            case RK::ConstantBuffer:     return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            case RK::StructuredBuffer:   return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            case RK::RWStructuredBuffer: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            case RK::Texture:        return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-            case RK::Sampler:        return VK_DESCRIPTOR_TYPE_SAMPLER;
-            case RK::CombinedTextureSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            case RK::RWTexture:      return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            default:                 return VK_DESCRIPTOR_TYPE_MAX_ENUM;
-        }
-    }
-
     bool VK_Shaders::ApplyResourceBinding(const RHI::RHI_BindingInfo& info, const RHI::RHI_ResourceBinding& value) {
         // Write to whatever (set, binding) Slang reflection assigned to this resource.
         const uint32_t set = info.m_Key.m_Set;
         const uint32_t binding = info.m_Key.m_Binding;
         if (m_Renderer == nullptr || FindDescriptorSet(set) == VK_NULL_HANDLE) return false;
 
-        const VkDescriptorType type = ToVkDescriptorType(info.m_Kind);
+        const VkDescriptorType type = ToVkDescriptorType(info);
         if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM) return false;
 
         if (std::holds_alternative<RHI::RHI_BufferBinding>(value)) {
@@ -167,13 +153,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         texII.imageLayout = layout;
         WriteDescriptor(
             texInfo->m_Key.m_Set, texInfo->m_Key.m_Binding,
-            ToVkDescriptorType(texInfo->m_Kind), nullptr, &texII);
+            ToVkDescriptorType(*texInfo), nullptr, &texII);
 
         VkDescriptorImageInfo sampII{};
         sampII.sampler = reinterpret_cast<VkSampler>(sampler);
         WriteDescriptor(
             sampInfo->m_Key.m_Set, sampInfo->m_Key.m_Binding,
-            ToVkDescriptorType(sampInfo->m_Kind), nullptr, &sampII);
+            ToVkDescriptorType(*sampInfo), nullptr, &sampII);
 
         return FindDescriptorSet(texInfo->m_Key.m_Set) != VK_NULL_HANDLE
             && FindDescriptorSet(sampInfo->m_Key.m_Set) != VK_NULL_HANDLE;

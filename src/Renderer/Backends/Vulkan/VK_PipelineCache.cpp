@@ -14,20 +14,6 @@
 
 namespace Nova::Core::Renderer::Backends::Vulkan {
 
-    VkDescriptorType ToVkDescriptorType(const RHI::RHI_BindingInfo& b) {
-        using RK = RHI::RHI_ResourceKind;
-        switch (b.m_Kind) {
-            case RK::ConstantBuffer:     return b.m_IsDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            case RK::StructuredBuffer:   return b.m_IsDynamicUniformBuffer ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            case RK::Texture:            return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-            case RK::Sampler:            return VK_DESCRIPTOR_TYPE_SAMPLER;
-            case RK::CombinedTextureSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            case RK::RWTexture:          return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            case RK::RWStructuredBuffer: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            default:                     return VK_DESCRIPTOR_TYPE_MAX_ENUM;
-        }
-    }
-
     void MarkEngineDynamicBuffers(RHI::RHI_ProgramReflection& refl) {
         const char* dynamicNames[] = {
             RHI::EngineResourceName::SceneUniforms,

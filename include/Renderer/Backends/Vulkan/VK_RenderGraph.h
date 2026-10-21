@@ -82,9 +82,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         void DestroyTransientResources();
         void DestroyPassRenderTargets();
 
-        VkFormat ToVkFormat(RHI::RHI_TextureFormat format) const;
-        bool IsDepthFormat(RHI::RHI_TextureFormat format) const;
-
         bool EnsurePassRenderTarget(PassRenderTarget& rt, const RHI::RHI_RenderGraphPassDesc& pass);
         bool ExecutePass(size_t passIndex, bool presentPhase, bool leaveRenderingOpen);
 
