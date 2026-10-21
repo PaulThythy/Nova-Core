@@ -9,6 +9,7 @@
 
 #include <glm/gtc/matrix_inverse.hpp>
 
+#include "Asset/AssetManager.h"
 #include "ECS/Components/MeshComponent.h"
 #include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Components/TransformComponent.h"
@@ -73,10 +74,11 @@ namespace Nova::Core::Scene {
 		for (auto entity : view) {
 			const auto& mc = view.get<ECS::Components::MeshComponent>(entity);
 
-			if (!mc.m_AABBTree.IsBuilt() || !mc.m_MeshAsset || !mc.m_MeshAsset->IsLoaded())
+			auto meshAsset = Asset::AssetManager::Get().GetAsset(mc.m_Mesh);
+			if (!mc.m_AABBTree.IsBuilt() || !meshAsset || !meshAsset->IsLoaded())
 				continue;
 
-			auto cpuMesh = mc.m_MeshAsset->GetCPUMesh();
+			auto cpuMesh = meshAsset->GetCPUMesh();
 			if (!cpuMesh)
 				continue;
 
@@ -139,14 +141,15 @@ namespace Nova::Core::Scene {
 
 		for (auto entity : view) {
 			const auto& mrc = view.get<ECS::Components::MeshRendererComponent>(entity);
-			if (!mrc.m_MeshAsset || !mrc.m_MeshAsset->IsLoaded())
+			auto meshAsset = Asset::AssetManager::Get().GetAsset(mrc.m_Mesh);
+			if (!meshAsset || !meshAsset->IsLoaded())
 				continue;
 
-			auto cpuMesh = mrc.m_MeshAsset->GetCPUMesh();
+			auto cpuMesh = meshAsset->GetCPUMesh();
 			if (!cpuMesh)
 				continue;
 
-			const UUID meshID = mrc.m_MeshAsset->GetUUID();
+			const UUID meshID = mrc.m_Mesh.GetUUID();
 			const uint32_t matIndex = FindOrAddMaterial(out.m_Materials, materialsByHash, mrc.m_Material);
 
 			if (out.m_Batches.empty() || out.m_Batches[lastBatch].m_MeshID != meshID) {

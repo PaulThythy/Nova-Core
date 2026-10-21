@@ -76,10 +76,9 @@ namespace Nova::Core::Asset::Assets {
         /** Fixed AssetID of an engine primitive, kInvalidUUID for MeshPrimitive::Unknown. */
         static UUID GetPrimitiveAssetID(MeshPrimitive primitive);
 
-        bool Load();
-        bool Reload();
-
-        bool IsLoaded() const { return m_Loaded; }
+        bool Load() override;
+        bool Reload() override;
+        bool IsLoaded() const override { return m_Loaded; }
 
         MeshPrimitive GetPrimitive() const { return m_Primitive; }
         const MeshAssetDesc& GetDesc() const { return m_Desc; }

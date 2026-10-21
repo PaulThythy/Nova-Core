@@ -1,26 +1,25 @@
 #ifndef MESHRENDERERCOMPONENT_H
 #define MESHRENDERERCOMPONENT_H
 
-#include <memory>
-
 #include "Api.h"
+#include "Asset/AssetHandle.h"
 #include "Asset/Assets/MeshAsset.h"
 #include "Renderer/RHI/RHI_ShaderUniforms.h"
 
 namespace Nova::Core::ECS::Components {
 
-    struct NV_API MeshRendererComponent {
-        std::shared_ptr<Asset::Assets::MeshAsset> m_MeshAsset;
-        Renderer::RHI::MaterialGPU m_Material{};
+	struct NV_API MeshRendererComponent {
+		Asset::AssetHandle<Asset::Assets::MeshAsset> m_Mesh;
+		Renderer::RHI::MaterialGPU m_Material{};
 
-        MeshRendererComponent() = default;
+		MeshRendererComponent() = default;
 
-        explicit MeshRendererComponent(const std::shared_ptr<Asset::Assets::MeshAsset>& meshAsset)
-            : m_MeshAsset(meshAsset) {}
+		explicit MeshRendererComponent(Asset::AssetHandle<Asset::Assets::MeshAsset> mesh)
+			: m_Mesh(mesh) {}
 
-        MeshRendererComponent(const std::shared_ptr<Asset::Assets::MeshAsset>& meshAsset, const Renderer::RHI::MaterialGPU& material)
-            : m_MeshAsset(meshAsset), m_Material(material) {}
-    };
+		MeshRendererComponent(Asset::AssetHandle<Asset::Assets::MeshAsset> mesh, const Renderer::RHI::MaterialGPU& material)
+			: m_Mesh(mesh), m_Material(material) {}
+	};
 
 } // namespace Nova::Core::ECS::Components
 

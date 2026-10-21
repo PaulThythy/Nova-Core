@@ -13,9 +13,12 @@ namespace Nova::Core::Asset::Assets {
         ShaderAsset(std::filesystem::path shaderPath,
             Nova::Core::Renderer::RHI::RHI_ShaderCompileInput compileInput = {});
 
-        bool Compile();
+        bool Load() override { return Compile(); }
+        bool Reload() override { return Recompile(); }
+        bool IsLoaded() const override { return m_CompiledVulkan; }
 
-        // Force recompilation, useful for hot reload workflows.
+        bool Compile();
+        /** Force recompilation, useful for hot reload workflows. */
         bool Recompile();
 
         // Accessors populated after compilation.

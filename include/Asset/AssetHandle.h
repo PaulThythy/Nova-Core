@@ -1,46 +1,28 @@
 #ifndef ASSETHANDLE_H
 #define ASSETHANDLE_H
 
-#include <memory>
-
 #include "Api.h"
-#include "Core/Assert.h"
 #include "Core/UUID.h"
 
 namespace Nova::Core::Asset {
 
-    template <typename T>
-    class NV_API AssetHandle {
-    public:
-        AssetHandle() = default;
-        explicit AssetHandle(std::shared_ptr<T> asset) : m_AssetRef(std::move(asset)) {}
+	/**
+	 * Opaque typed reference to an asset owned by AssetManager.
+	 * Does not keep the asset alive — resolve via AssetManager::GetAsset.
+	 */
+	template <typename T>
+	struct NV_API AssetHandle {
+		UUID m_Id = kInvalidUUID;
 
-        T* operator->() {
-            NV_ASSERT_MSG(m_AssetRef, "Attempted to access an empty AssetHandle.");
-            return m_AssetRef.get();
-        }
-        const T* operator->() const {
-            NV_ASSERT_MSG(m_AssetRef, "Attempted to access an empty AssetHandle.");
-            return m_AssetRef.get();
-        }
+		bool IsValid() const { return m_Id != kInvalidUUID; }
+		UUID GetUUID() const { return m_Id; }
 
-        T& operator*() {
-            NV_ASSERT_MSG(m_AssetRef, "Attempted to dereference an empty AssetHandle.");
-            return *m_AssetRef;
-        }
-        const T& operator*() const {
-            NV_ASSERT_MSG(m_AssetRef, "Attempted to dereference an empty AssetHandle.");
-            return *m_AssetRef;
-        }
+		explicit operator bool() const { return IsValid(); }
 
-        explicit operator bool() const { return (bool)m_AssetRef; }
+		friend bool operator==(const AssetHandle& a, const AssetHandle& b) { return a.m_Id == b.m_Id; }
+		friend bool operator!=(const AssetHandle& a, const AssetHandle& b) { return !(a == b); }
+	};
 
-        std::shared_ptr<T> GetAssetRef() const { return m_AssetRef; }
-
-    private:
-        std::shared_ptr<T> m_AssetRef;
-    };
-
-} // Nova::Core::Asset
+} // namespace Nova::Core::Asset
 
 #endif // ASSETHANDLE_H
