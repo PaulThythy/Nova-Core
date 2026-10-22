@@ -130,3 +130,25 @@ if(BUILD_SHARED_LIBS)
         set_property(TARGET assimp PROPERTY POSITION_INDEPENDENT_CODE ON)
     endif()
 endif()
+
+# Tracy (client only — the profiler GUI is a separate Tracy build)
+# TRACY_ENABLE is left OFF in Tracy's own options; Nova injects it per-config below
+# so Dist builds stay free of profiling overhead under multi-config generators.
+option(NOVA_ENABLE_TRACY "Enable Tracy frame profiler (all configs except Dist)" ON)
+set(TRACY_STATIC ON CACHE BOOL "" FORCE)
+set(TRACY_ENABLE OFF CACHE BOOL "" FORCE)
+set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
+set(TRACY_CLIENT_PYTHON OFF CACHE BOOL "" FORCE)
+add_subdirectory(tracy EXCLUDE_FROM_ALL)
+
+if(NOVA_ENABLE_TRACY)
+    # Per-config enablement: Tracy's own TRACY_ENABLE option is configure-time only.
+    # Generator expression keeps Dist free of profiling while Debug/Release stay instrumented.
+    target_compile_definitions(TracyClient PUBLIC
+        $<$<NOT:$<CONFIG:Dist>>:TRACY_ENABLE>
+    )
+endif()
+
+if(BUILD_SHARED_LIBS AND TARGET TracyClient)
+    set_property(TARGET TracyClient PROPERTY POSITION_INDEPENDENT_CODE ON)
+endif()

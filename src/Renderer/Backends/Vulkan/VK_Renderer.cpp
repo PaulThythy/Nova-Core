@@ -6,6 +6,7 @@
 #include "Core/Window.h"
 #include "Core/ImGuiLayer.h"
 #include "Core/Log.h"
+#include "Core/Profiler.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -236,6 +237,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::BeginFrame() {
+        NV_PROFILE_SCOPE_N("VK_Renderer::BeginFrame");
+
         m_FrameActive = false;
         m_PassesRecorded = false;
 
@@ -313,6 +316,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::RenderFrame() {
+        NV_PROFILE_SCOPE_N("VK_Renderer::RenderFrame");
+
         if (!m_FrameActive || !m_RenderGraph) return;
         m_PassesRecorded = true;
         if (auto* vkGraph = GetVKRenderGraph())
@@ -365,6 +370,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::EndFrame() {
+        NV_PROFILE_SCOPE_N("VK_Renderer::EndFrame");
+
         m_PassesRecorded = false;
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
 

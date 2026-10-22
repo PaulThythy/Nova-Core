@@ -1,5 +1,6 @@
 #include "Core/Application.h"
 #include "Core/Log.h"
+#include "Core/Profiler.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -14,6 +15,8 @@ namespace Nova::Core {
             NV_LOG_WARN("Application instance already exists");
         }
         s_Instance = this;
+
+        NV_PROFILE_SET_THREAD_NAME("Main");
 
         InitEngine(&windowDesc);
     }
@@ -49,6 +52,8 @@ namespace Nova::Core {
         const double freq = (double)SDL_GetPerformanceFrequency();
 
         while(m_IsRunning) {
+            NV_PROFILE_SCOPE_N("Frame");
+
             SDL_WindowID mainWindowID = SDL_GetWindowID(m_Window->GetSDLWindow());
 
             SDL_Event event;
@@ -130,6 +135,7 @@ namespace Nova::Core {
 
             if (SDL_GetWindowFlags(m_Window->GetSDLWindow()) & SDL_WINDOW_MINIMIZED) {
                 SDL_Delay(10);
+                NV_PROFILE_FRAME_MARK;
                 continue;
             }
 
@@ -146,16 +152,26 @@ namespace Nova::Core {
 
             //TODO only update layers when the window is not minimized
 
-            for (Layer* layer : m_LayerStack)
-                layer->OnUpdate(dt);
+            {
+                NV_PROFILE_SCOPE_N("OnUpdate");
+                for (Layer* layer : m_LayerStack)
+                    layer->OnUpdate(dt);
+            }
 
-            for (Layer* layer : m_LayerStack)
-                layer->OnBegin();
+            {
+                NV_PROFILE_SCOPE_N("OnBegin");
+                for (Layer* layer : m_LayerStack)
+                    layer->OnBegin();
+            }
 
-            for (Layer* layer : m_LayerStack)
-                layer->OnRender();
-            
+            {
+                NV_PROFILE_SCOPE_N("OnRender");
+                for (Layer* layer : m_LayerStack)
+                    layer->OnRender();
+            }
+
             if (m_ImGuiLayer) {
+                NV_PROFILE_SCOPE_N("OnImGuiRender");
                 m_ImGuiLayer->Begin();
 
                 for (Layer* layer : m_LayerStack)
@@ -164,14 +180,19 @@ namespace Nova::Core {
                 m_ImGuiLayer->End();
             }
 
-            for (Layer* layer : m_LayerStack)
-                layer->OnEnd();
+            {
+                NV_PROFILE_SCOPE_N("OnEnd");
+                for (Layer* layer : m_LayerStack)
+                    layer->OnEnd();
+            }
 
             m_LayerStack.ProcessPendingTransitions();
 
             if (m_Window->GetSDLRenderer()) {
                 m_Window->PresentRenderer();
             }
+
+            NV_PROFILE_FRAME_MARK;
         }
     }
 
