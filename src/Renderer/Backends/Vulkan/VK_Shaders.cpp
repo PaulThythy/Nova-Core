@@ -90,27 +90,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
     }
 
-    static VkDescriptorType ToVkDescriptorType(RHI::RHI_ResourceKind kind) {
-        using RK = RHI::RHI_ResourceKind;
-        switch (kind) {
-            case RK::ConstantBuffer:     return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            case RK::StructuredBuffer:   return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            case RK::RWStructuredBuffer: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            case RK::Texture:        return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-            case RK::Sampler:        return VK_DESCRIPTOR_TYPE_SAMPLER;
-            case RK::CombinedTextureSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            case RK::RWTexture:      return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            default:                 return VK_DESCRIPTOR_TYPE_MAX_ENUM;
-        }
-    }
-
     bool VK_Shaders::ApplyResourceBinding(const RHI::RHI_BindingInfo& info, const RHI::RHI_ResourceBinding& value) {
         // Write to whatever (set, binding) Slang reflection assigned to this resource.
         const uint32_t set = info.m_Key.m_Set;
         const uint32_t binding = info.m_Key.m_Binding;
         if (m_Renderer == nullptr || FindDescriptorSet(set) == VK_NULL_HANDLE) return false;
 
-        const VkDescriptorType type = ToVkDescriptorType(info.m_Kind);
+        const VkDescriptorType type = ToVkDescriptorType(info);
         if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM) return false;
 
         if (std::holds_alternative<RHI::RHI_BufferBinding>(value)) {
@@ -167,13 +153,13 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         texII.imageLayout = layout;
         WriteDescriptor(
             texInfo->m_Key.m_Set, texInfo->m_Key.m_Binding,
-            ToVkDescriptorType(texInfo->m_Kind), nullptr, &texII);
+            ToVkDescriptorType(*texInfo), nullptr, &texII);
 
         VkDescriptorImageInfo sampII{};
         sampII.sampler = reinterpret_cast<VkSampler>(sampler);
         WriteDescriptor(
             sampInfo->m_Key.m_Set, sampInfo->m_Key.m_Binding,
-            ToVkDescriptorType(sampInfo->m_Kind), nullptr, &sampII);
+            ToVkDescriptorType(*sampInfo), nullptr, &sampII);
 
         return FindDescriptorSet(texInfo->m_Key.m_Set) != VK_NULL_HANDLE
             && FindDescriptorSet(sampInfo->m_Key.m_Set) != VK_NULL_HANDLE;
@@ -208,8 +194,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
     void VK_Shaders::BindDescriptorSets(VkCommandBuffer cmd,
         VkDeviceSize sceneDynamicOffset,
-        VkDeviceSize modelDynamicOffset, VkDeviceSize materialDynamicOffset,
-        VkDeviceSize lightsDynamicOffset)
+        VkDeviceSize materialDynamicOffset,
+        VkDeviceSize lightsDynamicOffset,
+        VkDeviceSize instancesDynamicOffset, VkDeviceSize materialsDynamicOffset)
     {
         if (m_DescriptorSets.empty()) return;
 
@@ -219,9 +206,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         struct EngineDynamic { const char* name; VkDeviceSize offset; };
         const EngineDynamic engineDynamics[] = {
             { RHI::EngineResourceName::SceneUniforms, sceneDynamicOffset },
-            { RHI::EngineResourceName::Model,         modelDynamicOffset },
             { RHI::EngineResourceName::Material,      materialDynamicOffset },
             { RHI::EngineResourceName::Lights,        lightsDynamicOffset },
+            { RHI::EngineResourceName::Instances,     instancesDynamicOffset },
+            { RHI::EngineResourceName::Materials,     materialsDynamicOffset },
         };
 
         // m_DescriptorSets is sorted by set index in SetEngineBuffers.
@@ -277,16 +265,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
                 pool.ResolveBinding(m_Engine.m_Scene.m_Uniforms, 0, frameIdx).m_Offset);
         }
 
-        // Model / Material: per-draw dynamic UBOs from SetParameter.
-        const bool usesModel = m_Reflection.FindBindingByName(RHI::EngineResourceName::Model) != nullptr;
+        // Material: legacy per-draw dynamic UBO from SetParameter (prefer nova.materials SSBO).
         const bool usesMaterial = m_Reflection.FindBindingByName(RHI::EngineResourceName::Material) != nullptr;
-
-        VkDeviceSize modelOffsetThisDraw = 0;
-        if (usesModel) {
-            RHI::ModelUniforms model{};
-            CopyParametersIntoStruct(m_Parameters, RHI::GetModelLayout(), &model);
-            modelOffsetThisDraw = pool.WriteNextDynamicElement(m_Engine.m_Model, &model, sizeof model, frameIdx);
-        }
 
         VkDeviceSize materialOffsetThisDraw = 0;
         if (usesMaterial) {
@@ -295,12 +275,17 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             materialOffsetThisDraw = pool.WriteNextDynamicElement(m_Engine.m_Material, &material, sizeof material, frameIdx);
         }
 
-        // Lights SSBO: App uploads the array; bind the current frame region.
-        const VkDeviceSize lightsOffsetThisFrame = m_Engine.m_Scene.m_Lights.IsValid()
-            ? static_cast<VkDeviceSize>(pool.ResolveBinding(m_Engine.m_Scene.m_Lights, 0, frameIdx).m_Offset)
-            : 0;
+        // Lights / instances / materials SSBOs: App uploads the arrays; bind the current frame region.
+        auto frameRegionOffset = [&](RHI::RHI_GpuBufferHandle handle) -> VkDeviceSize {
+            return handle.IsValid()
+                ? static_cast<VkDeviceSize>(pool.ResolveBinding(handle, 0, frameIdx).m_Offset)
+                : 0;
+        };
 
-        BindDescriptorSets(cmd, sceneOffsetThisFrame, modelOffsetThisDraw, materialOffsetThisDraw, lightsOffsetThisFrame);
+        BindDescriptorSets(cmd, sceneOffsetThisFrame, materialOffsetThisDraw,
+            frameRegionOffset(m_Engine.m_Scene.m_Lights),
+            frameRegionOffset(m_Engine.m_Instances),
+            frameRegionOffset(m_Engine.m_Materials));
     }
 
     void* VK_Shaders::GetNativeHandle() const {

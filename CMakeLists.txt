@@ -32,6 +32,7 @@ target_link_libraries(Nova-Core PUBLIC
     slang
     VulkanMemoryAllocator
     assimp
+    TracyClient
 )
 target_link_libraries(Nova-Core PRIVATE stb)
 

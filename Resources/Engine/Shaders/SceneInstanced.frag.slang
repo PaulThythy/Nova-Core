@@ -1,0 +1,43 @@
+#include "NovaUniforms.slang"
+
+// Instanced Scene.frag.slang: the material is read from `nova.materials` with the index
+// forwarded by SceneInstanced.vert.slang instead of the per-draw `nova.material`.
+// Field order and types must match SceneInstanced.vert.slang VSOut (excluding SV_Position).
+struct PSIn {
+    float3 v_Normal;
+    float3 v_Pos;
+    float4 v_Color;
+    nointerpolation uint v_MaterialIndex;
+};
+
+[shader("fragment")]
+float4 main(PSIn input) : SV_Target0 {
+    MaterialGPU material = nova.materials[input.v_MaterialIndex];
+
+    float3 N = normalize(input.v_Normal);
+    float3 V = normalize(nova.scene.uniforms.m_Camera.m_Position - input.v_Pos);
+    float3 base = material.m_Base * material.m_BaseColor;
+
+    // Stronger ambient than Scene.frag so the stress-test stays readable without shadows.
+    float3 ambient = 0.18 * base;
+    float3 lighting = float3(0.0, 0.0, 0.0);
+
+    int numLights = clamp(nova.scene.uniforms.m_LightCount, 0, MAX_LIGHTS);
+    for (int i = 0; i < numLights; ++i) {
+        LightGPU light = nova.scene.lights[i];
+        float3 L;
+        float atten;
+        EvalLightVector(light, input.v_Pos, L, atten);
+        if (atten <= 0.0)
+            continue;
+
+        float3 radianceColor = light.color * light.intensity;
+        float shadow = ShadowFactor(
+            light, input.v_Pos, N, L, nova.shadowMaps, nova.shadowSampler);
+        lighting += evalPBR(material, N, V, L, radianceColor * atten) * shadow;
+    }
+
+    float3 emissive = material.m_EmissionColor.rgb * material.m_Emission;
+    float3 color = ambient + lighting + emissive;
+    return float4(color, 1.0);
+}

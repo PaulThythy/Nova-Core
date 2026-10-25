@@ -86,22 +86,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             texture.UnregisterImGui();
     }
 
-    VkFormat VK_RenderGraph::ToVkFormat(RHI::RHI_TextureFormat format) const {
-        switch (format) {
-            case RHI::RHI_TextureFormat::RGBA8:            return VK_FORMAT_R8G8B8A8_UNORM;
-            case RHI::RHI_TextureFormat::RGBA16F:          return VK_FORMAT_R16G16B16A16_SFLOAT;
-            case RHI::RHI_TextureFormat::RGBA32F:          return VK_FORMAT_R32G32B32A32_SFLOAT;
-            case RHI::RHI_TextureFormat::Depth32:          return VK_FORMAT_D32_SFLOAT;
-            case RHI::RHI_TextureFormat::Depth24Stencil8:  return VK_FORMAT_D24_UNORM_S8_UINT;
-            default:                                       return VK_FORMAT_UNDEFINED;
-        }
-    }
-
-    bool VK_RenderGraph::IsDepthFormat(RHI::RHI_TextureFormat format) const {
-        return format == RHI::RHI_TextureFormat::Depth32
-            || format == RHI::RHI_TextureFormat::Depth24Stencil8;
-    }
-
     bool VK_RenderGraph::CreateTransientResources() {
         m_Textures.clear();
         m_Textures.resize(m_Data.m_Textures.size());

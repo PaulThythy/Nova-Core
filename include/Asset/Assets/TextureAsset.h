@@ -26,10 +26,9 @@ namespace Nova::Core::Asset::Assets {
     public:
         TextureAsset(std::filesystem::path path, TextureAssetDesc desc = {});
 
-        bool Load();
-        bool Reload();
-
-        bool IsLoaded() const { return m_Loaded && m_CPUTexture != nullptr; }
+        bool Load() override;
+        bool Reload() override;
+        bool IsLoaded() const override { return m_Loaded && m_CPUTexture != nullptr; }
 
         std::shared_ptr<Renderer::RHI::RHI_Texture> GetCPUTexture() const { return m_CPUTexture; }
 

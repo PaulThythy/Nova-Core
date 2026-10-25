@@ -1,16 +1,49 @@
 #include "Scene/SceneQuery.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <limits>
+#include <unordered_map>
+#include <vector>
 
 #include <glm/gtc/matrix_inverse.hpp>
 
+#include "Asset/AssetManager.h"
 #include "ECS/Components/MeshComponent.h"
+#include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Components/TransformComponent.h"
 #include "Math/AABB.h"
 #include "Scene/Scene.h"
 
 namespace Nova::Core::Scene {
+
+	size_t HashMaterial(const Renderer::RHI::MaterialGPU& material) {
+		const auto* bytes = reinterpret_cast<const uint8_t*>(&material);
+		size_t hash = 14695981039346656037ull;
+		for (size_t i = 0; i < sizeof(Renderer::RHI::MaterialGPU); ++i) {
+			hash ^= static_cast<size_t>(bytes[i]);
+			hash *= 1099511628211ull;
+		}
+		return hash;
+	}
+
+	uint32_t FindOrAddMaterial(
+		std::vector<Renderer::RHI::MaterialGPU>& materials,
+		std::unordered_map<size_t, std::vector<uint32_t>>& byHash,
+		const Renderer::RHI::MaterialGPU& material)
+	{
+		const size_t hash = HashMaterial(material);
+		auto& bucket = byHash[hash];
+		for (uint32_t index : bucket) {
+			if (std::memcmp(&materials[index], &material, sizeof(Renderer::RHI::MaterialGPU)) == 0)
+				return index;
+		}
+		const uint32_t index = static_cast<uint32_t>(materials.size());
+		materials.push_back(material);
+		bucket.push_back(index);
+		return index;
+	}
 
 	Math::Ray ScreenPointToRay(const Math::Camera& camera, float u, float v) {
 		const float ndcX = u * 2.0f - 1.0f;
@@ -41,10 +74,11 @@ namespace Nova::Core::Scene {
 		for (auto entity : view) {
 			const auto& mc = view.get<ECS::Components::MeshComponent>(entity);
 
-			if (!mc.m_AABBTree.IsBuilt() || !mc.m_MeshAsset || !mc.m_MeshAsset->IsLoaded())
+			auto meshAsset = Asset::AssetManager::Get().GetAsset(mc.m_Mesh);
+			if (!mc.m_AABBTree.IsBuilt() || !meshAsset || !meshAsset->IsLoaded())
 				continue;
 
-			auto cpuMesh = mc.m_MeshAsset->GetCPUMesh();
+			auto cpuMesh = meshAsset->GetCPUMesh();
 			if (!cpuMesh)
 				continue;
 
@@ -92,6 +126,70 @@ namespace Nova::Core::Scene {
 
 		outHit = best;
 		return true;
+	}
+
+	SceneRenderBatches BuildRenderBatches(Scene& scene, uint32_t firstInstance) {
+		SceneRenderBatches out;
+
+		auto& registry = scene.GetRegistry();
+		auto view = registry.view<ECS::Components::MeshRendererComponent, ECS::Components::MeshComponent>();
+
+		std::unordered_map<UUID, uint32_t> batchByMesh;
+		std::unordered_map<size_t, std::vector<uint32_t>> materialsByHash;
+		std::vector<uint32_t> instanceBatch;
+		uint32_t lastBatch = 0;
+
+		for (auto entity : view) {
+			const auto& mrc = view.get<ECS::Components::MeshRendererComponent>(entity);
+			const auto& mc = view.get<ECS::Components::MeshComponent>(entity);
+			auto meshAsset = Asset::AssetManager::Get().GetAsset(mc.m_Mesh);
+			if (!meshAsset || !meshAsset->IsLoaded())
+				continue;
+
+			auto cpuMesh = meshAsset->GetCPUMesh();
+			if (!cpuMesh)
+				continue;
+
+			const UUID meshID = mc.m_Mesh.GetUUID();
+			const uint32_t matIndex = FindOrAddMaterial(out.m_Materials, materialsByHash, mrc.m_Material);
+
+			if (out.m_Batches.empty() || out.m_Batches[lastBatch].m_MeshID != meshID) {
+				const auto [it, inserted] = batchByMesh.try_emplace(meshID, static_cast<uint32_t>(out.m_Batches.size()));
+				if (inserted)
+					out.m_Batches.push_back({ meshID, cpuMesh, 0, 0 });
+				lastBatch = it->second;
+			}
+			++out.m_Batches[lastBatch].m_InstanceCount;
+
+			Renderer::RHI::InstanceGPU& instance = out.m_Instances.emplace_back();
+			instance.m_Model = scene.GetWorldTransform(entity);
+			instance.m_MaterialIndex = matIndex;
+			instanceBatch.push_back(lastBatch);
+		}
+
+		uint32_t offset = firstInstance;
+		for (auto& batch : out.m_Batches) {
+			batch.m_FirstInstance = offset;
+			offset += batch.m_InstanceCount;
+		}
+
+		if (std::is_sorted(instanceBatch.begin(), instanceBatch.end()))
+			return out;
+
+		std::vector<uint32_t> cursors(out.m_Batches.size());
+		for (size_t b = 0; b < out.m_Batches.size(); ++b)
+			cursors[b] = out.m_Batches[b].m_FirstInstance - firstInstance;
+
+		std::vector<Renderer::RHI::InstanceGPU> scratchInstances(out.m_Instances.size());
+		std::vector<uint32_t> scratchBatch(instanceBatch.size());
+		for (size_t i = 0; i < out.m_Instances.size(); ++i) {
+			const uint32_t batch = instanceBatch[i];
+			const uint32_t dst = cursors[batch]++;
+			scratchInstances[dst] = out.m_Instances[i];
+			scratchBatch[dst] = batch;
+		}
+		out.m_Instances.swap(scratchInstances);
+		return out;
 	}
 
 } // namespace Nova::Core::Scene

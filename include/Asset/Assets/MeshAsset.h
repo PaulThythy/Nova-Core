@@ -67,12 +67,18 @@ namespace Nova::Core::Asset::Assets {
 
     class NV_API MeshAsset final : public Asset {
     public:
+        /**
+         * `Engine://Primitives/<Name>` gets the primitive's fixed AssetID (stable across runs);
+         * any other path (meshes loaded from files) gets a random one.
+         */
         MeshAsset(std::filesystem::path path, MeshAssetDesc desc = {});
 
-        bool Load();
-        bool Reload();
+        /** Fixed AssetID of an engine primitive, kInvalidUUID for MeshPrimitive::Unknown. */
+        static UUID GetPrimitiveAssetID(MeshPrimitive primitive);
 
-        bool IsLoaded() const { return m_Loaded; }
+        bool Load() override;
+        bool Reload() override;
+        bool IsLoaded() const override { return m_Loaded; }
 
         MeshPrimitive GetPrimitive() const { return m_Primitive; }
         const MeshAssetDesc& GetDesc() const { return m_Desc; }
@@ -87,7 +93,6 @@ namespace Nova::Core::Asset::Assets {
         static bool IsEnginePrimitivePath(const std::filesystem::path& path, std::string* outName);
         static MeshPrimitive PrimitiveFromName(const std::string& name);
         static UUID UUIDForMeshPath(const std::filesystem::path& path);
-        static UUID UUIDForPrimitive(MeshPrimitive primitive);
 
         MeshAssetDesc m_Desc;
         MeshPrimitive m_Primitive = MeshPrimitive::Unknown;

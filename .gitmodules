@@ -30,3 +30,6 @@
 [submodule "vendors/assimp"]
 	path = vendors/assimp
 	url = https://github.com/assimp/assimp.git
+[submodule "vendors/tracy"]
+	path = vendors/tracy
+	url = https://github.com/wolfpld/tracy.git

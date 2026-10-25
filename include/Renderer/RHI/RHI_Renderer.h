@@ -1,8 +1,10 @@
 #ifndef RHI_RENDERER_H
 #define RHI_RENDERER_H
 
+#include <bit>
 #include <memory>
 #include <cstdint>
+#include <span>
 #include <unordered_map>
 
 #include "Api.h"
@@ -117,8 +119,21 @@ namespace Nova::Core::Renderer::RHI {
         /** Destroy a buffer created by one of the `Create*Buffer` functions above. */
         virtual void DestroyGpuBuffer(RHI_GpuBufferHandle handle) = 0;
 
-        /** Write `size` bytes of `data` into `elementIndex`, in the current frame-in-flight's region. */
+        /**
+         * Write `size` bytes of `data` starting at `elementIndex` (may span consecutive elements),
+         * in the current frame-in-flight's region.
+         */
         virtual void UpdateGpuBuffer(RHI_GpuBufferHandle handle, const void* data, size_t size, uint32_t elementIndex = 0) = 0;
+
+        /** Element count of a buffer (per frame-in-flight region), 0 for an invalid handle. */
+        virtual uint32_t GetGpuBufferElementCount(RHI_GpuBufferHandle handle) const = 0;
+        /**
+         * Reallocate a buffer with `elementCount` elements, keeping its handle. Contents are lost
+         * (re-upload them) and the GPU is waited on, so grow geometrically (EnsureGpuBufferCapacity).
+         * Must be called before RenderFrame records the passes of the current frame. Engine
+         * descriptors follow automatically; bindings from ResolveGpuBufferBinding must be resolved again.
+         */
+        virtual bool ResizeGpuBuffer(RHI_GpuBufferHandle handle, uint32_t elementCount) = 0;
 
         /**
          * Resolve a created buffer to a bindable (buffer handle/offset/range) for the current
@@ -166,6 +181,27 @@ namespace Nova::Core::Renderer::RHI {
     template<typename T>
     void UpdateStructuredBuffer(IRenderer& renderer, RHI_GpuBufferHandle handle, const T& value, uint32_t elementIndex = 0) {
         renderer.UpdateGpuBuffer(handle, &value, sizeof(T), elementIndex);
+    }
+
+    /** Upload `values` into consecutive elements starting at `firstElement`, in a single write. */
+    template<typename T>
+    void UpdateStructuredBufferRange(IRenderer& renderer, RHI_GpuBufferHandle handle, std::span<const T> values, uint32_t firstElement = 0) {
+        if (!values.empty())
+            renderer.UpdateGpuBuffer(handle, values.data(), values.size_bytes(), firstElement);
+    }
+
+    /**
+     * Grow `handle` to hold at least `elementCount` elements (rounded up to a power of two, never
+     * shrinks). Returns false if it could not be grown. Same constraints as IRenderer::ResizeGpuBuffer.
+     */
+    inline bool EnsureGpuBufferCapacity(IRenderer& renderer, RHI_GpuBufferHandle handle, uint32_t elementCount) {
+        const uint32_t capacity = renderer.GetGpuBufferElementCount(handle);
+        if (capacity == 0)
+            return false;
+        if (elementCount <= capacity)
+            return true;
+        const uint32_t grown = (elementCount > (1u << 31)) ? elementCount : std::bit_ceil(elementCount);
+        return renderer.ResizeGpuBuffer(handle, grown);
     }
 
 } // namespace Nova::Core::Renderer::RHI

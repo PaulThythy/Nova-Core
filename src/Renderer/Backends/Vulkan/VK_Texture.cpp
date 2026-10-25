@@ -267,9 +267,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         const uint32_t layers = std::max(1u, desc.m_Layers);
         const bool isArray = layers > 1;
-        const bool isDepth =
-            desc.m_Format == RHI::RHI_TextureFormat::Depth32
-            || desc.m_Format == RHI::RHI_TextureFormat::Depth24Stencil8;
+        const bool isDepth = IsDepthFormat(desc.m_Format);
 
         VkImageUsageFlags usage = 0;
         if (HasTextureUsage(desc.m_Usage, RHI::RHI_TextureUsage::ColorAttachment))

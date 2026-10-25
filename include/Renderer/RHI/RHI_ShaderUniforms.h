@@ -26,6 +26,9 @@ namespace Nova::Core::Renderer::RHI {
     static constexpr uint32_t SHADOW_MAP_RESOLUTION = 2048;
     /** Half-extent of the directional light ortho frustum (world units). Smaller = sharper shadows. */
     static constexpr float SHADOW_DIR_ORTHO_HALF_EXTENT = 10.0f;
+    /** Initial element counts of `nova.instances` / `nova.materials`; grow them with EnsureGpuBufferCapacity. */
+    static constexpr uint32_t INITIAL_INSTANCE_CAPACITY = 16384;
+    static constexpr uint32_t INITIAL_MATERIAL_CAPACITY = 256;
 
     // Stable reflection names for the engine resources declared in NovaUniforms.slang
     // (`ParameterBlock<NovaEngine> nova;`). The descriptor set and binding for each are
@@ -34,10 +37,11 @@ namespace Nova::Core::Renderer::RHI {
     namespace EngineResourceName {
         inline constexpr const char* SceneUniforms = "nova.scene.uniforms";
         inline constexpr const char* Lights        = "nova.scene.lights";
-        inline constexpr const char* Model         = "nova.model";
         inline constexpr const char* Material      = "nova.material";
         inline constexpr const char* ShadowMaps    = "nova.shadowMaps";
         inline constexpr const char* ShadowSampler = "nova.shadowSampler";
+        inline constexpr const char* Instances     = "nova.instances";
+        inline constexpr const char* Materials     = "nova.materials";
     }
 
     /**
@@ -68,22 +72,27 @@ namespace Nova::Core::Renderer::RHI {
         alignas(4)  float     m_Pad{ 0.0f };
     };
 
-    /** Scene-level data: camera + light count. Uploaded by AppRenderer::PushSceneUniforms. */
+    /** Scene-level data: camera + light count. Uploaded by AppRenderer::PushSceneUniforms.
+     *  `m_LightIndex` selects the active light for the shadow pass (ignored by lit scene). */
     struct NV_API SceneUniforms {
         CameraGPU m_Camera{};
-        alignas(4) int   m_LightCount{ 0 };
-        alignas(4) float m_PadAfterLightCount{ 0.0f };
+        alignas(4) int m_LightCount{ 0 };
+        alignas(4) int m_LightIndex{ 0 };
     };
 
-    /** Per-draw model transform. Shadow pass also sets `m_LightIndex` to read `lightViewProj`. */
-    struct NV_API ModelUniforms {
+    /**
+     * GPU instance element for `StructuredBuffer<InstanceGPU> nova.instances` (std430).
+     * Instanced shaders index it with SV_VulkanInstanceID, which includes the draw's
+     * firstInstance: a draw covers elements [firstInstance, firstInstance + instanceCount).
+     */
+    struct NV_API InstanceGPU {
         alignas(16) glm::mat4 m_Model{ 1.0f };
-        //TODO remove light index from model uniforms
-        alignas(4)  int       m_LightIndex{ 0 };
-        alignas(4)  float     m_PadLightIndex0{ 0.0f };
-        alignas(4)  float     m_PadLightIndex1{ 0.0f };
-        alignas(4)  float     m_PadLightIndex2{ 0.0f };
+        alignas(4)  uint32_t  m_MaterialIndex{ 0 }; // element of `nova.materials`
+        alignas(4)  uint32_t  m_Pad0{ 0 };
+        alignas(4)  uint32_t  m_Pad1{ 0 };
+        alignas(4)  uint32_t  m_Pad2{ 0 };
     };
+    static_assert(sizeof(InstanceGPU) == 80, "InstanceGPU must match the std430 stride of InstanceGPU in NovaUniforms.slang");
 
     /** GPU light element for `StructuredBuffer<LightGPU> nova.scene.lights` (std430). */
     struct NV_API LightGPU {
@@ -160,17 +169,22 @@ namespace Nova::Core::Renderer::RHI {
      * per buffer field of `NovaEngine`. `FrameUniforms` is a push constant (not a descriptor
      * buffer). Shadow map texture/sampler are render-graph resources bound by reflection name
      * after texture creation.
-     * `m_Scene.m_Uniforms` holds a single value (one region per frame-in-flight). `m_Model` and
-     * `m_Material` are arrays (one element per draw call this frame) — see MAX_MODEL_DRAWS in
-     * VK_PipelineCache. `m_Scene.m_Lights` is a StructuredBuffer of up to MAX_LIGHTS elements.
+     * `m_Scene.m_Uniforms` holds a single value (one region per frame-in-flight).
+     * `m_Material` is a legacy per-draw ConstantBuffer ring (MAX_MODEL_DRAWS) — prefer
+     * `m_Materials` SSBO. `m_Scene.m_Lights` is a StructuredBuffer of up to MAX_LIGHTS elements.
+     * `m_Instances` / `m_Materials` are per-frame StructuredBuffers read by instanced shaders
+     * (one InstanceGPU per instance, materials referenced by index); the app uploads them once
+     * per frame and grows them with EnsureGpuBufferCapacity.
      */
     struct NV_API RHI_EngineParameterBlock {
         RHI_SceneParameterBlock m_Scene;
-        RHI_GpuBufferHandle     m_Model;    // ConstantBuffer<ModelUniforms> model;
-        RHI_GpuBufferHandle     m_Material; // ConstantBuffer<MaterialGPU> material;
+        RHI_GpuBufferHandle     m_Material;  // ConstantBuffer<MaterialGPU> material (legacy);
+        RHI_GpuBufferHandle     m_Instances; // StructuredBuffer<InstanceGPU> instances;
+        RHI_GpuBufferHandle     m_Materials; // StructuredBuffer<MaterialGPU> materials;
 
         bool IsValid() const {
-            return m_Scene.IsValid() && m_Model.IsValid() && m_Material.IsValid();
+            return m_Scene.IsValid() && m_Material.IsValid()
+                && m_Instances.IsValid() && m_Materials.IsValid();
         }
     };
 
@@ -225,14 +239,6 @@ namespace Nova::Core::Renderer::RHI {
             { "m_Frame",      offsetof(FrameUniforms, m_Frame) },
             { "m_Mouse",      offsetof(FrameUniforms, m_Mouse) },
             { "m_Date",       offsetof(FrameUniforms, m_Date) },
-        };
-        return kLayout;
-    }
-
-    inline const std::unordered_map<std::string, size_t>& GetModelLayout() {
-        static const std::unordered_map<std::string, size_t> kLayout = {
-            { "m_Model",      offsetof(ModelUniforms, m_Model) },
-            { "m_LightIndex", offsetof(ModelUniforms, m_LightIndex) },
         };
         return kLayout;
     }

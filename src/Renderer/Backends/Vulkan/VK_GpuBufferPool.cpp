@@ -49,35 +49,47 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_Entries.clear();
     }
 
-    RHI::RHI_GpuBufferHandle VK_GpuBufferPool::Create(RHI::RHI_ResourceKind kind, const RHI::RHI_GpuBufferDesc& desc) {
-        if (!m_Allocator || desc.m_ElementSize == 0 || desc.m_ElementCount == 0)
-            return RHI::RHI_GpuBufferHandle::Invalid();
-
-        const VkDeviceSize align = (kind == RHI::RHI_ResourceKind::ConstantBuffer) ? m_UboAlign : m_SsboAlign;
+    bool VK_GpuBufferPool::CreateEntry(RHI::RHI_ResourceKind kind, size_t elementSize, uint32_t elementCount,
+                                       bool perFrameInFlight, std::string debugName, Entry& outEntry) const {
+        const bool isConstantBuffer = (kind == RHI::RHI_ResourceKind::ConstantBuffer);
+        const VkDeviceSize align = isConstantBuffer ? m_UboAlign : m_SsboAlign;
 
         Entry entry{};
         entry.m_Kind = kind;
-        entry.m_ElementSize = desc.m_ElementSize;
-        entry.m_ElementStride = AlignUp(static_cast<VkDeviceSize>(desc.m_ElementSize), align);
-        entry.m_ElementCount = desc.m_ElementCount;
-        entry.m_PerFrameInFlight = desc.m_PerFrameInFlight;
-        entry.m_FrameRegionStride = entry.m_ElementStride * static_cast<VkDeviceSize>(entry.m_ElementCount);
-        entry.m_DebugName = desc.m_DebugName ? desc.m_DebugName : "";
+        entry.m_ElementSize = elementSize;
+        entry.m_ElementStride = isConstantBuffer
+            ? AlignUp(static_cast<VkDeviceSize>(elementSize), align)
+            : static_cast<VkDeviceSize>(elementSize);
+        entry.m_ElementCount = elementCount;
+        entry.m_PerFrameInFlight = perFrameInFlight;
+        // Frame regions start at dynamic offsets, which must be multiples of the offset alignment.
+        entry.m_FrameRegionStride = AlignUp(entry.m_ElementStride * static_cast<VkDeviceSize>(elementCount), align);
+        entry.m_DebugName = std::move(debugName);
 
         const uint32_t frameMultiplier = entry.m_PerFrameInFlight ? m_FramesInFlight : 1u;
         const VkDeviceSize totalSize = entry.m_FrameRegionStride * static_cast<VkDeviceSize>(frameMultiplier);
 
         VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        usage |= (kind == RHI::RHI_ResourceKind::ConstantBuffer)
-            ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-            : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        usage |= isConstantBuffer ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
         if (!m_Allocator->CreateBuffer(totalSize, usage, VK_MemoryLocation::CpuReadWrite, entry.m_Buffer)) {
-            NV_LOG_ERROR(std::string("VK_GpuBufferPool::Create - failed to allocate buffer '") + entry.m_DebugName + "'");
-            return RHI::RHI_GpuBufferHandle::Invalid();
+            NV_LOG_ERROR(std::string("VK_GpuBufferPool - failed to allocate buffer '") + entry.m_DebugName + "'");
+            return false;
         }
 
         entry.m_DynamicCursor.assign(m_FramesInFlight, 0);
+        outEntry = std::move(entry);
+        return true;
+    }
+
+    RHI::RHI_GpuBufferHandle VK_GpuBufferPool::Create(RHI::RHI_ResourceKind kind, const RHI::RHI_GpuBufferDesc& desc) {
+        if (!m_Allocator || desc.m_ElementSize == 0 || desc.m_ElementCount == 0)
+            return RHI::RHI_GpuBufferHandle::Invalid();
+
+        Entry entry{};
+        if (!CreateEntry(kind, desc.m_ElementSize, desc.m_ElementCount, desc.m_PerFrameInFlight,
+                         desc.m_DebugName ? desc.m_DebugName : "", entry))
+            return RHI::RHI_GpuBufferHandle::Invalid();
 
         m_Entries.push_back(std::move(entry));
 
@@ -92,13 +104,44 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_Allocator->DestroyBuffer(m_Entries[handle.m_Index].m_Buffer);
     }
 
+    bool VK_GpuBufferPool::Resize(RHI::RHI_GpuBufferHandle handle, uint32_t elementCount) {
+        Entry* entry = FindEntry(handle);
+        if (!entry || elementCount == 0)
+            return false;
+        if (elementCount == entry->m_ElementCount)
+            return true;
+
+        Entry resized{};
+        if (!CreateEntry(entry->m_Kind, entry->m_ElementSize, elementCount, entry->m_PerFrameInFlight, entry->m_DebugName, resized))
+            return false;
+
+        m_Allocator->DestroyBuffer(entry->m_Buffer);
+        *entry = std::move(resized);
+        return true;
+    }
+
+    uint32_t VK_GpuBufferPool::GetElementCount(RHI::RHI_GpuBufferHandle handle) const {
+        const Entry* entry = FindEntry(handle);
+        return entry ? entry->m_ElementCount : 0;
+    }
+
     void VK_GpuBufferPool::Update(RHI::RHI_GpuBufferHandle handle, const void* data, size_t size, uint32_t elementIndex, uint32_t currentFrame) {
         Entry* entry = FindEntry(handle);
         if (!entry || !data || size == 0 || elementIndex >= entry->m_ElementCount)
             return;
 
-        const VkDeviceSize offset = FrameBase(*entry, currentFrame) + static_cast<VkDeviceSize>(elementIndex) * entry->m_ElementStride;
-        m_Allocator->WriteToBuffer(entry->m_Buffer, offset, static_cast<VkDeviceSize>(size), data);
+        const VkDeviceSize offsetInRegion = static_cast<VkDeviceSize>(elementIndex) * entry->m_ElementStride;
+        VkDeviceSize writeSize = static_cast<VkDeviceSize>(size);
+        if (offsetInRegion + writeSize > entry->m_FrameRegionStride) {
+            if (!entry->m_WarnedOverflow) {
+                NV_LOG_WARN(std::string("VK_GpuBufferPool::Update - write past the end of '") + entry->m_DebugName
+                    + "' clamped (grow the buffer first)");
+                entry->m_WarnedOverflow = true;
+            }
+            writeSize = entry->m_FrameRegionStride - offsetInRegion;
+        }
+
+        m_Allocator->WriteToBuffer(entry->m_Buffer, FrameBase(*entry, currentFrame) + offsetInRegion, writeSize, data);
     }
 
     RHI::RHI_BufferBinding VK_GpuBufferPool::ResolveBinding(RHI::RHI_GpuBufferHandle handle, uint32_t elementIndex, uint32_t currentFrame) const {

@@ -2,6 +2,7 @@
 
 // Vertex locations and VS->FS varyings: Slang assigns SPIR-V locations in field order
 // (must match VkVertexInputAttributeDescription order in C++ and PSIn field order).
+// Model matrix comes from `nova.instances[SV_VulkanInstanceID]` (includes firstInstance).
 struct VSIn {
     float3 a_Position;
     float3 a_Normal;
@@ -11,16 +12,20 @@ struct VSIn {
     float3 a_Bitangent;
 };
 
+// v_MaterialIndex last so fragment shaders written against the old VSOut still match
+// the first locations (e.g. VertexColor.frag.slang).
 struct VSOut {
     float4 sv_position : SV_Position;
     float3 v_Normal;
     float3 v_Pos;
     float4 v_Color;
+    nointerpolation uint v_MaterialIndex;
 };
 
 [shader("vertex")]
-VSOut main(VSIn input) {
-    float4x4 model = nova.model.m_Model;
+VSOut main(VSIn input, uint instanceIndex : SV_VulkanInstanceID) {
+    InstanceGPU instance = nova.instances[instanceIndex];
+    float4x4 model = instance.m_Model;
 
     float3x3 m3 = (float3x3)model;
     float3x3 invT = transpose3x3(inverse3x3(m3));
@@ -33,5 +38,6 @@ VSOut main(VSIn input) {
     o.v_Pos = world.xyz;
     float4 viewPos = mul(nova.scene.uniforms.m_Camera.m_View, world);
     o.sv_position = mul(nova.scene.uniforms.m_Camera.m_Proj, viewPos);
+    o.v_MaterialIndex = instance.m_MaterialIndex;
     return o;
 }

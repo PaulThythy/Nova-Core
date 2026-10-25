@@ -48,18 +48,22 @@ struct CameraGPU {
 };
 
 // Scene-level constants (camera + light count).
+// `m_LightIndex` selects `nova.scene.lights[i]` for the shadow pass (one value per shadow layer).
 struct SceneUniforms {
     CameraGPU m_Camera;
     int m_LightCount;
-    float _padAfterLightCount;
+    int m_LightIndex;
 };
 
-// Per-draw model matrix. Lit / editor draws read the camera from `nova.scene.uniforms`.
-// Shadow pass reads `lightViewProj` from `nova.scene.lights[m_LightIndex]`.
-struct ModelUniforms {
+// Per-instance data for instanced draws, indexed with SV_VulkanInstanceID (includes the
+// draw's firstInstance). Padding uses scalars: a uint3 would align to 16 in std430 and
+// break the 80-byte stride mirrored in C++.
+struct InstanceGPU {
     float4x4 m_Model;
-    int m_LightIndex;
-    float3 _padLightIndex;
+    uint m_MaterialIndex; // element of `nova.materials`
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
 };
 
 // Scene resources: camera/light-count UBO + light list SSBO.
@@ -70,10 +74,11 @@ struct SceneParameterBlock {
 
 struct NovaEngine {
     SceneParameterBlock scene;
-    ConstantBuffer<ModelUniforms> model;
-    ConstantBuffer<MaterialGPU> material;
+    ConstantBuffer<MaterialGPU> material; // legacy per-draw path; prefer `materials` SSBO
     Texture2DArray shadowMaps;
     SamplerComparisonState shadowSampler;
+    StructuredBuffer<InstanceGPU> instances;
+    StructuredBuffer<MaterialGPU> materials;
 };
 
 ParameterBlock<NovaEngine> nova;

@@ -39,6 +39,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         bool Resize(uint32_t width, uint32_t height) override;
         const RHI::RHI_EngineParameterBlock* GetEngineParameterBlock() const override { return &m_PipelineCache.GetEngine(); }
         bool BindEngineShadowMaps(RHI::RHI_TextureHandle shadowMaps) override;
+        void OnGpuBufferResized(RHI::RHI_GpuBufferHandle handle) { m_PipelineCache.OnGpuBufferResized(handle); }
         bool GetSampledTextureNativeHandles(RHI::RHI_TextureHandle texture, uint64_t& outImageView, uint64_t& outSampler) const override;
 
         VkDescriptorPool GetImGuiDescriptorPool() const { return m_PipelineCache.GetDescriptorPool(); }
@@ -80,9 +81,6 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         bool CreateTransientResources();
         void DestroyTransientResources();
         void DestroyPassRenderTargets();
-
-        VkFormat ToVkFormat(RHI::RHI_TextureFormat format) const;
-        bool IsDepthFormat(RHI::RHI_TextureFormat format) const;
 
         bool EnsurePassRenderTarget(PassRenderTarget& rt, const RHI::RHI_RenderGraphPassDesc& pass);
         bool ExecutePass(size_t passIndex, bool presentPhase, bool leaveRenderingOpen);

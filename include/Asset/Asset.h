@@ -8,36 +8,43 @@
 
 namespace Nova::Core::Asset {
 
-    enum class AssetType {
-        Unknown = 0,
-        Texture,
-        Mesh,
-        Material,
-        Shader,
-        Audio,
-        Script
-    };
+	enum class AssetType {
+		Unknown = 0,
+		Texture,
+		Mesh,
+		Material,
+		Shader,
+		Audio,
+		Script
+	};
 
-    // TODO: add:
-    /*
-    enum class AssetState { Unloaded, Loading, Ready, Failed };
-    */
+	// TODO: add:
+	/*
+	enum class AssetState { Unloaded, Loading, Ready, Failed };
+	*/
 
-    class NV_API Asset {
-    public:
-        Asset(AssetType type, std::filesystem::path path, UUID uuid = GenerateUUID())
-            : m_UUID(uuid), m_Type(type), m_Path(std::move(path)) {}
-        virtual ~Asset() = default;
+	class NV_API Asset {
+	public:
+		/** Assets get a random UUID unless the engine provides a fixed one (e.g. primitive meshes). */
+		Asset(AssetType type, std::filesystem::path path, UUID uuid = GenerateUUID())
+			: m_UUID(uuid), m_Type(type), m_Path(std::move(path)) {}
+		virtual ~Asset() = default;
 
-        UUID GetUUID() const { return m_UUID; }
-        AssetType GetType() const { return m_Type; }
-        const std::filesystem::path& GetPath() const { return m_Path; }
+		UUID GetUUID() const { return m_UUID; }
+		AssetType GetType() const { return m_Type; }
+		const std::filesystem::path& GetPath() const { return m_Path; }
 
-    protected:
-        UUID m_UUID = kInvalidUUID;
-        AssetType m_Type;
-        std::filesystem::path m_Path;
-    };
+		/** Load or compile asset data into memory (idempotent if already ready). */
+		virtual bool Load() = 0;
+		/** Force reload / recompile from source. */
+		virtual bool Reload() = 0;
+		virtual bool IsLoaded() const = 0;
+
+	protected:
+		UUID m_UUID = kInvalidUUID;
+		AssetType m_Type;
+		std::filesystem::path m_Path;
+	};
 
 } // Nova::Core::Asset
 

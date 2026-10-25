@@ -6,6 +6,7 @@
 #include "Core/Window.h"
 #include "Core/ImGuiLayer.h"
 #include "Core/Log.h"
+#include "Core/Profiler.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -170,6 +171,31 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         m_GpuBuffers.Update(handle, data, size, elementIndex, GetCurrentFrameInFlight());
     }
 
+    uint32_t VK_Renderer::GetGpuBufferElementCount(RHI::RHI_GpuBufferHandle handle) const {
+        return m_GpuBuffers.GetElementCount(handle);
+    }
+
+    bool VK_Renderer::ResizeGpuBuffer(RHI::RHI_GpuBufferHandle handle, uint32_t elementCount) {
+        const uint32_t current = m_GpuBuffers.GetElementCount(handle);
+        if (current == 0 || elementCount == 0)
+            return false;
+        if (current == elementCount)
+            return true;
+        if (m_PassesRecorded) {
+            NV_LOG_WARN("VK_Renderer::ResizeGpuBuffer - refused: this frame's passes are already recorded (resize before RenderFrame)");
+            return false;
+        }
+
+        // Frames in flight may still read the old VkBuffer, and descriptor sets referencing it get rewritten.
+        CheckVkResult(vkDeviceWaitIdle(m_VKDevice.GetDevice()));
+        if (!m_GpuBuffers.Resize(handle, elementCount))
+            return false;
+
+        if (auto* vkGraph = GetVKRenderGraph())
+            vkGraph->OnGpuBufferResized(handle);
+        return true;
+    }
+
     RHI::RHI_BufferBinding VK_Renderer::ResolveGpuBufferBinding(RHI::RHI_GpuBufferHandle handle, uint32_t elementIndex) const {
         return m_GpuBuffers.ResolveBinding(handle, elementIndex, GetCurrentFrameInFlight());
     }
@@ -211,7 +237,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::BeginFrame() {
+        NV_PROFILE_SCOPE_N("VK_Renderer::BeginFrame");
+
         m_FrameActive = false;
+        m_PassesRecorded = false;
 
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
         imguiLayer.SetVulkanCommandBuffer(VK_NULL_HANDLE);
@@ -287,7 +316,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::RenderFrame() {
+        NV_PROFILE_SCOPE_N("VK_Renderer::RenderFrame");
+
         if (!m_FrameActive || !m_RenderGraph) return;
+        m_PassesRecorded = true;
         if (auto* vkGraph = GetVKRenderGraph())
             vkGraph->ExecuteScenePasses();
     }
@@ -338,6 +370,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     void VK_Renderer::EndFrame() {
+        NV_PROFILE_SCOPE_N("VK_Renderer::EndFrame");
+
+        m_PassesRecorded = false;
         auto& imguiLayer = Nova::Core::Application::Get().GetImGuiLayer();
 
         if (!m_FrameActive) {
