@@ -10,7 +10,7 @@ namespace Nova::Core {
     bool Window::Create(const WindowDesc& desc) {
         m_Desc = desc;
         m_GraphicsAPI = GraphicsAPI::None;
-        
+
         // Initialize SDL video/events (idempotent).
         if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
             NV_LOG_FATAL(std::string("SDL_Init failed: ") + SDL_GetError());

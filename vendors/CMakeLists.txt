@@ -139,6 +139,12 @@ set(TRACY_STATIC ON CACHE BOOL "" FORCE)
 set(TRACY_ENABLE OFF CACHE BOOL "" FORCE)
 set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
 set(TRACY_CLIENT_PYTHON OFF CACHE BOOL "" FORCE)
+# MinGW/UCRT: Tracy's DXT1 CompressWorker thread aborts with
+# "*** stack smashing detected ***" (winpthread + GCC stack protector). Disable
+# frame-image support there; zones/plots remain available.
+if(MINGW)
+    set(TRACY_NO_FRAME_IMAGE ON CACHE BOOL "" FORCE)
+endif()
 add_subdirectory(tracy EXCLUDE_FROM_ALL)
 
 if(NOVA_ENABLE_TRACY)
@@ -147,6 +153,11 @@ if(NOVA_ENABLE_TRACY)
     target_compile_definitions(TracyClient PUBLIC
         $<$<NOT:$<CONFIG:Dist>>:TRACY_ENABLE>
     )
+endif()
+
+if(MINGW AND TARGET TracyClient)
+    # winpthread + -fstack-protector has produced canary failures in Tracy workers.
+    target_compile_options(TracyClient PRIVATE -fno-stack-protector)
 endif()
 
 if(BUILD_SHARED_LIBS AND TARGET TracyClient)
