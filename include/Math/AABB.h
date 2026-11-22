@@ -95,6 +95,13 @@ namespace Nova::Core::Math {
 	/** Unit cube wireframe (-0.5..0.5) as a line list, for debug drawing. */
 	NV_API std::shared_ptr<Renderer::RHI::RHI_Mesh> CreateUnitAABBWireframeMesh(const glm::vec3& color = glm::vec3(0.0f, 1.0f, 0.0f));
 
+	/**
+	 * World-space AABB of a local AABB after `transform`.
+	 * Corners are transformed then re-bounded so the result stays axis-aligned
+	 * (rotation/shear grow the box; it never tilts with the object).
+	 */
+	NV_API AABB TransformAABB(const AABB& local, const glm::mat4& transform);
+
 	/** Model matrix that maps the unit wireframe cube onto `bounds`. */
 	NV_API glm::mat4 AABBToModelMatrix(const AABB& bounds);
 

@@ -259,6 +259,32 @@ namespace Nova::Core::Math {
 		return std::make_shared<Renderer::RHI::RHI_Mesh>(std::move(vertices), std::move(lineIndices));
 	}
 
+	AABB TransformAABB(const AABB& local, const glm::mat4& transform) {
+		const glm::vec3 corners[8] = {
+			{ local.m_Min.x, local.m_Min.y, local.m_Min.z },
+			{ local.m_Max.x, local.m_Min.y, local.m_Min.z },
+			{ local.m_Min.x, local.m_Max.y, local.m_Min.z },
+			{ local.m_Max.x, local.m_Max.y, local.m_Min.z },
+			{ local.m_Min.x, local.m_Min.y, local.m_Max.z },
+			{ local.m_Max.x, local.m_Min.y, local.m_Max.z },
+			{ local.m_Min.x, local.m_Max.y, local.m_Max.z },
+			{ local.m_Max.x, local.m_Max.y, local.m_Max.z },
+		};
+
+		AABB world;
+		bool first = true;
+		for (const glm::vec3& corner : corners) {
+			const glm::vec3 p = glm::vec3(transform * glm::vec4(corner, 1.0f));
+			if (first) {
+				world = AABB(p, p);
+				first = false;
+			} else {
+				world.Expand(p);
+			}
+		}
+		return world;
+	}
+
 	glm::mat4 AABBToModelMatrix(const AABB& bounds) {
 		const glm::vec3 center = bounds.GetCenter();
 		glm::vec3 extent = bounds.GetExtents();
