@@ -622,8 +622,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             }
         }
 
-        if (!hasColor && !hasDepth)
+        // Buffer-only / compute passes: no color or depth attachments.
+        if (!hasColor && !hasDepth) {
+            if (pass.m_Execute) {
+                PassContext ctx(*this, width, height, &rt);
+                pass.m_Execute(ctx);
+            }
             return true;
+        }
 
         BeginRendering(
             cmd, width, height,
@@ -808,8 +814,38 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         RHI::IShaders* shader = m_Graph.m_PipelineCache.Get(handle);
         VkCommandBuffer cmd = m_Graph.GetCurrentCommandBuffer();
         if (!shader || cmd == VK_NULL_HANDLE) return;
+        // Do not CommitResources here: vkUpdateDescriptorSets on sets still referenced by
+        // in-flight command buffers is illegal without descriptor indexing flags.
         shader->Bind(cmd);
         shader->ApplyParameters(cmd);
+    }
+
+    void VK_RenderGraph::PassContext::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) {
+        VkCommandBuffer cmd = m_Graph.GetCurrentCommandBuffer();
+        if (cmd == VK_NULL_HANDLE || groupCountX == 0)
+            return;
+
+        // Host writes (UpdateGpuBuffer) -> compute reads.
+        VkMemoryBarrier hostToCompute{};
+        hostToCompute.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        hostToCompute.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        hostToCompute.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        vkCmdPipelineBarrier(cmd,
+            VK_PIPELINE_STAGE_HOST_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 1, &hostToCompute, 0, nullptr, 0, nullptr);
+
+        vkCmdDispatch(cmd, groupCountX, std::max(1u, groupCountY), std::max(1u, groupCountZ));
+
+        // Compute writes -> subsequent vertex/fragment (or further compute) reads.
+        VkMemoryBarrier computeToGraphics{};
+        computeToGraphics.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        computeToGraphics.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        computeToGraphics.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(cmd,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 1, &computeToGraphics, 0, nullptr, 0, nullptr);
     }
 
     void VK_RenderGraph::PassContext::SetDepthBias(float constantFactor, float slopeFactor, float clamp) {

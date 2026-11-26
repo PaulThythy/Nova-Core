@@ -44,9 +44,10 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     }
 
     // --- VK_Shaders ---
-    void VK_Shaders::SetPipeline(VkPipeline pipeline, VkPipelineLayout layout) {
+    void VK_Shaders::SetPipeline(VkPipeline pipeline, VkPipelineLayout layout, VkPipelineBindPoint bindPoint) {
         m_Pipeline = pipeline;
         m_PipelineLayout = layout;
+        m_BindPoint = bindPoint;
     }
 
     void VK_Shaders::SetEngineBuffers(VK_Renderer* renderer, const RHI::RHI_EngineParameterBlock& engine,
@@ -168,7 +169,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
     void VK_Shaders::Bind(void* apiContext) {
         if (!apiContext || m_Pipeline == VK_NULL_HANDLE) return;
         VkCommandBuffer cmd = static_cast<VkCommandBuffer>(apiContext);
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
+        vkCmdBindPipeline(cmd, m_BindPoint, m_Pipeline);
     }
 
     // Pack the SetParameter() values listed in `layout` (name -> byte offset) into `dstBase`,
@@ -228,7 +229,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             offsets.reserve(dyn.size());
             for (const auto& [binding, offset] : dyn) offsets.push_back(offset);
 
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout,
+            vkCmdBindDescriptorSets(cmd, m_BindPoint, m_PipelineLayout,
                 setIndex, 1, &ds,
                 static_cast<uint32_t>(offsets.size()), offsets.empty() ? nullptr : offsets.data());
         }
@@ -244,16 +245,23 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const uint32_t frameIdx = m_Renderer->GetCurrentFrameInFlight();
         VK_GpuBufferPool& pool = m_Renderer->GetGpuBufferPool();
 
-        // FrameUniforms: push constants when the linked program reflects them.
+        // Push constants: custom blob (compute sim params) or engine FrameUniforms.
         if (m_Reflection.m_PushConstants && m_Reflection.m_PushConstants->m_SizeBytes > 0) {
-            RHI::FrameUniforms frame{};
-            CopyParametersIntoStruct(m_Parameters, RHI::GetFrameLayout(), &frame);
-            const uint32_t pushSize = static_cast<uint32_t>(std::min(
-                m_Reflection.m_PushConstants->m_SizeBytes, sizeof(frame)));
-            VkShaderStageFlags stages = ToVkStageFlags(m_Reflection.m_PushConstants->m_Stages);
-            if (stages == 0)
-                stages = VK_SHADER_STAGE_ALL_GRAPHICS;
-            vkCmdPushConstants(cmd, m_PipelineLayout, stages, 0, pushSize, &frame);
+            const VkShaderStageFlags stages = (m_BindPoint == VK_PIPELINE_BIND_POINT_COMPUTE)
+                ? VK_SHADER_STAGE_COMPUTE_BIT
+                : VK_SHADER_STAGE_ALL_GRAPHICS;
+
+            if (!m_PushConstantData.empty()) {
+                const uint32_t pushSize = static_cast<uint32_t>(std::min(
+                    m_Reflection.m_PushConstants->m_SizeBytes, m_PushConstantData.size()));
+                vkCmdPushConstants(cmd, m_PipelineLayout, stages, 0, pushSize, m_PushConstantData.data());
+            } else {
+                RHI::FrameUniforms frame{};
+                CopyParametersIntoStruct(m_Parameters, RHI::GetFrameLayout(), &frame);
+                const uint32_t pushSize = static_cast<uint32_t>(std::min(
+                    m_Reflection.m_PushConstants->m_SizeBytes, sizeof(frame)));
+                vkCmdPushConstants(cmd, m_PipelineLayout, stages, 0, pushSize, &frame);
+            }
         }
 
         // Scene uniforms are uploaded once per frame by AppRenderer::PushSceneUniforms.

@@ -222,14 +222,39 @@ namespace Nova::Core::Renderer::RHI {
             auto* fieldTypeLayout = field->getTypeLayout();
             auto* fieldType = field->getType();
 
-            if (fieldTypeLayout &&
+            // Push constants: Slang puts category on the *variable* layout
+            // (`binding.kind = pushConstantBuffer`), while the type stays ConstantBuffer.
+            // Checking only TypeLayout::getParameterCategory() misses [[vk::push_constant]].
+            bool isPushConstant = false;
+            if (field->getCategory() == slang::ParameterCategory::PushConstantBuffer)
+                isPushConstant = true;
+            for (unsigned c = 0; !isPushConstant && c < field->getCategoryCount(); ++c) {
+                if (field->getCategoryByIndex(c) == slang::ParameterCategory::PushConstantBuffer)
+                    isPushConstant = true;
+            }
+            if (!isPushConstant && fieldTypeLayout &&
                 fieldTypeLayout->getParameterCategory() == slang::ParameterCategory::PushConstantBuffer)
             {
-                size_t size = fieldTypeLayout->getSize(slang::ParameterCategory::Uniform);
-                if (size == SLANG_UNKNOWN_SIZE || size == SLANG_UNBOUNDED_SIZE)
-                    size = fieldTypeLayout->getSize();
-                if ((size == SLANG_UNKNOWN_SIZE || size == SLANG_UNBOUNDED_SIZE) && fieldTypeLayout->getElementTypeLayout())
-                    size = fieldTypeLayout->getElementTypeLayout()->getSize(slang::ParameterCategory::Uniform);
+                isPushConstant = true;
+            }
+
+            if (isPushConstant) {
+                size_t size = 0;
+                if (fieldTypeLayout) {
+                    // ConstantBuffer<T> → size of T (Uniform), as in Slang reflection JSON.
+                    if (auto* elem = fieldTypeLayout->getElementTypeLayout()) {
+                        size = elem->getSize(slang::ParameterCategory::Uniform);
+                        if (size == SLANG_UNKNOWN_SIZE || size == SLANG_UNBOUNDED_SIZE)
+                            size = elem->getSize();
+                    }
+                    if (size == 0 || size == SLANG_UNKNOWN_SIZE || size == SLANG_UNBOUNDED_SIZE) {
+                        size = fieldTypeLayout->getSize(slang::ParameterCategory::Uniform);
+                        if (size == SLANG_UNKNOWN_SIZE || size == SLANG_UNBOUNDED_SIZE)
+                            size = fieldTypeLayout->getSize(slang::ParameterCategory::PushConstantBuffer);
+                        if (size == SLANG_UNKNOWN_SIZE || size == SLANG_UNBOUNDED_SIZE)
+                            size = fieldTypeLayout->getSize();
+                    }
+                }
                 if (size != SLANG_UNKNOWN_SIZE && size != SLANG_UNBOUNDED_SIZE && size > 0) {
                     if (!out.m_PushConstants) {
                         out.m_PushConstants = RHI_PushConstantInfo{ size, stageMask };

@@ -59,7 +59,8 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         ~VK_Shaders() override = default;
 
         /** Set pipeline and layout (owned by swapchain/renderer). Call after pipeline creation. */
-        void SetPipeline(VkPipeline pipeline, VkPipelineLayout layout);
+        void SetPipeline(VkPipeline pipeline, VkPipelineLayout layout,
+                         VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS);
 
         /**
          * Engine `ConstantBuffer<T>` handles (`ParameterBlock<NovaEngine> nova;`:
@@ -112,6 +113,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         VkPipeline m_Pipeline = VK_NULL_HANDLE;
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
+        VkPipelineBindPoint m_BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 
         VK_Renderer* m_Renderer = nullptr;
         RHI::RHI_EngineParameterBlock m_Engine{};

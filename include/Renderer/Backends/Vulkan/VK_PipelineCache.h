@@ -53,9 +53,12 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             std::unique_ptr<VK_Shaders> shader;
             std::filesystem::file_time_type vertWriteTime{};
             std::filesystem::file_time_type fragWriteTime{};
+            std::filesystem::file_time_type computeWriteTime{};
+            bool isCompute = false;
         };
 
         bool BuildPipeline(PipelineEntry& entry);
+        bool BuildComputePipeline(PipelineEntry& entry);
         void DestroyEntry(PipelineEntry& entry);
         bool CreateEngineBuffers();
         void DestroyEngineBuffers();

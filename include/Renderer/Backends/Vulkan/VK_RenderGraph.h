@@ -64,6 +64,7 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
             void Draw(const RHI::RHI_DrawCommand& cmd) override;
             void DrawIndexed(const RHI::RHI_DrawIndexedCommand& cmd) override;
             void BindShader(RHI::RHI_ShaderHandle shader) override;
+            void Dispatch(uint32_t groupCountX, uint32_t groupCountY = 1, uint32_t groupCountZ = 1) override;
             uint32_t GetRenderWidth() const override { return m_Width; }
             uint32_t GetRenderHeight() const override { return m_Height; }
             void SetDepthBias(float constantFactor, float slopeFactor, float clamp = 0.0f) override;

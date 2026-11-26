@@ -152,7 +152,14 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         binding.m_Handle = reinterpret_cast<uint64_t>(entry->m_Buffer.buffer);
         binding.m_Offset = static_cast<uint64_t>(FrameBase(*entry, currentFrame) + static_cast<VkDeviceSize>(elementIndex) * entry->m_ElementStride);
-        binding.m_Range = static_cast<uint64_t>(entry->m_ElementSize);
+        // Structured / RW arrays: expose the rest of the per-frame region so shaders can index [i..N).
+        if (entry->m_Kind == RHI::RHI_ResourceKind::StructuredBuffer
+            || entry->m_Kind == RHI::RHI_ResourceKind::RWStructuredBuffer) {
+            const VkDeviceSize used = static_cast<VkDeviceSize>(elementIndex) * entry->m_ElementStride;
+            binding.m_Range = static_cast<uint64_t>(entry->m_FrameRegionStride - used);
+        } else {
+            binding.m_Range = static_cast<uint64_t>(entry->m_ElementSize);
+        }
         return binding;
     }
 

@@ -241,21 +241,33 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
 
         bool anyChanged = false;
         for (auto& entry : m_Entries) {
-            if (!entry.shader || !entry.desc.m_Vertex)
-                continue;
-            if (!entry.desc.m_DepthOnly && !entry.desc.m_Fragment)
+            if (!entry.shader)
                 continue;
 
-            const auto vertTime = FileSystem::LastWriteTime(entry.desc.m_Vertex->GetPath());
-            const auto fragTime = entry.desc.m_Fragment
-                ? FileSystem::LastWriteTime(entry.desc.m_Fragment->GetPath())
-                : entry.fragWriteTime;
-            if (vertTime == entry.vertWriteTime && fragTime == entry.fragWriteTime)
-                continue;
+            if (entry.desc.IsCompute()) {
+                if (!entry.desc.m_Compute)
+                    continue;
+                const auto compTime = FileSystem::LastWriteTime(entry.desc.m_Compute->GetPath());
+                if (compTime == entry.computeWriteTime)
+                    continue;
+                entry.desc.m_Compute->Recompile();
+            } else {
+                if (!entry.desc.m_Vertex)
+                    continue;
+                if (!entry.desc.m_DepthOnly && !entry.desc.m_Fragment)
+                    continue;
 
-            entry.desc.m_Vertex->Recompile();
-            if (entry.desc.m_Fragment)
-                entry.desc.m_Fragment->Recompile();
+                const auto vertTime = FileSystem::LastWriteTime(entry.desc.m_Vertex->GetPath());
+                const auto fragTime = entry.desc.m_Fragment
+                    ? FileSystem::LastWriteTime(entry.desc.m_Fragment->GetPath())
+                    : entry.fragWriteTime;
+                if (vertTime == entry.vertWriteTime && fragTime == entry.fragWriteTime)
+                    continue;
+
+                entry.desc.m_Vertex->Recompile();
+                if (entry.desc.m_Fragment)
+                    entry.desc.m_Fragment->Recompile();
+            }
 
             PipelineEntry rebuilt{};
             rebuilt.desc = entry.desc;
@@ -405,8 +417,123 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         entry.setLayouts.clear();
     }
 
+    bool VK_PipelineCache::BuildComputePipeline(PipelineEntry& entry) {
+        if (!m_Renderer || !entry.desc.m_Compute)
+            return false;
+
+        if (!entry.desc.m_Compute->Compile()) {
+            NV_LOG_WARN(("VK_PipelineCache: compute compile failed:\n" + entry.desc.m_Compute->GetLastLog()).c_str());
+            return false;
+        }
+
+        if (!CreateEngineBuffers())
+            return false;
+
+        VkDevice device = m_Renderer->GetDevice();
+
+        VK_ShaderModule computeModule;
+        if (!computeModule.Create(device, entry.desc.m_Compute->GetBinary()))
+            return false;
+
+        RHI::RHI_ProgramReflection reflForVk = entry.desc.m_Compute->GetReflection();
+        MarkEngineDynamicBuffers(reflForVk);
+
+        entry.setLayouts.clear();
+        for (const auto& setInfo : reflForVk.m_Sets) {
+            VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+            if (CreateDescriptorSetLayoutFromReflection(device, reflForVk, setInfo.m_Set, layout))
+                entry.setLayouts.emplace_back(setInfo.m_Set, layout);
+        }
+        std::sort(entry.setLayouts.begin(), entry.setLayouts.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+
+        if (entry.setLayouts.empty()) {
+            computeModule.Destroy();
+            NV_LOG_WARN(("VK_PipelineCache: compute shader '" + entry.desc.m_Name + "' has no descriptor sets").c_str());
+            return false;
+        }
+
+        entry.descriptorSets.clear();
+        for (const auto& [setIndex, layout] : entry.setLayouts) {
+            VkDescriptorSetAllocateInfo allocSetInfo{};
+            allocSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocSetInfo.descriptorPool = m_DescriptorPool;
+            allocSetInfo.descriptorSetCount = 1;
+            allocSetInfo.pSetLayouts = &layout;
+            VkDescriptorSet ds = VK_NULL_HANDLE;
+            if (vkAllocateDescriptorSets(device, &allocSetInfo, &ds) != VK_SUCCESS) {
+                computeModule.Destroy();
+                return false;
+            }
+            entry.descriptorSets.emplace_back(setIndex, ds);
+        }
+
+        std::vector<VkDescriptorSetLayout> setLayouts;
+        setLayouts.reserve(entry.setLayouts.size());
+        for (const auto& [setIndex, layout] : entry.setLayouts)
+            setLayouts.push_back(layout);
+
+        VkPushConstantRange pushRange{};
+        const bool hasPushConstants = reflForVk.m_PushConstants.has_value()
+            && reflForVk.m_PushConstants->m_SizeBytes > 0;
+        if (hasPushConstants) {
+            pushRange.stageFlags = ToVkStageFlags(reflForVk.m_PushConstants->m_Stages);
+            if (pushRange.stageFlags == 0)
+                pushRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            pushRange.offset = 0;
+            pushRange.size = static_cast<uint32_t>(reflForVk.m_PushConstants->m_SizeBytes);
+        }
+
+        VkPipelineLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+        layoutInfo.pSetLayouts = setLayouts.data();
+        if (hasPushConstants) {
+            layoutInfo.pushConstantRangeCount = 1;
+            layoutInfo.pPushConstantRanges = &pushRange;
+        }
+        if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &entry.pipelineLayout) != VK_SUCCESS) {
+            computeModule.Destroy();
+            return false;
+        }
+
+        VkPipelineShaderStageCreateInfo stage{};
+        stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        stage.module = computeModule.GetModule();
+        stage.pName = entry.desc.m_EntryPoint.empty() ? "main" : entry.desc.m_EntryPoint.c_str();
+
+        VkComputePipelineCreateInfo pipe{};
+        pipe.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        pipe.stage = stage;
+        pipe.layout = entry.pipelineLayout;
+
+        if (vkCreateComputePipelines(device, m_VkPipelineCache, 1, &pipe, nullptr, &entry.pipeline) != VK_SUCCESS) {
+            vkDestroyPipelineLayout(device, entry.pipelineLayout, nullptr);
+            entry.pipelineLayout = VK_NULL_HANDLE;
+            computeModule.Destroy();
+            return false;
+        }
+
+        computeModule.Destroy();
+
+        entry.isCompute = true;
+        entry.shader = std::make_unique<VK_Shaders>();
+        entry.shader->SetPipeline(entry.pipeline, entry.pipelineLayout, VK_PIPELINE_BIND_POINT_COMPUTE);
+        entry.shader->SetEngineBuffers(m_Renderer, m_Engine, entry.descriptorSets);
+        entry.shader->SetReflection(reflForVk);
+        WriteEngineBuffersToEntry(entry);
+        WriteShadowMapsToEntry(entry);
+
+        entry.computeWriteTime = FileSystem::LastWriteTime(entry.desc.m_Compute->GetPath());
+        return true;
+    }
+
     bool VK_PipelineCache::BuildPipeline(PipelineEntry& entry) {
         if (!m_Renderer) return false;
+
+        if (entry.desc.IsCompute())
+            return BuildComputePipeline(entry);
 
         const bool depthOnly = entry.desc.m_DepthOnly;
 
@@ -622,9 +749,9 @@ namespace Nova::Core::Renderer::Backends::Vulkan {
         const bool hasPushConstants = reflForVk.m_PushConstants.has_value()
             && reflForVk.m_PushConstants->m_SizeBytes > 0;
         if (hasPushConstants) {
-            pushRange.stageFlags = ToVkStageFlags(reflForVk.m_PushConstants->m_Stages);
-            if (pushRange.stageFlags == 0)
-                pushRange.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
+            // Graphics programs must advertise every graphics stage that may read push constants.
+            // Reflection sometimes omits VERTEX; Vulkan then rejects the pipeline / draws.
+            pushRange.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
             pushRange.offset = 0;
             pushRange.size = static_cast<uint32_t>(reflForVk.m_PushConstants->m_SizeBytes);
         }

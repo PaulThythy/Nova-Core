@@ -1,9 +1,12 @@
 #ifndef RHI_SHADERS_H
 #define RHI_SHADERS_H
 
+#include <cstddef>
+#include <cstring>
 #include <string>
 #include <unordered_map>
 #include <variant>
+#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -52,6 +55,17 @@ namespace Nova::Core::Renderer::RHI {
         bool CommitResources() { return m_Resources.Apply(this); }
 
         /**
+         * Raw push-constant blob for the next ApplyParameters() (e.g. compute sim params).
+         * When non-empty and the program has push constants, this is pushed instead of FrameUniforms.
+         */
+        void SetPushConstantData(const void* data, size_t size) {
+            m_PushConstantData.resize(size);
+            if (size > 0 && data)
+                std::memcpy(m_PushConstantData.data(), data, size);
+        }
+        void ClearPushConstantData() { m_PushConstantData.clear(); }
+
+        /**
          * Bind a sampled image + sampler by reflection name (e.g. `outline.source` /
          * `outline.sourceSampler`). `imageView` / `sampler` are backend-native handles
          * (VkImageView / VkSampler cast to uint64_t). Prefer resolving them via
@@ -85,6 +99,7 @@ namespace Nova::Core::Renderer::RHI {
         virtual bool ApplyResourceBinding(const RHI_BindingInfo& info, const RHI_ResourceBinding& value) = 0;
 
         std::unordered_map<std::string, UniformValue> m_Parameters;
+        std::vector<std::uint8_t> m_PushConstantData;
 
         RHI_ProgramReflection m_Reflection{};
         RHI_ShaderResourceSet m_Resources{ &m_Reflection };

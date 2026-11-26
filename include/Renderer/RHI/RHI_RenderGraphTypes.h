@@ -217,6 +217,12 @@ namespace Nova::Core::Renderer::RHI {
         virtual void BindShader(RHI_ShaderHandle shader) = 0;
         virtual void Draw(const RHI_DrawCommand& cmd) = 0;
         virtual void DrawIndexed(const RHI_DrawIndexedCommand& cmd) = 0;
+
+        /** Dispatch a bound compute shader (no-op on graphics-only backends). */
+        virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY = 1, uint32_t groupCountZ = 1) {
+            (void)groupCountX; (void)groupCountY; (void)groupCountZ;
+        }
+
         virtual uint32_t GetRenderWidth() const = 0;
         virtual uint32_t GetRenderHeight() const = 0;
 
